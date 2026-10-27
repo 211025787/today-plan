@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 应用主色：番茄红 -->
+    <color name="primary">#FFE94B3C</color>
+    <color name="primary_dark">#FFD63A2C</color>
+    <color name="accent">#FFFFB300</color>
+    <color name="ic_launcher_background">#FFE94B3C</color>
+    <!-- 小组件卡片背景色 -->
+    <color name="widget_bg">#FFF8F7F6</color>
+    <color name="widget_text_primary">#FF212121</color>
+    <color name="widget_text_secondary">#FF757575</color>
+</resources>

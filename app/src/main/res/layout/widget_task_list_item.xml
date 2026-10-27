@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 任务列表小组件单行布局：完成圆圈 + 任务标题 + 优先级色条 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingVertical="6dp">
+
+    <!-- 左侧优先级色条 -->
+    <View
+        android:id="@+id/widget_item_priority"
+        android:layout_width="4dp"
+        android:layout_height="20dp"
+        android:background="@color/primary" />
+
+    <!-- 完成状态圆圈 -->
+    <ImageView
+        android:id="@+id/widget_item_check"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_marginStart="8dp"
+        android:src="@drawable/ic_widget_circle" />
+
+    <!-- 任务标题 -->
+    <TextView
+        android:id="@+id/widget_item_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="8dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/widget_text_primary"
+        android:textSize="14sp" />
+
+    <!-- 番茄预计个数 -->
+    <TextView
+        android:id="@+id/widget_item_pomo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="12sp" />
+</LinearLayout>

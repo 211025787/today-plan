@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 番茄钟快捷小组件布局：倒计时文本 + 开始/暂停按钮 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@drawable/widget_card_bg"
+    android:padding="12dp">
+
+    <!-- 当前阶段标签：专注中/休息中/就绪 -->
+    <TextView
+        android:id="@+id/widget_timer_phase"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="准备专注"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="12sp" />
+
+    <!-- 剩余时间 -->
+    <TextView
+        android:id="@+id/widget_timer_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="25:00"
+        android:textColor="@color/primary"
+        android:textSize="34sp"
+        android:textStyle="bold" />
+
+    <!-- 操作按钮行 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <ImageButton
+            android:id="@+id/widget_timer_btn_toggle"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_widget_play"
+            android:contentDescription="开始或暂停" />
+
+        <ImageButton
+            android:id="@+id/widget_timer_btn_stop"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="16dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_widget_stop"
+            android:contentDescription="停止" />
+    </LinearLayout>
+</LinearLayout>

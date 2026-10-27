@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动图标前景：圆形番茄 + 白色对勾 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,30c-14.4,0 -26,10.4 -26,23.2S39.6,76 54,76s26,-9.6 26,-22.8S68.4,30 54,30z" />
+    <path
+        android:fillColor="#FFE94B3C"
+        android:pathData="M44.6,56.4l6.2,6.2l13.6,-13.6l4,4l-17.6,17.6l-10.2,-10.2z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,26c-2.4,0 -4.4,-1.2 -5.6,-3h11.2C58.4,24.8 56.4,26 54,26z" />
+</vector>

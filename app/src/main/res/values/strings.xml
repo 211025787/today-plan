@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">滴答清单</string>
+    <string name="tab_tasks">任务</string>
+    <string name="tab_focus">专注</string>
+    <string name="tab_stats">统计</string>
+    <string name="tab_habits">习惯</string>
+    <string name="tab_mine">我的</string>
+</resources>
