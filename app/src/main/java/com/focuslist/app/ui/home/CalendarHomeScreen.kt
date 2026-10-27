@@ -7,6 +7,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,16 +26,23 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -47,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,6 +109,17 @@ fun CalendarHomeScreen(container: AppContainer) {
     var showQuickNote by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
+    // 多选管理模式（纯 UI 状态）：选中日卡片页点击"管理"进入
+    var manageMode by remember { mutableStateOf(false) }
+    val selectedIds by viewModel.selectMode.collectAsState()
+    // 长按单卡片弹出的操作菜单：编辑时长 / 删除
+    var menuPlan by remember { mutableStateOf<PlanEntity?>(null) }
+    // 编辑今日时长对话框的目标计划
+    var editPlan by remember { mutableStateOf<PlanEntity?>(null) }
+    // 删除确认对话框：单删时为该计划，批量删时为 null（用 selectedIds 判断）
+    var deleteConfirmPlan by remember { mutableStateOf<PlanEntity?>(null) }
+    var deleteConfirmBatch by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -111,13 +132,25 @@ fun CalendarHomeScreen(container: AppContainer) {
                     )
                 },
                 actions = {
-                    // 仅在日历展开时允许翻月
                     if (state.selectedDay == null) {
+                        // 日历展开时允许翻月
                         IconButton(onClick = { viewModel.shiftMonth(-1) }) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一月")
                         }
                         IconButton(onClick = { viewModel.shiftMonth(1) }) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一月")
+                        }
+                    } else {
+                        // 选中日卡片页：管理 / 取消多选
+                        TextButton(onClick = {
+                            if (manageMode) {
+                                manageMode = false
+                                viewModel.exitSelectMode()
+                            } else {
+                                manageMode = true
+                            }
+                        }) {
+                            Text(if (manageMode) "取消" else "管理")
                         }
                     }
                 },
@@ -174,7 +207,13 @@ fun CalendarHomeScreen(container: AppContainer) {
                         text = "‹ 返回日历",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { viewModel.clearSelection() }
+                        modifier = Modifier.clickable {
+                            if (manageMode) {
+                                manageMode = false
+                                viewModel.exitSelectMode()
+                            }
+                            viewModel.clearSelection()
+                        }
                     )
                 }
                 val dayPlans = viewModel.plansOfDay(state, day)
@@ -187,22 +226,60 @@ fun CalendarHomeScreen(container: AppContainer) {
                         modifier = Modifier.padding(32.dp)
                     )
                 } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 170.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(dayPlans, key = { it.id }) { plan ->
-                            // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
-                            val totalSec = viewModel.daySecondsOf(state, plan.id, day)
-                            GradientPlanCard(
-                                plan = plan,
-                                todaySec = totalSec,
-                                running = state.timers[plan.id]?.running == true,
-                                onToggleTimer = { viewModel.toggleTimer(plan.id) }
-                            )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = if (manageMode) 200.dp else 170.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(dayPlans, key = { it.id }) { plan ->
+                                // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
+                                val totalSec = viewModel.daySecondsOf(state, plan.id, day)
+                                val isSelected = plan.id in selectedIds
+                                GradientPlanCard(
+                                    plan = plan,
+                                    todaySec = totalSec,
+                                    running = state.timers[plan.id]?.running == true,
+                                    manageMode = manageMode,
+                                    selected = isSelected,
+                                    onToggleTimer = { viewModel.toggleTimer(plan.id) },
+                                    onClick = {
+                                        if (manageMode) {
+                                            viewModel.toggleSelectPlan(plan.id)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        if (manageMode) {
+                                            viewModel.toggleSelectPlan(plan.id)
+                                        } else {
+                                            menuPlan = plan
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        // 多选模式底部：删除所选按钮
+                        if (manageMode && selectedIds.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 100.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(MaterialTheme.colorScheme.error)
+                                    .clickable { deleteConfirmBatch = true }
+                                    .padding(horizontal = 28.dp, vertical = 13.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Text(
+                                    text = "删除所选 (${selectedIds.size})",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                            }
                         }
                     }
                 }
@@ -229,6 +306,118 @@ fun CalendarHomeScreen(container: AppContainer) {
                 scope.launch { container.noteRepository.add(content) }
                 showQuickNote = false
             }
+        )
+    }
+
+    // 长按单卡片操作菜单：编辑今日时长 / 删除该计划
+    menuPlan?.let { plan ->
+        AlertDialog(
+            onDismissRequest = { menuPlan = null },
+            title = { Text(plan.title) },
+            text = {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                editPlan = plan
+                                menuPlan = null
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text("编辑今日已完成时长", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                deleteConfirmPlan = plan
+                                menuPlan = null
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Text("删除该计划", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { menuPlan = null }) { Text("取消") } }
+        )
+    }
+
+    // 编辑今日时长对话框：手动补录已完成分钟数
+    editPlan?.let { plan ->
+        val todayStart = DateUtils.startOfDay(System.currentTimeMillis())
+        var minutesText by remember(plan.id) {
+            mutableStateOf((viewModel.daySecondsOf(state, plan.id, todayStart) / 60L).toString())
+        }
+        AlertDialog(
+            onDismissRequest = { editPlan = null },
+            title = { Text("编辑今日时长") },
+            text = {
+                Column {
+                    Text(
+                        text = "为「${plan.title}」设置今天已完成的分钟数",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = minutesText,
+                        onValueChange = { minutesText = it.filter { c -> c.isDigit() } },
+                        label = { Text("分钟") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val minutes = minutesText.toIntOrNull() ?: 0
+                    viewModel.setTodayMinutes(plan.id, minutes)
+                    editPlan = null
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { editPlan = null }) { Text("取消") } }
+        )
+    }
+
+    // 单个计划删除确认
+    deleteConfirmPlan?.let { plan ->
+        AlertDialog(
+            onDismissRequest = { deleteConfirmPlan = null },
+            title = { Text("删除计划") },
+            text = { Text("确定删除「${plan.title}」？该计划的所有计时记录将被清除，且不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deletePlan(plan.id)
+                    deleteConfirmPlan = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteConfirmPlan = null }) { Text("取消") } }
+        )
+    }
+
+    // 批量删除确认
+    if (deleteConfirmBatch) {
+        AlertDialog(
+            onDismissRequest = { deleteConfirmBatch = false },
+            title = { Text("批量删除") },
+            text = { Text("确定删除选中的 ${selectedIds.size} 个计划？所有计时记录将被清除，且不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteSelected()
+                    deleteConfirmBatch = false
+                    manageMode = false
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteConfirmBatch = false }) { Text("取消") } }
         )
     }
 }
@@ -370,15 +559,31 @@ private fun DayCellHome(
 }
 
 /**
- * 选中日的渐变方形计划卡片：右上角开始/暂停，大完成率数字。
+ * 选中日的渐变方形计划卡片：
+ * - 非管理模式：右上角开始/暂停计时，长按弹操作菜单；
+ * - 管理模式：左上角勾选圈，点击/长按切换勾选。
  *
  * @param plan 计划实体
  * @param todaySec 当日累计秒数
  * @param running 是否正在计时
+ * @param manageMode 是否处于多选管理模式
+ * @param selected 是否被勾选
  * @param onToggleTimer 开始/暂停回调
+ * @param onClick 点击回调（管理模式下切换勾选）
+ * @param onLongClick 长按回调（非管理模式弹菜单 / 管理模式切换勾选）
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GradientPlanCard(plan: PlanEntity, todaySec: Long, running: Boolean, onToggleTimer: () -> Unit) {
+private fun GradientPlanCard(
+    plan: PlanEntity,
+    todaySec: Long,
+    running: Boolean,
+    manageMode: Boolean,
+    selected: Boolean,
+    onToggleTimer: () -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
     val base = parseThemeColor(plan.colorHex)
     // 由计划色派生的深色渐变
     val deep = Color(base.red * 0.55f, base.green * 0.55f, base.blue * 0.55f)
@@ -394,22 +599,43 @@ private fun GradientPlanCard(plan: PlanEntity, todaySec: Long, running: Boolean,
             .aspectRatio(1f)
             .clip(RoundedCornerShape(22.dp))
             .background(Brush.linearGradient(listOf(base, deep)))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
-        // 右上角开始/暂停圆钮
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(10.dp)
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.28f))
-                .clickable(onClick = onToggleTimer)
-        ) {
-            if (running) {
-                Text(text = "⏸", color = Color.White, fontSize = 14.sp)
-            } else {
-                Icon(Icons.Default.PlayArrow, contentDescription = "开始计时", tint = Color.White, modifier = Modifier.size(20.dp))
+        if (!manageMode) {
+            // 非管理模式：右上角开始/暂停圆钮
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.28f))
+                    .clickable(onClick = onToggleTimer)
+            ) {
+                if (running) {
+                    Text(text = "⏸", color = Color.White, fontSize = 14.sp)
+                } else {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "开始计时", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+            }
+        } else {
+            // 管理模式：左上角勾选圈
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(10.dp)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.35f))
+            ) {
+                if (selected) {
+                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                }
             }
         }
 

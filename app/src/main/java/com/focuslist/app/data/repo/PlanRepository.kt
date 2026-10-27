@@ -94,4 +94,22 @@ class PlanRepository(private val planDao: PlanDao) {
         }
         planDao.addSeconds(planId, today, deltaSec, now)
     }
+
+    /**
+     * 手动设置计划当天的累计秒数（补录场景：覆盖原值而非追加）。
+     *
+     * @param planId 计划 ID
+     * @param sec 新的累计秒数；小于 0 时按 0 处理
+     */
+    suspend fun setTodaySeconds(planId: Long, sec: Long) {
+        val safeSec = if (sec < 0) 0L else sec
+        val today = DateUtils.startOfDay(System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        // 当天行不存在时直接以目标值建行，存在则覆盖
+        if (planDao.getLog(planId, today) == null) {
+            planDao.insertLog(PlanLogEntity(planId = planId, date = today, accumulatedSec = safeSec, updatedAt = now))
+        } else {
+            planDao.setSeconds(planId, today, safeSec, now)
+        }
+    }
 }

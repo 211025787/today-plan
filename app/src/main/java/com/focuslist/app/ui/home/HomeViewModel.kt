@@ -14,6 +14,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -54,6 +55,12 @@ class HomeViewModel(
 
     /** 选中日期（0 点时间戳）；null 表示未选中（日历展开） */
     private val selectedDay = MutableStateFlow<Long?>(null)
+
+    /** 多选模式下选中的计划 ID 集合；空集表示非多选模式 */
+    private val selectedPlanIds = MutableStateFlow<Set<Long>>(emptySet())
+
+    /** 多选模式选中集合（只读暴露） */
+    val selectMode: StateFlow<Set<Long>> = selectedPlanIds.asStateFlow()
 
     init {
         // 跨天自动落库回调：秒表跨过 0 点时把各计划已跑段写入当天
@@ -198,5 +205,68 @@ class HomeViewModel(
             }
         }
         return (sum / plans.size * 100).toInt()
+    }
+
+    /**
+     * 手动设置计划当天的已完成分钟数（补录场景：覆盖原值）。
+     *
+     * @param planId 计划 ID
+     * @param minutes 分钟数；小于 0 时按 0 处理
+     */
+    fun setTodayMinutes(planId: Long, minutes: Int) {
+        viewModelScope.launch {
+            planRepository.setTodaySeconds(planId, minutes.toLong() * 60L)
+        }
+    }
+
+    /**
+     * 切换某计划的多选勾选状态；首次勾选时进入多选模式。
+     *
+     * @param planId 计划 ID
+     */
+    fun toggleSelectPlan(planId: Long) {
+        val current = selectedPlanIds.value
+        selectedPlanIds.value = if (planId in current) {
+            current - planId
+        } else {
+            current + planId
+        }
+    }
+
+    /**
+     * 退出多选模式并清空选中集合。
+     */
+    fun exitSelectMode() {
+        selectedPlanIds.value = emptySet()
+    }
+
+    /**
+     * 删除单个计划：先停计时再删库，并从多选集合中移除。
+     *
+     * @param planId 计划 ID
+     */
+    fun deletePlan(planId: Long) {
+        PlanTimerHolder.remove(planId)
+        PlanTimerHolder.persist(appContext)
+        selectedPlanIds.value = selectedPlanIds.value - planId
+        viewModelScope.launch {
+            planRepository.delete(planId)
+        }
+    }
+
+    /**
+     * 批量删除选中的计划：逐个停计时与删库，完成后退出多选模式。
+     */
+    fun deleteSelected() {
+        val ids = selectedPlanIds.value
+        if (ids.isEmpty()) {
+            return
+        }
+        ids.forEach { PlanTimerHolder.remove(it) }
+        PlanTimerHolder.persist(appContext)
+        selectedPlanIds.value = emptySet()
+        viewModelScope.launch {
+            ids.forEach { planRepository.delete(it) }
+        }
     }
 }

@@ -113,4 +113,15 @@ interface PlanDao {
      */
     @Query("UPDATE plan_logs SET accumulatedSec = accumulatedSec + :deltaSec, updatedAt = :updatedAt WHERE planId = :planId AND date = :date")
     suspend fun addSeconds(planId: Long, date: Long, deltaSec: Long, updatedAt: Long)
+
+    /**
+     * 直接设置当日累计秒数（手动补录场景：覆盖原值而非追加）。
+     *
+     * @param planId 计划 ID
+     * @param date 当天 0 点时间戳
+     * @param sec 新的累计秒数
+     * @param updatedAt 更新时间戳
+     */
+    @Query("UPDATE plan_logs SET accumulatedSec = :sec, updatedAt = :updatedAt WHERE planId = :planId AND date = :date")
+    suspend fun setSeconds(planId: Long, date: Long, sec: Long, updatedAt: Long)
 }
