@@ -201,7 +201,8 @@ class HomeViewModel(
             if (goal <= 0) {
                 0.0
             } else {
-                (daySecondsOf(state, plan.id, dayStart).toDouble() / goal).coerceAtMost(1.0)
+                // 不截断 100%：超出目标时完成率 >100%，便于看出超额程度
+                daySecondsOf(state, plan.id, dayStart).toDouble() / goal
             }
         }
         return (sum / plans.size * 100).toInt()
@@ -269,4 +270,5 @@ class HomeViewModel(
             ids.forEach { planRepository.delete(it) }
         }
     }
+
 }

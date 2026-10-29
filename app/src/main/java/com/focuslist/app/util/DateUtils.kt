@@ -66,19 +66,20 @@ object DateUtils {
     }
 
     /**
-     * 将秒数格式化为 "MM:SS" 倒计时文案。
+     * 将秒数格式化为 "MM:SS" 倒计时文案；负值显示为 "-MM:SS"（超时计时）。
      *
-     * @param totalSec 剩余秒数，负值按 0 处理
-     * @return 格式化字符串，例如 "25:00"
+     * @param totalSec 剩余秒数，可为负（超出目标后继续计时）
+     * @return 格式化字符串，例如 "25:00" 或 "-03:20"
      */
     fun formatCountdown(totalSec: Long): String {
-        val sec = if (totalSec < 0) {
-            0
-        } else {
-            totalSec
+        if (totalSec < 0) {
+            val sec = -totalSec
+            val m = sec / 60
+            val s = sec % 60
+            return "-%02d:%02d".format(m, s)
         }
-        val m = sec / 60
-        val s = sec % 60
+        val m = totalSec / 60
+        val s = totalSec % 60
         return "%02d:%02d".format(m, s)
     }
 

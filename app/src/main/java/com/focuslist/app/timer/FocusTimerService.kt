@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import com.focuslist.app.FocusListApp
 import com.focuslist.app.data.local.entity.FocusRecordEntity
 import com.focuslist.app.notify.Notifier
+import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.util.DateUtils
 import com.focuslist.app.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
@@ -103,7 +104,20 @@ class FocusTimerService : Service() {
         }
         serviceScope.launch {
             val settings = container.settingsStore.settings.first()
-            val totalSec = (if (currentDurationMin > 0) currentDurationMin else settings.focusMinutes) * 60L
+            // 番茄总时长：绑定计划时取计划剩余（目标-已落库-未落库段），<=0 时用目标开新一轮
+            val totalSec = when {
+                currentPlanId != null -> {
+                    val pid = currentPlanId!!
+                    val plan = container.planRepository.getPlan(pid)
+                    val goalSec = (plan?.dailyGoalMinutes ?: settings.focusMinutes) * 60L
+                    val savedSec = container.planRepository.getTodaySeconds(pid)
+                    val extraSec = PlanTimerHolder.timers.value[pid]?.sessionSec ?: 0L
+                    val remain = goalSec - (savedSec + extraSec)
+                    if (remain > 0) remain else goalSec
+                }
+                currentDurationMin > 0 -> currentDurationMin * 60L
+                else -> settings.focusMinutes * 60L
+            }
             phaseStartAt = System.currentTimeMillis()
             pausedAtMs = 0L
             pausedAccumSec = 0L
@@ -118,6 +132,11 @@ class FocusTimerService : Service() {
                     cyclePomos = TimerStateHolder.current().cyclePomos
                 )
             )
+            // 绑定计划时同步启动计划计时（番茄走 = 计划剩余减）
+            currentPlanId?.let {
+                PlanTimerHolder.start(it)
+                PlanTimerHolder.persist(this@FocusTimerService)
+            }
             // 占位通知更新为真实倒计时
             notifier.updateTimerNotification("专注中", DateUtils.formatCountdown(totalSec))
             startTick()
@@ -215,6 +234,11 @@ class FocusTimerService : Service() {
                 }
             }
         }
+        // 中断时暂停计划计时（保留已跑段）
+        currentPlanId?.let {
+            PlanTimerHolder.pause(it)
+            PlanTimerHolder.persist(this)
+        }
         tickJob?.cancel()
         TimerStateHolder.set(TimerUiState(cyclePomos = current.cyclePomos))
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -258,9 +282,10 @@ class FocusTimerService : Service() {
                     )
                 )
                 finished.taskId?.let { container.taskRepository.incPomo(it) }
-                // 番茄绑定计划时：完成的番茄时长累计进计划当日完成度
-                currentPlanId?.let { planId ->
-                    container.planRepository.addSessionSeconds(planId, finished.totalSec)
+                // 番茄联动计划：PlanTimerHolder 已实时累加，此处暂停保留未落库段
+                currentPlanId?.let {
+                    PlanTimerHolder.pause(it)
+                    PlanTimerHolder.persist(this@FocusTimerService)
                 }
             }
 
@@ -322,6 +347,11 @@ class FocusTimerService : Service() {
                 cyclePomos = cyclePomos
             )
         )
+        // 进入休息：暂停计划计时（保留未落库段）
+        currentPlanId?.let {
+            PlanTimerHolder.pause(it)
+            PlanTimerHolder.persist(this)
+        }
         try {
             startForeground(Notifier.NOTIFY_TIMER_RUNNING, notifier.buildTimerNotification("休息中", DateUtils.formatCountdown(totalSec)))
         } catch (e: Exception) {

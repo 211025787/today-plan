@@ -3,14 +3,20 @@ package com.focuslist.app.ui.plan
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.media.RingtoneManager
+import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
 import androidx.core.content.ContextCompat
+import com.focuslist.app.FocusListApp
 import com.focuslist.app.notify.Notifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -27,7 +33,13 @@ class PlanTimerService : Service() {
     /** 是否正在监听 */
     private var observing = false
 
+    /** 已提醒到达目标的计划集合（避免重复提醒，剩余恢复正数时重置） */
+    private val alertedPlans = mutableSetOf<Long>()
+
     private val notifier by lazy { Notifier(this) }
+
+    /** 依赖容器：读取计划目标与设置开关 */
+    private val container by lazy { (application as FocusListApp).container }
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
@@ -83,7 +95,66 @@ class PlanTimerService : Service() {
                     val entry = currentEntry()
                     notifier.updateStopwatchNotification(entry.runningCount, entry.pausedCount, entry.baseSec, entry.anyRunning)
                     PlanTimerHolder.persist(this@PlanTimerService)
+                    // 检测计划倒计时到达目标（剩余从正变 0/负）
+                    checkPlanReachGoal(map)
                 }
+            }
+        }
+    }
+
+    /**
+     * 检测运行中计划的剩余秒数是否跨过 0（到达目标），触发响铃与震动。
+     * 每个计划仅提醒一次，剩余恢复正数时重置允许下次再提醒。
+     *
+     * @param map 当前秒表 Map
+     */
+    private suspend fun checkPlanReachGoal(map: Map<Long, PlanTimerEntry>) {
+        val settings = container.settingsStore.settings.first()
+        if (!settings.planReachGoalSound && !settings.planReachGoalVibrate) {
+            return
+        }
+        for ((planId, entry) in map) {
+            if (!entry.running) {
+                continue
+            }
+            val plan = container.planRepository.getPlan(planId) ?: continue
+            val goalSec = plan.dailyGoalMinutes * 60L
+            if (goalSec <= 0) {
+                continue
+            }
+            val savedSec = container.planRepository.getTodaySeconds(planId)
+            val remain = goalSec - (savedSec + entry.sessionSec)
+            if (remain <= 0 && planId !in alertedPlans) {
+                alertedPlans.add(planId)
+                playReachGoalAlert(settings.planReachGoalSound, settings.planReachGoalVibrate)
+            } else if (remain > 0) {
+                alertedPlans.remove(planId)
+            }
+        }
+    }
+
+    /**
+     * 播放到达目标的响铃与震动提醒。
+     *
+     * @param sound 是否响铃
+     * @param vibrate 是否震动
+     */
+    private fun playReachGoalAlert(sound: Boolean, vibrate: Boolean) {
+        if (sound) {
+            try {
+                val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                RingtoneManager.getRingtone(this, uri)?.play()
+            } catch (e: SecurityException) {
+                // 铃声不可用时静默降级
+            }
+        }
+        if (vibrate) {
+            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(500L, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(500L)
             }
         }
     }

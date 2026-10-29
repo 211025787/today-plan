@@ -166,6 +166,19 @@ fun SettingsScreen(container: AppContainer, onOpenNotes: () -> Unit = {}) {
                 }
             }
 
+            // 计划倒计时到达目标提醒
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("计划倒计时提醒", style = MaterialTheme.typography.titleSmall)
+                    SwitchRow(label = "到达目标时响铃", checked = settings.planReachGoalSound) { checked ->
+                        viewModel.savePlanReachGoal(checked, settings.planReachGoalVibrate)
+                    }
+                    SwitchRow(label = "到达目标时震动", checked = settings.planReachGoalVibrate) { checked ->
+                        viewModel.savePlanReachGoal(settings.planReachGoalSound, checked)
+                    }
+                }
+            }
+
             // 备注入口卡片（FAB 里可添加，这里查看管理）
             GlassCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenNotes)) {
                 Row(

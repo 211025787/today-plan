@@ -27,6 +27,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -35,11 +37,15 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -85,6 +92,7 @@ private val dayTitleFormat = SimpleDateFormat("M 月 d 日", Locale.getDefault()
 /** 周一到周日表头 */
 private val weekHeaders = listOf("一", "二", "三", "四", "五", "六", "日")
 
+
 /**
  * 日历主页（打开即展示）：月历格子内展示当天事项标签与完成度百分比；
  * 点击某天收起日历，切换为该日计划的渐变方形卡片（右上角开始/暂停计时）。
@@ -119,6 +127,8 @@ fun CalendarHomeScreen(container: AppContainer) {
     // 删除确认对话框：单删时为该计划，批量删时为 null（用 selectedIds 判断）
     var deleteConfirmPlan by remember { mutableStateOf<PlanEntity?>(null) }
     var deleteConfirmBatch by remember { mutableStateOf(false) }
+    // 按日期范围删除计划对话框
+    var showRangeDelete by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -139,6 +149,10 @@ fun CalendarHomeScreen(container: AppContainer) {
                         }
                         IconButton(onClick = { viewModel.shiftMonth(1) }) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一月")
+                        }
+                        // 按日期范围删除计划入口
+                        IconButton(onClick = { showRangeDelete = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "范围删除")
                         }
                     } else {
                         // 选中日卡片页：管理 / 取消多选
@@ -420,6 +434,19 @@ fun CalendarHomeScreen(container: AppContainer) {
             dismissButton = { TextButton(onClick = { deleteConfirmBatch = false }) { Text("取消") } }
         )
     }
+
+    // 按日期范围删除计划对话框
+    if (showRangeDelete) {
+        RangeDeleteDialog(
+            plans = state.plans,
+            onDismiss = { showRangeDelete = false },
+            onDelete = { ids, start, end ->
+                // 删除选中日期范围内生效的计划实体及其全部计时记录
+                ids.forEach { viewModel.deletePlan(it) }
+                showRangeDelete = false
+            }
+        )
+    }
 }
 
 /**
@@ -593,6 +620,8 @@ private fun GradientPlanCard(
     } else {
         0
     }
+    // 倒计时剩余秒数（可为负，超出目标后继续计时）
+    val remainSec = goalSec - todaySec
 
     Box(
         modifier = Modifier
@@ -656,11 +685,271 @@ private fun GradientPlanCard(
                 color = Color.White
             )
             Text(
-                text = "${DateUtils.formatCountdown(todaySec)} / ${plan.dailyGoalMinutes} 分钟" +
+                text = "${DateUtils.formatCountdown(remainSec)} / ${plan.dailyGoalMinutes} 分钟" +
                     if (running) " · 计时中" else "",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White.copy(alpha = 0.85f)
             )
+        }
+    }
+}
+/** 范围删除日期显示格式 */
+private val rangeDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+/**
+ * 按日期范围删除计划对话框：选起止日期，列出范围内生效的计划，勾选删除计划实体及其全部计时记录。
+ *
+ * @param plans 全部未归档计划
+ * @param onDismiss 关闭回调
+ * @param onDelete 删除回调（选中的计划 ID 集合, 起始日期, 结束日期）
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RangeDeleteDialog(
+    plans: List<PlanEntity>,
+    onDismiss: () -> Unit,
+    onDelete: (Set<Long>, Long, Long) -> Unit
+) {
+    /** 当前显示月的 1 号 0 点 */
+    var displayMonth by remember {
+        mutableStateOf(Calendar.getInstance().apply {
+            timeInMillis = DateUtils.startOfDay(System.currentTimeMillis())
+            set(Calendar.DAY_OF_MONTH, 1)
+        }.timeInMillis)
+    }
+    /** 起始日期 0 点时间戳 */
+    var rangeStart by remember { mutableStateOf<Long?>(null) }
+    /** 结束日期 0 点时间戳 */
+    var rangeEnd by remember { mutableStateOf<Long?>(null) }
+    /** 已勾选的计划 ID */
+    val selectedPlans = remember { mutableStateListOf<Long>() }
+
+    // 范围内生效的计划：计划生效区间与选择区间有交集
+    val filteredPlans = if (rangeStart != null && rangeEnd != null) {
+        plans.filter { it.startDate <= rangeEnd!! && it.endDate >= rangeStart!! }
+    } else {
+        emptyList()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("按日期范围删除") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                // 已选范围提示
+                val rangeHint = when {
+                    rangeStart != null && rangeEnd != null -> "${rangeDateFormat.format(Date(rangeStart!!))} ~ ${rangeDateFormat.format(Date(rangeEnd!!))}"
+                    rangeStart != null -> "已选起始 ${rangeDateFormat.format(Date(rangeStart!!))}，请选结束日期"
+                    else -> "点击日期选择起始，再选结束"
+                }
+                Text(rangeHint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+                // 月份翻页
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    IconButton(onClick = {
+                        displayMonth = Calendar.getInstance().apply {
+                            timeInMillis = displayMonth
+                            add(Calendar.MONTH, -1)
+                        }.timeInMillis
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上个月")
+                    }
+                    Text(monthTitleFormat.format(Date(displayMonth)), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                    IconButton(onClick = {
+                        displayMonth = Calendar.getInstance().apply {
+                            timeInMillis = displayMonth
+                            add(Calendar.MONTH, 1)
+                        }.timeInMillis
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下个月")
+                    }
+                }
+                // 星期表头
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    weekHeaders.forEach { h ->
+                        Text(h, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    }
+                }
+                // 日期网格
+                RangeMonthGrid(
+                    displayMonth = displayMonth,
+                    rangeStart = rangeStart,
+                    rangeEnd = rangeEnd,
+                    onDateSelected = { clicked ->
+                        when {
+                            rangeStart == null -> rangeStart = clicked
+                            rangeEnd == null -> {
+                                if (clicked < rangeStart!!) {
+                                    rangeStart = clicked
+                                    rangeEnd = null
+                                } else if (clicked == rangeStart) {
+                                    rangeEnd = clicked
+                                } else {
+                                    rangeEnd = clicked
+                                }
+                            }
+                            else -> {
+                                rangeStart = clicked
+                                rangeEnd = null
+                            }
+                        }
+                    }
+                )
+                // 范围内计划列表
+                if (filteredPlans.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("范围内生效 ${filteredPlans.size} 个计划，勾选要删除的", style = MaterialTheme.typography.labelMedium)
+                    filteredPlans.forEach { plan ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (plan.id in selectedPlans) {
+                                        selectedPlans.remove(plan.id)
+                                    } else {
+                                        selectedPlans.add(plan.id)
+                                    }
+                                }
+                                .padding(vertical = 2.dp)
+                        ) {
+                            Checkbox(
+                                checked = plan.id in selectedPlans,
+                                onCheckedChange = {
+                                    if (it) {
+                                        selectedPlans.add(plan.id)
+                                    } else {
+                                        selectedPlans.remove(plan.id)
+                                    }
+                                }
+                            )
+                            Text("${plan.icon} ${plan.title}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            Text(
+                                text = "${plan.dailyGoalMinutes} 分钟/天",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else if (rangeStart != null && rangeEnd != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("该日期范围内没有生效中的计划", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (rangeStart != null && rangeEnd != null) {
+                        onDelete(selectedPlans.toSet(), rangeStart!!, rangeEnd!!)
+                    }
+                },
+                enabled = selectedPlans.isNotEmpty() && rangeStart != null && rangeEnd != null && rangeStart!! <= rangeEnd!!
+            ) {
+                Text(
+                    text = "删除 (${selectedPlans.size})",
+                    color = if (selectedPlans.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+
+}
+/**
+ * 范围删除对话框内嵌的月历日期网格。
+ *
+ * 以周一为首列，展示 [displayMonth] 所在月的每一天；点击某天触发 [onDateSelected]。
+ * 落在 [rangeStart]..[rangeEnd] 区间内的日期高亮背景，起止两端用主色圆形底。
+ *
+ * @param displayMonth 当前显示月的 1 号 0 点时间戳
+ * @param rangeStart 已选起始日期 0 点时间戳，null 表示未选
+ * @param rangeEnd 已选结束日期 0 点时间戳，null 表示未选
+ * @param onDateSelected 日期点击回调（0 点时间戳）
+ */
+@Composable
+private fun RangeMonthGrid(
+    displayMonth: Long,
+    rangeStart: Long?,
+    rangeEnd: Long?,
+    onDateSelected: (Long) -> Unit
+) {
+    val cal = remember(displayMonth) {
+        Calendar.getInstance().apply { timeInMillis = displayMonth }
+    }
+    val daysInMonth = remember(displayMonth) {
+        Calendar.getInstance().apply {
+            timeInMillis = displayMonth
+            getActualMaximum(Calendar.DAY_OF_MONTH)
+        }.getActualMaximum(Calendar.DAY_OF_MONTH)
+    }
+    // 周一为首列：Calendar.DAY_OF_WEEK 中周一=2，故偏移 1
+    val firstDayOfWeek = remember(displayMonth) {
+        Calendar.getInstance().apply {
+            timeInMillis = displayMonth
+            set(Calendar.DAY_OF_MONTH, 1)
+        }.get(Calendar.DAY_OF_WEEK)
+    }
+    val leadingBlanks = remember(firstDayOfWeek) {
+        (firstDayOfWeek - Calendar.MONDAY + 7) % 7
+    }
+    val todayStart = remember { DateUtils.startOfDay(System.currentTimeMillis()) }
+    val primary = MaterialTheme.colorScheme.primary
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+
+    // 逐行渲染，最多 6 行
+    val totalCells = leadingBlanks + daysInMonth
+    val rowCount = (totalCells + 6) / 7
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        for (row in 0 until rowCount) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                for (col in 0 until 7) {
+                    val cellIndex = row * 7 + col
+                    val dayNum = cellIndex - leadingBlanks + 1
+                    if (dayNum < 1 || dayNum > daysInMonth) {
+                        Box(modifier = Modifier.weight(1f).aspectRatio(1f))
+                    } else {
+                        val dayStart = remember(displayMonth, dayNum) {
+                            Calendar.getInstance().apply {
+                                timeInMillis = displayMonth
+                                set(Calendar.DAY_OF_MONTH, dayNum)
+                            }.timeInMillis
+                        }
+                        val isStart = rangeStart != null && dayStart == rangeStart
+                        val isEnd = rangeEnd != null && dayStart == rangeEnd
+                        val inRange = rangeStart != null && rangeEnd != null && dayStart >= rangeStart!! && dayStart <= rangeEnd!!
+                        val isToday = dayStart == todayStart
+                        val bg = when {
+                            isStart || isEnd -> primary
+                            inRange -> primaryContainer
+                            else -> Color.Transparent
+                        }
+                        val fg = when {
+                            isStart || isEnd -> Color.White
+                            inRange -> onSurface
+                            else -> onSurfaceVariant
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f)
+                                .clip(CircleShape)
+                                .background(bg)
+                                .clickable { onDateSelected(dayStart) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = dayNum.toString(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = fg,
+                                fontWeight = if (isStart || isEnd || isToday) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

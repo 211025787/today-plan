@@ -77,6 +77,28 @@ class PlanRepository(private val planDao: PlanDao) {
     }
 
     /**
+
+     * 按 ID 查询计划实体。
+     *
+     * @param id 计划 ID
+     * @return 计划实体；不存在时为 null
+     */
+    suspend fun getPlan(id: Long): PlanEntity? {
+        return planDao.getById(id)
+    }
+
+    /**
+     * 查询计划当天已落库的累计秒数（不含未落库的运行段）。
+     *
+     * @param planId 计划 ID
+     * @return 已落库秒数；无记录返回 0
+     */
+    suspend fun getTodaySeconds(planId: Long): Long {
+        val today = DateUtils.startOfDay(System.currentTimeMillis())
+        return planDao.getLog(planId, today)?.accumulatedSec ?: 0L
+    }
+
+    /**
      * 给计划当天累计追加秒数（不存在记录则先建行，保证多次开始可累加）。
      *
      * @param planId 计划 ID

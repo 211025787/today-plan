@@ -41,6 +41,7 @@ import com.focuslist.app.AppContainer
 import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.timer.FocusTimerService
 import com.focuslist.app.ui.common.GlassCard
+import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.timer.TimerPhase
 import com.focuslist.app.timer.TimerStateHolder
 import com.focuslist.app.util.DateUtils
@@ -60,6 +61,10 @@ fun FocusScreen(container: AppContainer) {
     val timer by TimerStateHolder.state.collectAsState()
     // 可关联的当天计划列表
     val todayPlans by container.planRepository.observeActiveToday().collectAsState(initial = emptyList())
+    // 当日已落库累计（算计划剩余用）
+    val todayLogs by container.planRepository.observeTodayLogs().collectAsState(initial = emptyList())
+    // 并行秒表状态（算计划剩余含未落库段）
+    val planTimers by PlanTimerHolder.timers.collectAsState()
     // 设置（白噪音类型持久化）
     val settings by container.settingsStore.settings.collectAsState(initial = TimerSettings())
     // 页面协程：写设置等轻量操作
@@ -93,11 +98,16 @@ fun FocusScreen(container: AppContainer) {
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 全屏氛围动画背景（白噪音非静音时显示）
+            if (settings.whiteNoiseType != "NONE") {
+                AmbientBackground(settings.whiteNoiseType)
+            }
+            Column(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
             // 今日统计摘要玻璃卡
             if (todaySummary.isNotEmpty()) {
                 GlassCard(modifier = Modifier.padding(bottom = 16.dp), cornerRadius = 24.dp) {
@@ -193,6 +203,7 @@ fun FocusScreen(container: AppContainer) {
                 }
             }
         }
+        }
     }
 
     // 计划选择弹窗：番茄绑定当天计划，时长自动取计划的每日目标
@@ -206,14 +217,24 @@ fun FocusScreen(container: AppContainer) {
                         Text("今天没有生效中的计划，可先去首页添加")
                     }
                     todayPlans.forEach { plan ->
+                        // 计划剩余 = 目标 - 已落库 - 未落库段
+                        val savedSec = todayLogs.firstOrNull { it.planId == plan.id }?.accumulatedSec ?: 0L
+                        val extraSec = planTimers[plan.id]?.sessionSec ?: 0L
+                        val remainSec = plan.dailyGoalMinutes * 60L - savedSec - extraSec
+                        val remainMin = (remainSec / 60L).toInt()
+                        val remainLabel = if (remainMin > 0) {
+                            "剩余 $remainMin 分钟"
+                        } else {
+                            "已超目标 ${-remainMin} 分钟"
+                        }
                         TextButton(
                             onClick = {
-                                // 番茄时长 = 计划每日目标时长，完成后累计到计划
+                                // 番茄时长由 Service 按计划剩余自动计算
                                 FocusTimerService.startPomodoro(
                                     context = context,
                                     taskId = null,
                                     title = plan.title,
-                                    durationMin = plan.dailyGoalMinutes,
+                                    durationMin = 0,
                                     planId = plan.id
                                 )
                                 showTaskPicker = false
@@ -221,7 +242,7 @@ fun FocusScreen(container: AppContainer) {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                "${plan.icon} ${plan.title}（${plan.dailyGoalMinutes} 分钟）",
+                                "${plan.icon} ${plan.title}（$remainLabel）",
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Start
                             )

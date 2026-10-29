@@ -26,6 +26,8 @@ private val Context.dataStore by preferencesDataStore(name = "focus_settings")
  * @property themeMode 主题模式：SYSTEM 跟随系统、LIGHT 浅色、DARK 深色
  * @property themeColor 主题色，格式 "#RRGGBB"，默认滴答蓝 #4772FA
  * @property whiteNoiseType 专注时白噪音类型：NONE 关闭、WHITE 白噪声、BROWN 棕噪声
+ * @property planReachGoalSound 计划倒计时到达目标时是否响铃
+ * @property planReachGoalVibrate 计划倒计时到达目标时是否震动
  */
 data class TimerSettings(
     val focusMinutes: Int = 25,
@@ -39,7 +41,9 @@ data class TimerSettings(
     val strictMode: Boolean = false,
     val themeMode: String = "SYSTEM",
     val themeColor: String = "#4772FA",
-    val whiteNoiseType: String = "NONE"
+    val whiteNoiseType: String = "NONE",
+    val planReachGoalSound: Boolean = true,
+    val planReachGoalVibrate: Boolean = true
 )
 
 /**
@@ -85,6 +89,12 @@ class SettingsStore(private val context: Context) {
 
         /** 白噪音类型 key */
         val WHITE_NOISE = stringPreferencesKey("white_noise_type")
+
+        /** 计划到目标响铃 key */
+        val PLAN_REACH_SOUND = booleanPreferencesKey("plan_reach_goal_sound")
+
+        /** 计划到目标震动 key */
+        val PLAN_REACH_VIBRATE = booleanPreferencesKey("plan_reach_goal_vibrate")
     }
 
     /** 设置流：任何字段变更都会发射最新完整快照 */
@@ -101,7 +111,9 @@ class SettingsStore(private val context: Context) {
             strictMode = prefs[Keys.STRICT] ?: false,
             themeMode = prefs[Keys.THEME] ?: "SYSTEM",
             themeColor = prefs[Keys.THEME_COLOR] ?: "#4772FA",
-            whiteNoiseType = prefs[Keys.WHITE_NOISE] ?: "NONE"
+            whiteNoiseType = prefs[Keys.WHITE_NOISE] ?: "NONE",
+            planReachGoalSound = prefs[Keys.PLAN_REACH_SOUND] ?: true,
+            planReachGoalVibrate = prefs[Keys.PLAN_REACH_VIBRATE] ?: true
         )
     }
 
@@ -171,6 +183,19 @@ class SettingsStore(private val context: Context) {
     suspend fun updateWhiteNoise(type: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.WHITE_NOISE] = type
+        }
+    }
+
+    /**
+     * 更新计划倒计时到达目标时的提醒开关。
+     *
+     * @param sound 是否响铃
+     * @param vibrate 是否震动
+     */
+    suspend fun updatePlanReachGoal(sound: Boolean, vibrate: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.PLAN_REACH_SOUND] = sound
+            prefs[Keys.PLAN_REACH_VIBRATE] = vibrate
         }
     }
 }

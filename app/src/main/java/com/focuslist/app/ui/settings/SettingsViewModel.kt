@@ -81,4 +81,16 @@ class SettingsViewModel(private val settingsStore: SettingsStore) : ViewModel() 
             settingsStore.updateWhiteNoise(type)
         }
     }
+
+    /**
+     * 保存计划倒计时到达目标时的提醒开关。
+     *
+     * @param sound 是否响铃
+     * @param vibrate 是否震动
+     */
+    fun savePlanReachGoal(sound: Boolean, vibrate: Boolean) {
+        viewModelScope.launch {
+            settingsStore.updatePlanReachGoal(sound, vibrate)
+        }
+    }
 }

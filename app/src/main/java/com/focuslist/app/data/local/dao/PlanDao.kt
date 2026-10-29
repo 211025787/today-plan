@@ -95,6 +95,15 @@ interface PlanDao {
     suspend fun getLog(planId: Long, date: Long): PlanLogEntity?
 
     /**
+     * 按 ID 查询计划实体。
+     *
+     * @param id 计划 ID
+     * @return 计划实体；不存在时为 null
+     */
+    @Query("SELECT * FROM plans WHERE id = :id")
+    suspend fun getById(id: Long): PlanEntity?
+
+    /**
      * 插入当日记录。
      *
      * @param log 记录实体
@@ -124,4 +133,6 @@ interface PlanDao {
      */
     @Query("UPDATE plan_logs SET accumulatedSec = :sec, updatedAt = :updatedAt WHERE planId = :planId AND date = :date")
     suspend fun setSeconds(planId: Long, date: Long, sec: Long, updatedAt: Long)
+
+
 }
