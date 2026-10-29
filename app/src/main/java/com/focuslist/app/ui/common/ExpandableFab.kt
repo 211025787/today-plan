@@ -13,13 +13,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -36,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 /**
@@ -79,32 +77,20 @@ fun ExpandableFab(items: List<FabMenuItem>, modifier: Modifier = Modifier) {
                 exit = slideOutVertically(targetOffsetY = { it / 2 }, animationSpec = tween(150)) +
                     fadeOut(tween(150)) + scaleOut(transformOrigin = TransformOrigin(1f, 1f), animationSpec = tween(150))
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // 文案标签
-                    Text(
-                        text = item.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.surface)
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    // 小圆按钮
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .glass(cornerRadius = 22.dp)
-                            .clickable {
-                                expanded = false
-                                item.onClick()
-                            }
-                    ) {
-                        Text(text = item.icon, style = MaterialTheme.typography.titleMedium)
-                    }
+                // 纯图标小圆按钮（label 仅作无障碍提示）
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .glass(cornerRadius = 22.dp)
+                        .semantics { contentDescription = item.label }
+                        .clickable {
+                            expanded = false
+                            item.onClick()
+                        }
+                ) {
+                    Text(text = item.icon, style = MaterialTheme.typography.titleMedium)
                 }
             }
         }

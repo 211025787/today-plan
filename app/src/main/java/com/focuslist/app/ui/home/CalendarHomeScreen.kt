@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -67,6 +69,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
@@ -236,7 +240,14 @@ fun CalendarHomeScreen(container: AppContainer) {
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
-                Column {
+                // 填满剩余屏幕高度：星期表头固定，月份网格按行均分其余空间；
+                // 底部留出系统导航条 + 悬浮 Dock 栏（62+10*2=82dp，再加 6dp 间隙）的空间
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding()
+                        .padding(bottom = 88.dp)
+                ) {
                     // 星期表头（固定不动，月份网格在其下方滑动）
                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                         weekHeaders.forEach { label ->
@@ -256,7 +267,7 @@ fun CalendarHomeScreen(container: AppContainer) {
                             state = pagerState,
                             pagerSnapDistance = PagerSnapDistance.atMost(1)
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().weight(1f)
                     ) { page ->
                         HomeMonthGrid(
                             state = state,
@@ -524,9 +535,10 @@ private fun HomeMonthGrid(state: HomeUiState, viewModel: HomeViewModel, monthSta
     val today = DateUtils.startOfDay(System.currentTimeMillis())
     val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
         repeat(6) { row ->
-            Row(modifier = Modifier.fillMaxWidth()) {
+            // 6 行按权重均分翻页器高度，屏幕越高格子越高
+            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 repeat(7) { col ->
                     val dayStart = gridStart + (row * 7 + col) * DateUtils.DAY_MILLIS
                     val inMonth = dayStart >= monthStart && dayStart < monthStart + daysInMonth * DateUtils.DAY_MILLIS
@@ -535,9 +547,10 @@ private fun HomeMonthGrid(state: HomeUiState, viewModel: HomeViewModel, monthSta
                         inMonth = inMonth,
                         isToday = dayStart == today,
                         plans = if (inMonth) viewModel.plansOfDay(state, dayStart) else emptyList(),
-                        percent = if (inMonth) viewModel.percentOfDay(state, dayStart) else -1,
+                        state = state,
+                        viewModel = viewModel,
                         onClick = { onSelectDay(dayStart) },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).fillMaxHeight()
                     )
                 }
             }
@@ -546,13 +559,14 @@ private fun HomeMonthGrid(state: HomeUiState, viewModel: HomeViewModel, monthSta
 }
 
 /**
- * 首页日历单元格：日期数字 + 事项标签 + 完成度百分比。
+ * 首页日历单元格：日期数字 + 事项标签行（每行即迷你进度条，按当日完成比例加深填充，行尾小字数值）。
  *
  * @param dayStart 当天 0 点时间戳
  * @param inMonth 是否属于当前展示月
  * @param isToday 是否今天
  * @param plans 当天生效计划（标签来源）
- * @param percent 当日完成度百分比；-1 表示不显示
+ * @param state 首页 UI 状态（算当日完成度）
+ * @param viewModel 首页 ViewModel（算当日完成度）
  * @param onClick 点击回调
  * @param modifier 布局修饰符
  */
@@ -562,15 +576,15 @@ private fun DayCellHome(
     inMonth: Boolean,
     isToday: Boolean,
     plans: List<PlanEntity>,
-    percent: Int,
+    state: HomeUiState,
+    viewModel: HomeViewModel,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val dayNum = Calendar.getInstance().apply { timeInMillis = dayStart }.get(Calendar.DAY_OF_MONTH)
-    // Box 结构：日期左上、标签区顶部紧随、完成度绝对钉在右下角，标签再多也不会把百分比挤出去
     Box(
         modifier = modifier
-            .height(74.dp)
+            .fillMaxHeight()
             .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
             .padding(3.dp)
@@ -594,22 +608,39 @@ private fun DayCellHome(
                     }
                 )
             }
-            // 事项标签（至多 2 个，超出显示 +N）
-            plans.take(2).forEach { plan ->
+            // 事项标签（至多 3 个，超出显示 +N）：每行即迷你进度条，行尾小字为当日完成率数值
+            plans.take(3).forEach { plan ->
+                val goalSec = plan.dailyGoalMinutes * 60L
+                val progress = if (goalSec > 0) {
+                    (viewModel.daySecondsOf(state, plan.id, dayStart) * 100 / goalSec).toInt()
+                } else {
+                    0
+                }
+                val fraction = progress.coerceIn(0, 100) / 100f
+                val baseColor = parseThemeColor(plan.colorHex)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 1.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(parseThemeColor(plan.colorHex).copy(alpha = 0.18f))
+                        .drawBehind {
+                            // 整行淡色底，再按完成比例叠加深色填充
+                            drawRect(baseColor.copy(alpha = 0.18f))
+                            if (fraction > 0f) {
+                                drawRect(
+                                    color = baseColor.copy(alpha = 0.4f),
+                                    size = Size(size.width * fraction, size.height)
+                                )
+                            }
+                        }
                         .padding(horizontal = 3.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .size(4.dp, 10.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(parseThemeColor(plan.colorHex))
+                            .background(baseColor)
                     )
                     Text(
                         text = plan.title,
@@ -617,27 +648,23 @@ private fun DayCellHome(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(start = 2.dp)
+                        modifier = Modifier.weight(1f).padding(start = 2.dp)
+                    )
+                    Text(
+                        text = progress.toString(),
+                        fontSize = 7.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            if (plans.size > 2) {
+            if (plans.size > 3) {
                 Text(
-                    text = "+${plans.size - 2}",
+                    text = "+${plans.size - 3}",
                     fontSize = 8.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 3.dp)
                 )
             }
-        }
-        // 当日完成度百分比：钉在右下角，不受标签行数影响
-        if (percent >= 0 && inMonth) {
-            Text(
-                text = "$percent%",
-                fontSize = 9.sp,
-                color = if (percent >= 100) Color(0xFF43A047) else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.BottomEnd)
-            )
         }
     }
 }

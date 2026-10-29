@@ -18,7 +18,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -34,7 +33,6 @@ import com.focuslist.app.AppContainer
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.ThemeColors
 import com.focuslist.app.ui.theme.parseThemeColor
-import kotlin.math.roundToInt
 
 /**
  * 设置页（我的）：番茄参数、自动化开关、主题、备注入口与关于信息。
@@ -61,55 +59,6 @@ fun SettingsScreen(container: AppContainer, onOpenNotes: () -> Unit = {}) {
             modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(12.dp).padding(bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 计时参数卡片
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("番茄钟参数", style = MaterialTheme.typography.titleSmall)
-                    DurationSlider(
-                        label = "专注时长", value = settings.focusMinutes, range = 5f..120f, unit = "分钟"
-                    ) { value ->
-                        viewModel.saveDurations(value, settings.shortBreakMinutes, settings.longBreakMinutes, settings.longBreakInterval)
-                    }
-                    DurationSlider(
-                        label = "短休息", value = settings.shortBreakMinutes, range = 1f..30f, unit = "分钟"
-                    ) { value ->
-                        viewModel.saveDurations(settings.focusMinutes, value, settings.longBreakMinutes, settings.longBreakInterval)
-                    }
-                    DurationSlider(
-                        label = "长休息", value = settings.longBreakMinutes, range = 5f..60f, unit = "分钟"
-                    ) { value ->
-                        viewModel.saveDurations(settings.focusMinutes, settings.shortBreakMinutes, value, settings.longBreakInterval)
-                    }
-                    DurationSlider(
-                        label = "长休息间隔", value = settings.longBreakInterval, range = 2f..8f, unit = "个番茄"
-                    ) { value ->
-                        viewModel.saveDurations(settings.focusMinutes, settings.shortBreakMinutes, settings.longBreakMinutes, value)
-                    }
-                }
-            }
-
-            // 行为开关卡片
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("自动化", style = MaterialTheme.typography.titleSmall)
-                    SwitchRow(label = "番茄结束后自动开始休息", checked = settings.autoStartBreak) { checked ->
-                        viewModel.saveSwitches(checked, settings.autoStartNextPomo, settings.soundEnabled, settings.vibrateEnabled, settings.strictMode)
-                    }
-                    SwitchRow(label = "休息结束后自动开始下一番茄", checked = settings.autoStartNextPomo) { checked ->
-                        viewModel.saveSwitches(settings.autoStartBreak, checked, settings.soundEnabled, settings.vibrateEnabled, settings.strictMode)
-                    }
-                    SwitchRow(label = "结束时响铃", checked = settings.soundEnabled) { checked ->
-                        viewModel.saveSwitches(settings.autoStartBreak, settings.autoStartNextPomo, checked, settings.vibrateEnabled, settings.strictMode)
-                    }
-                    SwitchRow(label = "结束时震动", checked = settings.vibrateEnabled) { checked ->
-                        viewModel.saveSwitches(settings.autoStartBreak, settings.autoStartNextPomo, settings.soundEnabled, checked, settings.strictMode)
-                    }
-                    SwitchRow(label = "严格模式（计时期间勿退出）", checked = settings.strictMode) { checked ->
-                        viewModel.saveSwitches(settings.autoStartBreak, settings.autoStartNextPomo, settings.soundEnabled, settings.vibrateEnabled, checked)
-                    }
-                }
-            }
-
             // 主题卡片
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -203,30 +152,6 @@ fun SettingsScreen(container: AppContainer, onOpenNotes: () -> Unit = {}) {
                 }
             }
         }
-    }
-}
-
-/**
- * 时长滑杆行。
- *
- * @param label 参数名
- * @param value 当前值
- * @param range 取值范围
- * @param unit 单位文案
- * @param onChange 变更回调（取整后的值）
- */
-@Composable
-private fun DurationSlider(label: String, value: Int, range: ClosedFloatingPointRange<Float>, unit: String, onChange: (Int) -> Unit) {
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text(text = "$value $unit", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-        }
-        Slider(
-            value = value.toFloat(),
-            onValueChange = { onChange(it.roundToInt()) },
-            valueRange = range
-        )
     }
 }
 

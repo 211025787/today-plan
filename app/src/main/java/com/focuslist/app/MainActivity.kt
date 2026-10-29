@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        requestHighestRefreshRate()
         requestNotificationPermissionIfNeeded()
 
         // 小组件点击"番茄钟"快捷入口：跳到专注页
@@ -96,6 +97,26 @@ class MainActivity : ComponentActivity() {
                 AppScaffold(container = app.container, startRoute = startRoute)
             }
         }
+    }
+
+    /**
+     * 请求设备支持的最高刷新率显示模式。
+     *
+     * 部分机型默认把普通应用锁在 60/90Hz，通过 preferredDisplayModeId
+     * 显式选择最高刷新率模式（如 120Hz）；此为应用侧请求，最终以系统调度为准
+     * （省电模式、系统白名单等仍可能限制）。
+     */
+    private fun requestHighestRefreshRate() {
+        val currentDisplay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay
+        } ?: return
+        val best = currentDisplay.supportedModes.maxByOrNull { it.refreshRate } ?: return
+        val attrs = window.attributes
+        attrs.preferredDisplayModeId = best.modeId
+        window.attributes = attrs
     }
 
     /**

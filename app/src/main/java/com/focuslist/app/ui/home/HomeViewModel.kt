@@ -198,30 +198,6 @@ class HomeViewModel(
     }
 
     /**
-     * 计算某天完成度百分比：各生效计划"累计/目标"（截断 100%）的均值。
-     *
-     * @param state 当前 UI 状态
-     * @param dayStart 当天 0 点时间戳
-     * @return 0-100 的整数百分比；当天无生效计划返回 -1（不显示）
-     */
-    fun percentOfDay(state: HomeUiState, dayStart: Long): Int {
-        val plans = plansOfDay(state, dayStart)
-        if (plans.isEmpty()) {
-            return -1
-        }
-        val sum = plans.sumOf { plan ->
-            val goal = plan.dailyGoalMinutes * 60L
-            if (goal <= 0) {
-                0.0
-            } else {
-                // 不截断 100%：超出目标时完成率 >100%，便于看出超额程度
-                daySecondsOf(state, plan.id, dayStart).toDouble() / goal
-            }
-        }
-        return (sum / plans.size * 100).toInt()
-    }
-
-    /**
      * 手动设置计划当天的已完成分钟数（补录场景：覆盖原值）。
      *
      * @param planId 计划 ID
