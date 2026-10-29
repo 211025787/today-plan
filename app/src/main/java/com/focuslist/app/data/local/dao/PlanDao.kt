@@ -66,6 +66,16 @@ interface PlanDao {
     suspend fun deleteLogsOf(planId: Long)
 
     /**
+     * 删除计划在指定日期区间内的日志（按范围删除计划用，区间含两端）。
+     *
+     * @param planId 计划 ID
+     * @param start 区间起点 0 点（含）
+     * @param end 区间终点 0 点（含）
+     */
+    @Query("DELETE FROM plan_logs WHERE planId = :planId AND date >= :start AND date <= :end")
+    suspend fun deleteLogsBetween(planId: Long, start: Long, end: Long)
+
+    /**
      * 观察某天全部计划的累计记录。
      *
      * @param date 当天 0 点时间戳

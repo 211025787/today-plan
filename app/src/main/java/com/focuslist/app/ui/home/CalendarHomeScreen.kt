@@ -24,6 +24,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -52,12 +56,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,6 +98,32 @@ private val dayTitleFormat = SimpleDateFormat("M 月 d 日", Locale.getDefault()
 /** 周一到周日表头 */
 private val weekHeaders = listOf("一", "二", "三", "四", "五", "六", "日")
 
+/**
+ * 翻页器可翻范围：前后各 1200 个月（100 年）。
+ * 不能用 Int.MAX_VALUE 充当无限页数——惯性滑动的目标页计算会溢出，轻轻一划就飞出几十万页。
+ */
+private const val PAGER_MONTH_RANGE = 1200
+
+/** 翻页器起始页：范围中点即当月 */
+private const val PAGER_INITIAL_PAGE = PAGER_MONTH_RANGE
+
+/** 翻页器总页数 */
+private const val PAGER_PAGE_COUNT = PAGER_MONTH_RANGE * 2 + 1
+
+/**
+ * 相对当月偏移 [offset] 个月后的 1 号 0 点时间戳。
+ *
+ * @param offset 月份偏移（0 当月，正数未来，负数过去）
+ * @return 目标月 1 号 0 点
+ */
+private fun monthStartForOffset(offset: Int): Long {
+    val cal = Calendar.getInstance()
+    cal.timeInMillis = DateUtils.startOfDay(System.currentTimeMillis())
+    cal.set(Calendar.DAY_OF_MONTH, 1)
+    cal.add(Calendar.MONTH, offset)
+    return cal.timeInMillis
+}
+
 
 /**
  * 日历主页（打开即展示）：月历格子内展示当天事项标签与完成度百分比；
@@ -99,7 +131,7 @@ private val weekHeaders = listOf("一", "二", "三", "四", "五", "六", "日"
  *
  * @param container 依赖容器
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CalendarHomeScreen(container: AppContainer) {
     // LocalContext 需在 Composable 作用域先取出，再传入 ViewModel 工厂
@@ -130,24 +162,38 @@ fun CalendarHomeScreen(container: AppContainer) {
     // 按日期范围删除计划对话框
     var showRangeDelete by remember { mutableStateOf(false) }
 
+    // 月历翻页器：跟手拖动 + 惯性吸附，页号即月份偏移
+    val pagerState = rememberPagerState(initialPage = PAGER_INITIAL_PAGE) { PAGER_PAGE_COUNT }
+    // 吸附完成后把目标月同步给 ViewModel（触发当月计时记录查询）
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { page ->
+            viewModel.setMonthOffset(page - PAGER_INITIAL_PAGE)
+        }
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
+                        // 日历展开时标题跟随翻页器目标页，拖动过半即预告新月
                         text = state.selectedDay?.let { dayTitleFormat.format(Date(it)) }
-                            ?: monthTitleFormat.format(Date(state.shownMonth)),
+                            ?: monthTitleFormat.format(Date(monthStartForOffset(pagerState.targetPage - PAGER_INITIAL_PAGE))),
                         style = MaterialTheme.typography.headlineMedium
                     )
                 },
                 actions = {
                     if (state.selectedDay == null) {
-                        // 日历展开时允许翻月
-                        IconButton(onClick = { viewModel.shiftMonth(-1) }) {
+                        // 日历展开时允许翻月（与手势滑动共用翻页器，带动画）
+                        IconButton(onClick = {
+                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                        }) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一月")
                         }
-                        IconButton(onClick = { viewModel.shiftMonth(1) }) {
+                        IconButton(onClick = {
+                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                        }) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一月")
                         }
                         // 按日期范围删除计划入口
@@ -191,7 +237,7 @@ fun CalendarHomeScreen(container: AppContainer) {
                 exit = shrinkVertically() + fadeOut()
             ) {
                 Column {
-                    // 星期表头
+                    // 星期表头（固定不动，月份网格在其下方滑动）
                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                         weekHeaders.forEach { label ->
                             Text(
@@ -203,11 +249,22 @@ fun CalendarHomeScreen(container: AppContainer) {
                             )
                         }
                     }
-                    HomeMonthGrid(
-                        state = state,
-                        viewModel = viewModel,
-                        onSelectDay = viewModel::selectDay
-                    )
+                    // 月份网格翻页器：左右滑动跟手移动，松手后惯性吸附到相邻月（一次至多翻一页）
+                    HorizontalPager(
+                        state = pagerState,
+                        flingBehavior = PagerDefaults.flingBehavior(
+                            state = pagerState,
+                            pagerSnapDistance = PagerSnapDistance.atMost(1)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { page ->
+                        HomeMonthGrid(
+                            state = state,
+                            viewModel = viewModel,
+                            monthStart = monthStartForOffset(page - PAGER_INITIAL_PAGE),
+                            onSelectDay = viewModel::selectDay
+                        )
+                    }
                 }
             }
 
@@ -441,8 +498,8 @@ fun CalendarHomeScreen(container: AppContainer) {
             plans = state.plans,
             onDismiss = { showRangeDelete = false },
             onDelete = { ids, start, end ->
-                // 删除选中日期范围内生效的计划实体及其全部计时记录
-                ids.forEach { viewModel.deletePlan(it) }
+                // 只移除所选日期范围内的计划部分，范围外日期保留
+                viewModel.deletePlansInRange(ids, start, end)
                 showRangeDelete = false
             }
         )
@@ -454,11 +511,11 @@ fun CalendarHomeScreen(container: AppContainer) {
  *
  * @param state 首页 UI 状态
  * @param viewModel 首页 ViewModel（取按天数据）
+ * @param monthStart 本页展示月份的 1 号 0 点时间戳（翻页器各页面不同）
  * @param onSelectDay 选中日期回调
  */
 @Composable
-private fun HomeMonthGrid(state: HomeUiState, viewModel: HomeViewModel, onSelectDay: (Long) -> Unit) {
-    val monthStart = state.shownMonth
+private fun HomeMonthGrid(state: HomeUiState, viewModel: HomeViewModel, monthStart: Long, onSelectDay: (Long) -> Unit) {
     // 网格起点：当月 1 号所在周的周一
     val cal = Calendar.getInstance().apply { timeInMillis = monthStart }
     val firstDow = cal.get(Calendar.DAY_OF_WEEK)
@@ -791,6 +848,15 @@ private fun RangeDeleteDialog(
                                 rangeStart = clicked
                                 rangeEnd = null
                             }
+                        }
+                        // 范围变化后，清理不再属于新范围的勾选，避免误删
+                        val s = rangeStart
+                        val e = rangeEnd
+                        if (s != null && e != null) {
+                            val validIds = plans.filter { it.startDate <= e && it.endDate >= s }.map { it.id }
+                            selectedPlans.retainAll(validIds)
+                        } else {
+                            selectedPlans.clear()
                         }
                     }
                 )

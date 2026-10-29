@@ -83,6 +83,20 @@ object DateUtils {
         return "%02d:%02d".format(m, s)
     }
 
+    /**
+     * 日期加减天数（按日历天计算，避免直接加减毫秒受时区/夏令时影响）。
+     *
+     * @param dayStart 某天 0 点时间戳
+     * @param days 偏移天数，可为负
+     * @return 偏移后当天 0 点时间戳
+     */
+    fun addDays(dayStart: Long, days: Int): Long {
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = dayStart
+        cal.add(Calendar.DAY_OF_YEAR, days)
+        return cal.timeInMillis
+    }
+
     /** 一天的毫秒数 */
     const val DAY_MILLIS: Long = 24L * 60 * 60 * 1000
 }

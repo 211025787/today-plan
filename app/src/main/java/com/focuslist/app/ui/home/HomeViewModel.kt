@@ -125,6 +125,19 @@ class HomeViewModel(
     }
 
     /**
+     * 直接设置月份偏移（翻页器吸附到位后同步，与当前值相同则忽略）。
+     *
+     * @param offset 相对当月的偏移月数
+     */
+    fun setMonthOffset(offset: Int) {
+        if (monthOffset.value == offset) {
+            return
+        }
+        monthOffset.value = offset
+        selectedDay.value = null
+    }
+
+    /**
      * 选中/取消选中某天：点击已选中的同一天则收起回日历。
      *
      * @param dayStart 当天 0 点时间戳
@@ -268,6 +281,32 @@ class HomeViewModel(
         selectedPlanIds.value = emptySet()
         viewModelScope.launch {
             ids.forEach { planRepository.delete(it) }
+        }
+    }
+
+    /**
+     * 按日期范围批量移除计划：只移除落在 [rangeStart, rangeEnd] 内的部分，
+     * 范围外日期保留（计划被截短或拆分）；范围完全覆盖计划时才整体删除。
+     *
+     * @param planIds 计划 ID 集合
+     * @param rangeStart 删除区间起点 0 点（含）
+     * @param rangeEnd 删除区间终点 0 点（含）
+     */
+    fun deletePlansInRange(planIds: Set<Long>, rangeStart: Long, rangeEnd: Long) {
+        if (planIds.isEmpty()) {
+            return
+        }
+        viewModelScope.launch {
+            val today = DateUtils.startOfDay(System.currentTimeMillis())
+            planIds.forEach { id ->
+                planRepository.deleteInRange(id, rangeStart, rangeEnd)
+                // 计划已整体删除，或今天已不在剩余生效期内时，停掉对应计时
+                val plan = planRepository.getPlan(id)
+                if (plan == null || today < plan.startDate || today > plan.endDate) {
+                    PlanTimerHolder.remove(id)
+                }
+            }
+            PlanTimerHolder.persist(appContext)
         }
     }
 
