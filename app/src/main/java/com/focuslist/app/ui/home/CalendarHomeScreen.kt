@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -80,9 +81,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
+import com.focuslist.app.data.local.entity.NoteAttachmentEntity
 import com.focuslist.app.data.local.entity.PlanEntity
+import com.focuslist.app.data.local.entity.QuickNoteEntity
+import com.focuslist.app.ui.common.AntiBurnInGlow
 import com.focuslist.app.ui.common.ExpandableFab
 import com.focuslist.app.ui.common.FabMenuItem
+import com.focuslist.app.ui.common.antiBurnInDrift
+import com.focuslist.app.ui.note.DayNotePreviewCard
+import com.focuslist.app.ui.note.NoteDetailDialog
 import com.focuslist.app.ui.note.QuickNoteSheet
 import com.focuslist.app.ui.plan.AddPlanSheet
 import kotlinx.coroutines.launch
@@ -142,6 +149,8 @@ fun CalendarHomeScreen(container: AppContainer) {
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val viewModel: HomeViewModel = viewModel { HomeViewModel(container.planRepository, appContext) }
     val state by viewModel.uiState.collectAsState()
+    // 是否有计划正在计时：用于防烧屏（页面持续微动 + 隐藏 Dock）
+    val anyPlanRunning = state.timers.values.any { it.running }
 
     // 卡片页（已选中某天）时拦截返回键：回到日历而不是退出应用
     androidx.activity.compose.BackHandler(enabled = state.selectedDay != null) {
@@ -151,6 +160,8 @@ fun CalendarHomeScreen(container: AppContainer) {
     // 添加计划/快速备注弹层
     var showAddPlan by remember { mutableStateOf(false) }
     var showQuickNote by remember { mutableStateOf(false) }
+    // 备注详情弹窗目标
+    var noteDetail by remember { mutableStateOf<QuickNoteEntity?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // 多选管理模式（纯 UI 状态）：选中日卡片页点击"管理"进入
@@ -247,6 +258,8 @@ fun CalendarHomeScreen(container: AppContainer) {
                         .fillMaxSize()
                         .navigationBarsPadding()
                         .padding(bottom = 88.dp)
+                        // 计划计时中缓慢漂移，防止长期停留烧屏
+                        .antiBurnInDrift(anyPlanRunning)
                 ) {
                     // 星期表头（固定不动，月份网格在其下方滑动）
                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
@@ -299,49 +312,89 @@ fun CalendarHomeScreen(container: AppContainer) {
                     )
                 }
                 val dayPlans = viewModel.plansOfDay(state, day)
+                // 当日备注：按关联日期查询
+                val dayNotes by container.noteRepository.observeByDate(day).collectAsState(initial = emptyList())
+                // 备注默认最多展示 3 条，更多可展开（随日期重置）
+                var notesExpanded by remember(day) { mutableStateOf(false) }
 
-                if (dayPlans.isEmpty()) {
-                    Text(
-                        text = "这一天没有生效中的计划，点右下角圆点添加",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(32.dp)
-                    )
-                } else {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = if (manageMode) 200.dp else 170.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            items(dayPlans, key = { it.id }) { plan ->
-                                // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
-                                val totalSec = viewModel.daySecondsOf(state, plan.id, day)
-                                val isSelected = plan.id in selectedIds
-                                GradientPlanCard(
-                                    plan = plan,
-                                    todaySec = totalSec,
-                                    running = state.timers[plan.id]?.running == true,
-                                    manageMode = manageMode,
-                                    selected = isSelected,
-                                    onToggleTimer = { viewModel.toggleTimer(plan.id) },
-                                    onClick = {
-                                        if (manageMode) {
-                                            viewModel.toggleSelectPlan(plan.id)
-                                        }
-                                    },
-                                    onLongClick = {
-                                        if (manageMode) {
-                                            viewModel.toggleSelectPlan(plan.id)
-                                        } else {
-                                            menuPlan = plan
-                                        }
-                                    }
+                Box(modifier = Modifier.fillMaxSize().antiBurnInDrift(anyPlanRunning)) {
+                    // 计时中叠加呼吸光晕，画面持续流动
+                    if (anyPlanRunning) {
+                        AntiBurnInGlow()
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = if (manageMode) 200.dp else 170.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // 当天没有计划时的提示（仍可展示备注）
+                        if (dayPlans.isEmpty()) {
+                            item(span = { GridItemSpan(2) }, key = "empty_hint") {
+                                Text(
+                                    text = "这一天没有生效中的计划，点右下角圆点添加",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 16.dp, horizontal = 4.dp)
                                 )
                             }
                         }
+                        items(dayPlans, key = { it.id }) { plan ->
+                            // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
+                            val totalSec = viewModel.daySecondsOf(state, plan.id, day)
+                            val isSelected = plan.id in selectedIds
+                            GradientPlanCard(
+                                plan = plan,
+                                todaySec = totalSec,
+                                running = state.timers[plan.id]?.running == true,
+                                manageMode = manageMode,
+                                selected = isSelected,
+                                onToggleTimer = { viewModel.toggleTimer(plan.id) },
+                                onClick = {
+                                    if (manageMode) {
+                                        viewModel.toggleSelectPlan(plan.id)
+                                    }
+                                },
+                                onLongClick = {
+                                    if (manageMode) {
+                                        viewModel.toggleSelectPlan(plan.id)
+                                    } else {
+                                        menuPlan = plan
+                                    }
+                                }
+                            )
+                        }
+
+                        // 当日备注区：标题 + 最多 3 条预览 + 展开全部
+                        if (dayNotes.isNotEmpty()) {
+                            item(span = { GridItemSpan(2) }, key = "notes_header") {
+                                Text(
+                                    text = "📝 当日备注 · ${dayNotes.size} 条",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 6.dp, start = 2.dp)
+                                )
+                            }
+                            val shownNotes = if (notesExpanded) dayNotes else dayNotes.take(3)
+                            items(shownNotes, key = { "note_${it.id}" }, span = { GridItemSpan(2) }) { note ->
+                                DayNotePreviewCard(note = note, onClick = { noteDetail = note })
+                            }
+                            if (dayNotes.size > 3) {
+                                item(span = { GridItemSpan(2) }, key = "notes_toggle") {
+                                    TextButton(
+                                        onClick = { notesExpanded = !notesExpanded },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = if (notesExpanded) "收起备注" else "展开全部 ${dayNotes.size} 条备注",
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                         // 多选模式底部：删除所选按钮
                         if (manageMode && selectedIds.isNotEmpty()) {
                             Row(
@@ -363,7 +416,6 @@ fun CalendarHomeScreen(container: AppContainer) {
                                 )
                             }
                         }
-                    }
                 }
             }
         }
@@ -380,13 +432,38 @@ fun CalendarHomeScreen(container: AppContainer) {
         )
     }
 
-    // 快速备注弹层
+    // 快速备注弹层：默认关联当前查看的日期（未选中日则为今天）
     if (showQuickNote) {
         QuickNoteSheet(
+            defaultDate = state.selectedDay ?: DateUtils.startOfDay(System.currentTimeMillis()),
             onDismiss = { showQuickNote = false },
-            onSave = { content ->
-                scope.launch { container.noteRepository.add(content) }
+            onSave = { title, content, date, attachments ->
+                scope.launch {
+                    container.noteRepository.add(
+                        title = title,
+                        content = content,
+                        date = date,
+                        attachments = attachments.map { (type, uri) ->
+                            NoteAttachmentEntity(noteId = 0, type = type, uri = uri)
+                        }
+                    )
+                }
                 showQuickNote = false
+            }
+        )
+    }
+
+    // 备注详情弹窗
+    noteDetail?.let { note ->
+        val noteAttachments by container.noteRepository.observeAttachmentsOf(note.id)
+            .collectAsState(initial = emptyList())
+        NoteDetailDialog(
+            note = note,
+            attachments = noteAttachments,
+            onDismiss = { noteDetail = null },
+            onDelete = {
+                scope.launch { container.noteRepository.delete(note.id) }
+                noteDetail = null
             }
         )
     }

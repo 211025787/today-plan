@@ -22,6 +22,7 @@ private val Context.dataStore by preferencesDataStore(name = "focus_settings")
  * @property autoStartNextPomo 休息结束后是否自动开始下一个番茄
  * @property soundEnabled 计时结束是否响铃
  * @property vibrateEnabled 计时结束是否震动
+ * @property chimeType 计时结束提示音音色：BELL 清脆铃 / WOOD 木鱼 / DROP 水滴 / BOWL 颂钵 / SOFT 柔音
  * @property strictMode 严格模式：开启后计时期间离开页面视为放弃
  * @property themeMode 主题模式：SYSTEM 跟随系统、LIGHT 浅色、DARK 深色
  * @property themeColor 主题色，格式 "#RRGGBB"，默认滴答蓝 #4772FA
@@ -38,6 +39,7 @@ data class TimerSettings(
     val autoStartNextPomo: Boolean = false,
     val soundEnabled: Boolean = true,
     val vibrateEnabled: Boolean = true,
+    val chimeType: String = "BELL",
     val strictMode: Boolean = false,
     val themeMode: String = "SYSTEM",
     val themeColor: String = "#4772FA",
@@ -78,6 +80,9 @@ class SettingsStore(private val context: Context) {
         /** 震动开关 key */
         val VIBRATE = booleanPreferencesKey("vibrate_enabled")
 
+        /** 提示音音色 key */
+        val CHIME = stringPreferencesKey("chime_type")
+
         /** 严格模式 key */
         val STRICT = booleanPreferencesKey("strict_mode")
 
@@ -108,6 +113,7 @@ class SettingsStore(private val context: Context) {
             autoStartNextPomo = prefs[Keys.AUTO_POMO] ?: false,
             soundEnabled = prefs[Keys.SOUND] ?: true,
             vibrateEnabled = prefs[Keys.VIBRATE] ?: true,
+            chimeType = prefs[Keys.CHIME] ?: "BELL",
             strictMode = prefs[Keys.STRICT] ?: false,
             themeMode = prefs[Keys.THEME] ?: "SYSTEM",
             themeColor = prefs[Keys.THEME_COLOR] ?: "#4772FA",
@@ -150,6 +156,17 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.SOUND] = sound
             prefs[Keys.VIBRATE] = vibrate
             prefs[Keys.STRICT] = strict
+        }
+    }
+
+    /**
+     * 更新计时结束提示音音色。
+     *
+     * @param type 音色标识：BELL / WOOD / DROP / BOWL / SOFT
+     */
+    suspend fun updateChime(type: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.CHIME] = type
         }
     }
 

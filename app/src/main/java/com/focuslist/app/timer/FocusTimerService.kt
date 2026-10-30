@@ -3,7 +3,6 @@ package com.focuslist.app.timer
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.media.RingtoneManager
 import android.os.Build
 import android.os.IBinder
 import android.os.VibrationEffect
@@ -12,6 +11,7 @@ import androidx.core.content.ContextCompat
 import com.focuslist.app.FocusListApp
 import com.focuslist.app.data.local.entity.FocusRecordEntity
 import com.focuslist.app.notify.Notifier
+import com.focuslist.app.ui.common.ChimePlayer
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.util.DateUtils
 import com.focuslist.app.widget.WidgetRefresher
@@ -289,7 +289,7 @@ class FocusTimerService : Service() {
                 }
             }
 
-            playAlarm(settings.soundEnabled, settings.vibrateEnabled)
+            playAlarm(settings.soundEnabled, settings.vibrateEnabled, settings.chimeType)
 
             val newCycle = if (finished.phase == TimerPhase.WORK) {
                 finished.cyclePomos + 1
@@ -391,14 +391,14 @@ class FocusTimerService : Service() {
      *
      * @param sound 是否响铃
      * @param vibrate 是否震动
+     * @param chime 提示音音色标识（BELL / WOOD / DROP / BOWL / SOFT）
      */
-    private fun playAlarm(sound: Boolean, vibrate: Boolean) {
+    private fun playAlarm(sound: Boolean, vibrate: Boolean, chime: String) {
         if (sound) {
             try {
-                val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                RingtoneManager.getRingtone(this, uri)?.play()
-            } catch (ignored: SecurityException) {
-                // 铃声不可用时静默降级
+                ChimePlayer.play(this, chime)
+            } catch (ignored: Exception) {
+                // 音频不可用时静默降级
             }
         }
         if (vibrate) {

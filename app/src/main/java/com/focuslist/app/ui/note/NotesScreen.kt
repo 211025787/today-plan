@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.focuslist.app.AppContainer
 import com.focuslist.app.ui.common.GlassCard
@@ -75,7 +76,23 @@ fun NotesScreen(container: AppContainer, onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = note.content, style = MaterialTheme.typography.bodyMedium)
+                            if (note.title.isNotBlank()) {
+                                Text(
+                                    text = note.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (note.content.isNotBlank()) {
+                                Text(
+                                    text = markdownPreview(note.content),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                             Text(
                                 text = noteTimeFormat.format(Date(note.createdAt)),
                                 style = MaterialTheme.typography.labelSmall,

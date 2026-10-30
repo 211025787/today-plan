@@ -11,6 +11,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,23 +20,23 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -53,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -60,7 +62,9 @@ import androidx.compose.ui.unit.dp
 import com.focuslist.app.AppContainer
 import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.timer.FocusTimerService
+import com.focuslist.app.ui.common.ChimePlayer
 import com.focuslist.app.ui.common.GlassCard
+import com.focuslist.app.ui.common.antiBurnInDrift
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.timer.TimerPhase
 import com.focuslist.app.timer.TimerStateHolder
@@ -127,14 +131,24 @@ fun FocusScreen(container: AppContainer) {
         }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize()) {
-            // 全屏氛围动画背景（白噪音非静音时显示）
-            if (settings.whiteNoiseType != "NONE") {
-                AmbientBackground(settings.whiteNoiseType)
-            }
+            // 是否处于计时中：用于防烧屏（画面持续微动 + 氛围光晕）
+            val focusing = timer.running && timer.phase != TimerPhase.IDLE
+            val resting = timer.phase == TimerPhase.SHORT_BREAK || timer.phase == TimerPhase.LONG_BREAK
+            // 全屏氛围底光：随白噪音模式变化（静音/白噪/棕噪三种光场）
+            FocusBackdrop(active = focusing, noiseType = settings.whiteNoiseType)
+            // 内容区：空间充足时垂直居中，小屏溢出时可滚动，保证底部按钮不被裁掉
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .navigationBarsPadding()
+                    .padding(bottom = 96.dp)
+                    .antiBurnInDrift(focusing),
+                contentAlignment = Alignment.Center
+            ) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
             // 今日统计摘要玻璃卡
             if (todaySummary.isNotEmpty()) {
@@ -161,8 +175,14 @@ fun FocusScreen(container: AppContainer) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 圆形进度环 + 中央时间
+            // 圆形进度环 + 中央时间（外圈套唱片式光晕）
             Box(contentAlignment = Alignment.Center) {
+                // 唱片式光环：数十圈同心弧缓慢自转 + 反向扫光 + 呼吸缩放
+                TimerAura(
+                    active = focusing,
+                    resting = resting,
+                    modifier = Modifier.size(340.dp)
+                )
                 val progress = if (timer.totalSec > 0) {
                     1f - timer.remainSec.toFloat() / timer.totalSec.toFloat()
                 } else {
@@ -206,31 +226,57 @@ fun FocusScreen(container: AppContainer) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 控制按钮区
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                when {
-                    timer.phase == TimerPhase.IDLE -> {
-                        OutlinedButton(onClick = { showTaskPicker = true }) { Text("选择计划") }
-                        Button(onClick = { FocusTimerService.startPomodoro(context, null, "") }) { Text("自由专注") }
-                    }
-                    else -> {
-                        if (timer.running) {
-                            Button(onClick = { FocusTimerService.sendAction(context, FocusTimerService.ACTION_PAUSE) }) { Text("暂停") }
-                        } else {
-                            Button(onClick = { FocusTimerService.sendAction(context, FocusTimerService.ACTION_RESUME) }) { Text("继续") }
-                        }
-                        if (timer.phase == TimerPhase.WORK) {
-                            OutlinedButton(
-                                onClick = { FocusTimerService.sendAction(context, FocusTimerService.ACTION_STOP) },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                            ) { Text("放弃") }
-                        } else {
-                            OutlinedButton(onClick = { FocusTimerService.sendAction(context, FocusTimerService.ACTION_SKIP) }) { Text("跳过休息") }
+            // 主操作：大圆形按钮（开始 / 暂停 / 继续）—— 与上方光环呼应的"唱针"式单一主动作
+            val primaryIcon = if (timer.running) Icons.Default.Pause else Icons.Default.PlayArrow
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(88.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clickable {
+                        when {
+                            timer.phase == TimerPhase.IDLE ->
+                                FocusTimerService.startPomodoro(context, null, "")
+                            timer.running ->
+                                FocusTimerService.sendAction(context, FocusTimerService.ACTION_PAUSE)
+                            else ->
+                                FocusTimerService.sendAction(context, FocusTimerService.ACTION_RESUME)
                         }
                     }
+            ) {
+                Icon(
+                    imageVector = primaryIcon,
+                    contentDescription = when {
+                        timer.phase == TimerPhase.IDLE -> "开始专注"
+                        timer.running -> "暂停"
+                        else -> "继续"
+                    },
+                    tint = Color.White,
+                    modifier = Modifier.size(38.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // 次要操作：低调的文字按钮，不抢主按钮视觉
+            when {
+                timer.phase == TimerPhase.IDLE -> TextButton(onClick = { showTaskPicker = true }) {
+                    Text("选择计划")
+                }
+                timer.phase == TimerPhase.WORK -> TextButton(
+                    onClick = { FocusTimerService.sendAction(context, FocusTimerService.ACTION_STOP) }
+                ) {
+                    Text("放弃本轮", color = MaterialTheme.colorScheme.error)
+                }
+                else -> TextButton(
+                    onClick = { FocusTimerService.sendAction(context, FocusTimerService.ACTION_SKIP) }
+                ) {
+                    Text("跳过休息")
                 }
             }
-        }
+            }
+            }
         }
     }
 
@@ -294,17 +340,21 @@ fun FocusScreen(container: AppContainer) {
             onUpdateSwitches = { autoBreak, autoPomo, sound, vibrate, strict ->
                 scope.launch { container.settingsStore.updateSwitches(autoBreak, autoPomo, sound, vibrate, strict) }
             },
+            onUpdateChime = { type ->
+                scope.launch { container.settingsStore.updateChime(type) }
+            },
             onDismiss = { showSettings = false }
         )
     }
 }
 
 /**
- * 专注设置弹层：番茄参数（步进器）、结束时提醒（铃声/震动动画开关）、自动化开关。
+ * 专注设置弹层：番茄参数（步进器）、结束时提醒（铃声/震动动画开关）、提示音音色、自动化开关。
  *
  * @param settings 当前设置快照
  * @param onUpdateDurations 保存时长参数回调（专注、短休息、长休息、长休息间隔）
  * @param onUpdateSwitches 保存开关回调（自动休息、自动下一番茄、铃声、震动、严格模式）
+ * @param onUpdateChime 保存提示音音色回调
  * @param onDismiss 关闭弹层回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -313,8 +363,10 @@ private fun FocusSettingsSheet(
     settings: TimerSettings,
     onUpdateDurations: (Int, Int, Int, Int) -> Unit,
     onUpdateSwitches: (Boolean, Boolean, Boolean, Boolean, Boolean) -> Unit,
+    onUpdateChime: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -367,6 +419,34 @@ private fun FocusSettingsSheet(
                     onUpdateSwitches(settings.autoStartBreak, settings.autoStartNextPomo, settings.soundEnabled, checked, settings.strictMode)
                 }
             }
+
+            Text(
+                "提示音",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 16.dp, bottom = 2.dp)
+            )
+            // 音色选择：点一下即试听并保存
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState())
+            ) {
+                ChimePlayer.options.forEach { (type, name, icon) ->
+                    FilterChip(
+                        selected = settings.chimeType == type,
+                        onClick = {
+                            onUpdateChime(type)
+                            ChimePlayer.play(context, type)
+                        },
+                        label = { Text("$icon $name") }
+                    )
+                }
+            }
+            Text(
+                text = "点击试听，选中的音色用于番茄与计划计时结束提醒",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
 
             Text("自动化", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
             FocusSwitchRow(

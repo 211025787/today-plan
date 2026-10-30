@@ -6,14 +6,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -40,13 +39,13 @@ import androidx.compose.ui.unit.dp
  * 展开菜单项。
  *
  * @property icon 项图标（emoji 文本）
- * @property label 项文案
+ * @property label 项文案（无障碍提示用）
  * @property onClick 点击回调
  */
 data class FabMenuItem(val icon: String, val label: String, val onClick: () -> Unit)
 
 /**
- * 圆点悬浮按钮：点击后动画向上展开功能菜单（添加计划、备注等）。
+ * 圆点悬浮按钮：点击后菜单项向左水平展开（添加计划、备注等）。
  *
  * 注意：不使用全屏遮罩——遮罩若放在本组件内部会被裁剪到 FAB 容器导致菜单错位；
  * 展开后点击任意菜单项或主圆点即可收起。
@@ -58,39 +57,39 @@ data class FabMenuItem(val icon: String, val label: String, val onClick: () -> U
 fun ExpandableFab(items: List<FabMenuItem>, modifier: Modifier = Modifier) {
     var expanded by remember { mutableStateOf(false) }
 
-    // 菜单列：右对齐，主圆点在最下方，菜单项向上依次弹出
-    Column(
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    // 菜单行：主圆点在最右，菜单项向左依次弹出
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = modifier
     ) {
         items.forEachIndexed { index, item ->
             AnimatedVisibility(
                 visible = expanded,
-                enter = slideInVertically(
-                    initialOffsetY = { it / 2 },
+                enter = slideInHorizontally(
+                    initialOffsetX = { it / 2 },
                     animationSpec = tween(200, delayMillis = index * 40)
                 ) + fadeIn(tween(200, delayMillis = index * 40)) + scaleIn(
-                    transformOrigin = TransformOrigin(1f, 1f),
+                    transformOrigin = TransformOrigin(1f, 0.5f),
                     animationSpec = tween(200, delayMillis = index * 40)
                 ),
-                exit = slideOutVertically(targetOffsetY = { it / 2 }, animationSpec = tween(150)) +
-                    fadeOut(tween(150)) + scaleOut(transformOrigin = TransformOrigin(1f, 1f), animationSpec = tween(150))
+                exit = slideOutHorizontally(targetOffsetX = { it / 2 }, animationSpec = tween(150)) +
+                    fadeOut(tween(150)) + scaleOut(transformOrigin = TransformOrigin(1f, 0.5f), animationSpec = tween(150))
             ) {
-                // 纯图标小圆按钮（label 仅作无障碍提示）
+                // 纯图标小圆按钮（label 仅作无障碍提示），比主圆点略小
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(50.dp)
                         .clip(CircleShape)
-                        .glass(cornerRadius = 22.dp)
+                        .glass(cornerRadius = 25.dp)
                         .semantics { contentDescription = item.label }
                         .clickable {
                             expanded = false
                             item.onClick()
                         }
                 ) {
-                    Text(text = item.icon, style = MaterialTheme.typography.titleMedium)
+                    Text(text = item.icon, style = MaterialTheme.typography.titleLarge)
                 }
             }
         }

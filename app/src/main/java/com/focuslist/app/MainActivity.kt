@@ -8,6 +8,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
@@ -16,11 +22,18 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -28,6 +41,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.focuslist.app.data.prefs.TimerSettings
+import com.focuslist.app.timer.TimerPhase
+import com.focuslist.app.timer.TimerStateHolder
 import com.focuslist.app.ui.common.DockItem
 import com.focuslist.app.ui.common.GlassBackground
 import com.focuslist.app.ui.common.GlassDockBar
@@ -41,6 +56,7 @@ import com.focuslist.app.ui.theme.FocusListTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -162,25 +178,63 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
-    GlassBackground {
-        NavHost(
-            navController = navController,
-            startDestination = startRoute,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // 首页：打开即日历主页
-            composable(Destinations.HOME.route) { CalendarHomeScreen(container) }
-            composable(Destinations.FOCUS.route) { FocusScreen(container) }
-            composable(Destinations.HABITS.route) { HabitsScreen(container) }
-            composable(Destinations.MINE.route) {
-                SettingsScreen(container, onOpenNotes = { navController.navigate("notes") })
-            }
-            composable("notes") { NotesScreen(container, onBack = { navController.popBackStack() }) }
-        }
+    // 专注中（番茄钟或计划秒表在跑）：Dock 自动隐藏防烧屏，任何触摸临时唤出，静止 5 秒后再隐去
+    val pomoState by TimerStateHolder.state.collectAsState()
+    val planTimers by PlanTimerHolder.timers.collectAsState()
+    val focusing = (pomoState.running && pomoState.phase != TimerPhase.IDLE) ||
+        planTimers.values.any { it.running }
+    var dockVisible by remember { mutableStateOf(true) }
+    // 触摸计数：每次按下自增，用于重新计时隐藏
+    var touchTick by remember { mutableStateOf(0) }
 
-        // 悬浮 Dock：仅主 Tab 页面显示，底部居中
-        if (currentRoute in mainRoutes) {
-            Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+    LaunchedEffect(focusing, touchTick) {
+        if (!focusing) {
+            dockVisible = true
+            return@LaunchedEffect
+        }
+        dockVisible = true
+        delay(5000)
+        dockVisible = false
+    }
+
+    GlassBackground {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                // 只在 Initial 阶段旁听，不消费事件，不影响页面内点击与滑动
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.type == PointerEventType.Press) {
+                                touchTick++
+                            }
+                        }
+                    }
+                }
+        ) {
+            NavHost(
+                navController = navController,
+                startDestination = startRoute,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // 首页：打开即日历主页
+                composable(Destinations.HOME.route) { CalendarHomeScreen(container) }
+                composable(Destinations.FOCUS.route) { FocusScreen(container) }
+                composable(Destinations.HABITS.route) { HabitsScreen(container) }
+                composable(Destinations.MINE.route) {
+                    SettingsScreen(container, onOpenNotes = { navController.navigate("notes") })
+                }
+                composable("notes") { NotesScreen(container, onBack = { navController.popBackStack() }) }
+            }
+
+            // 悬浮 Dock：仅主 Tab 页面显示，底部居中；专注中自动收起
+            AnimatedVisibility(
+                visible = currentRoute in mainRoutes && dockVisible,
+                enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { it / 3 },
+                exit = fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 3 },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
                 GlassDockBar(
                     items = Destinations.entries.map { DockItem(it.route, it.label, it.icon) },
                     currentRoute = currentRoute,

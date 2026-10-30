@@ -12,6 +12,7 @@ import com.focuslist.app.data.repo.PlanRepository
 import com.focuslist.app.data.repo.TagRepository
 import com.focuslist.app.data.repo.TaskRepository
 import com.focuslist.app.notify.Notifier
+import com.focuslist.app.ui.common.ChimePlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,6 +70,8 @@ class FocusListApp : Application() {
         container = AppContainer(this)
         // 提前创建通知渠道，保证 Android 8+ 提醒可送达
         Notifier(this).ensureChannels()
+        // 预加载提示音（SoundPool 异步加载，启动时预热避免首次播放无声）
+        ChimePlayer.preload(this)
         // 首启写入内置清单
         appScope.launch {
             container.categoryRepository.seedIfEmpty()

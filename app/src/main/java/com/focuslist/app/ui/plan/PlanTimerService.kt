@@ -3,7 +3,6 @@ package com.focuslist.app.ui.plan
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.media.RingtoneManager
 import android.os.Build
 import android.os.IBinder
 import android.os.VibrationEffect
@@ -11,6 +10,7 @@ import android.os.Vibrator
 import androidx.core.content.ContextCompat
 import com.focuslist.app.FocusListApp
 import com.focuslist.app.notify.Notifier
+import com.focuslist.app.ui.common.ChimePlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -126,7 +126,7 @@ class PlanTimerService : Service() {
             val remain = goalSec - (savedSec + entry.sessionSec)
             if (remain <= 0 && planId !in alertedPlans) {
                 alertedPlans.add(planId)
-                playReachGoalAlert(settings.planReachGoalSound, settings.planReachGoalVibrate)
+                playReachGoalAlert(settings.planReachGoalSound, settings.planReachGoalVibrate, settings.chimeType)
             } else if (remain > 0) {
                 alertedPlans.remove(planId)
             }
@@ -138,14 +138,14 @@ class PlanTimerService : Service() {
      *
      * @param sound 是否响铃
      * @param vibrate 是否震动
+     * @param chime 提示音音色标识（BELL / WOOD / DROP / BOWL / SOFT）
      */
-    private fun playReachGoalAlert(sound: Boolean, vibrate: Boolean) {
+    private fun playReachGoalAlert(sound: Boolean, vibrate: Boolean, chime: String) {
         if (sound) {
             try {
-                val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                RingtoneManager.getRingtone(this, uri)?.play()
-            } catch (e: SecurityException) {
-                // 铃声不可用时静默降级
+                ChimePlayer.play(this, chime)
+            } catch (e: Exception) {
+                // 音频不可用时静默降级
             }
         }
         if (vibrate) {
