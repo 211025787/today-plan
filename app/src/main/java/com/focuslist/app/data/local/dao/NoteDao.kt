@@ -41,6 +41,15 @@ interface NoteDao {
     suspend fun insert(note: QuickNoteEntity): Long
 
     /**
+     * 按 ID 查询备注。
+     *
+     * @param id 备注 ID
+     * @return 备注实体；不存在时为 null
+     */
+    @Query("SELECT * FROM quick_notes WHERE id = :id")
+    suspend fun getById(id: Long): QuickNoteEntity?
+
+    /**
      * 删除备注。
      *
      * @param id 备注 ID

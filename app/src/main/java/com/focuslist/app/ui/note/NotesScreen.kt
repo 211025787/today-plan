@@ -1,5 +1,6 @@
 package com.focuslist.app.ui.note
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,14 +40,15 @@ import java.util.Locale
 private val noteTimeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
 
 /**
- * 备注页：快速备注的列表与管理（删除）。
+ * 备注页：快速备注的列表与管理（点击查看/编辑，删除）。
  *
  * @param container 依赖容器
+ * @param onOpenNote 打开备注全屏页回调（备注 ID）
  * @param onBack 返回回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotesScreen(container: AppContainer, onBack: () -> Unit) {
+fun NotesScreen(container: AppContainer, onOpenNote: (Long) -> Unit = {}, onBack: () -> Unit) {
     val notes by container.noteRepository.observeAll().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
 
@@ -73,7 +75,10 @@ fun NotesScreen(container: AppContainer, onBack: () -> Unit) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenNote(note.id) }
+                            .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             if (note.title.isNotBlank()) {

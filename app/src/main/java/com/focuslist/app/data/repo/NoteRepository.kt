@@ -65,6 +65,28 @@ class NoteRepository(private val noteDao: NoteDao) {
     }
 
     /**
+     * 按 ID 查询备注。
+     *
+     * @param id 备注 ID
+     * @return 备注实体；不存在时为 null
+     */
+    suspend fun getNote(id: Long): QuickNoteEntity? {
+        return noteDao.getById(id)
+    }
+
+    /**
+     * 更新备注内容与附件（附件整体替换：先清空再写入当前列表）。
+     *
+     * @param note 备注实体（需带 id）
+     * @param attachments 新的附件列表
+     */
+    suspend fun update(note: QuickNoteEntity, attachments: List<NoteAttachmentEntity>) {
+        noteDao.insert(note.copy(updatedAt = System.currentTimeMillis()))
+        noteDao.deleteAttachmentsOf(note.id)
+        attachments.forEach { noteDao.insertAttachment(it.copy(id = 0, noteId = note.id)) }
+    }
+
+    /**
      * 删除备注及其附件。
      *
      * @param id 备注 ID

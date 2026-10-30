@@ -36,10 +36,12 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.timer.TimerPhase
 import com.focuslist.app.timer.TimerStateHolder
@@ -49,6 +51,7 @@ import com.focuslist.app.ui.common.GlassDockBar
 import com.focuslist.app.ui.focus.FocusScreen
 import com.focuslist.app.ui.habits.HabitsScreen
 import com.focuslist.app.ui.home.CalendarHomeScreen
+import com.focuslist.app.ui.note.NoteScreen
 import com.focuslist.app.ui.note.NotesScreen
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.ui.settings.SettingsScreen
@@ -218,14 +221,48 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 startDestination = startRoute,
                 modifier = Modifier.fillMaxSize()
             ) {
-                // 首页：打开即日历主页
-                composable(Destinations.HOME.route) { CalendarHomeScreen(container) }
+                // 首页：打开即日历主页；备注统一走全屏页面
+                composable(Destinations.HOME.route) {
+                    CalendarHomeScreen(
+                        container = container,
+                        onOpenNote = { id, date ->
+                            navController.navigate("note_editor?noteId=$id&date=$date")
+                        }
+                    )
+                }
                 composable(Destinations.FOCUS.route) { FocusScreen(container) }
                 composable(Destinations.HABITS.route) { HabitsScreen(container) }
                 composable(Destinations.MINE.route) {
                     SettingsScreen(container, onOpenNotes = { navController.navigate("notes") })
                 }
-                composable("notes") { NotesScreen(container, onBack = { navController.popBackStack() }) }
+                composable("notes") {
+                    NotesScreen(
+                        container = container,
+                        onOpenNote = { id -> navController.navigate("note_editor?noteId=$id&date=0") },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                // 备注全屏页：新建（noteId=-1）与查看/编辑共用
+                composable(
+                    route = "note_editor?noteId={noteId}&date={date}",
+                    arguments = listOf(
+                        navArgument("noteId") {
+                            type = NavType.LongType
+                            defaultValue = -1L
+                        },
+                        navArgument("date") {
+                            type = NavType.LongType
+                            defaultValue = 0L
+                        }
+                    )
+                ) { entry ->
+                    NoteScreen(
+                        container = container,
+                        noteId = entry.arguments?.getLong("noteId") ?: -1L,
+                        defaultDate = entry.arguments?.getLong("date") ?: 0L,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
 
             // 悬浮 Dock：仅主 Tab 页面显示，底部居中；专注中自动收起

@@ -81,16 +81,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
-import com.focuslist.app.data.local.entity.NoteAttachmentEntity
 import com.focuslist.app.data.local.entity.PlanEntity
-import com.focuslist.app.data.local.entity.QuickNoteEntity
 import com.focuslist.app.ui.common.AntiBurnInGlow
 import com.focuslist.app.ui.common.ExpandableFab
 import com.focuslist.app.ui.common.FabMenuItem
 import com.focuslist.app.ui.common.antiBurnInDrift
 import com.focuslist.app.ui.note.DayNotePreviewCard
-import com.focuslist.app.ui.note.NoteDetailDialog
-import com.focuslist.app.ui.note.QuickNoteSheet
 import com.focuslist.app.ui.plan.AddPlanSheet
 import kotlinx.coroutines.launch
 import com.focuslist.app.ui.theme.parseThemeColor
@@ -141,10 +137,14 @@ private fun monthStartForOffset(offset: Int): Long {
  * 点击某天收起日历，切换为该日计划的渐变方形卡片（右上角开始/暂停计时）。
  *
  * @param container 依赖容器
+ * @param onOpenNote 打开备注全屏页回调（备注 ID，<=0 表示新建；关联日期 0 点时间戳）
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun CalendarHomeScreen(container: AppContainer) {
+fun CalendarHomeScreen(
+    container: AppContainer,
+    onOpenNote: (Long, Long) -> Unit = { _, _ -> }
+) {
     // LocalContext 需在 Composable 作用域先取出，再传入 ViewModel 工厂
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val viewModel: HomeViewModel = viewModel { HomeViewModel(container.planRepository, appContext) }
@@ -157,11 +157,8 @@ fun CalendarHomeScreen(container: AppContainer) {
         viewModel.clearSelection()
     }
 
-    // 添加计划/快速备注弹层
+    // 添加计划/备注弹层
     var showAddPlan by remember { mutableStateOf(false) }
-    var showQuickNote by remember { mutableStateOf(false) }
-    // 备注详情弹窗目标
-    var noteDetail by remember { mutableStateOf<QuickNoteEntity?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // 多选管理模式（纯 UI 状态）：选中日卡片页点击"管理"进入
@@ -238,7 +235,17 @@ fun CalendarHomeScreen(container: AppContainer) {
                 ExpandableFab(
                     items = listOf(
                         FabMenuItem(icon = "📋", label = "添加计划", onClick = { showAddPlan = true }),
-                        FabMenuItem(icon = "📝", label = "备注", onClick = { showQuickNote = true })
+                        FabMenuItem(
+                            icon = "📝",
+                            label = "备注",
+                            onClick = {
+                                // 新备注默认关联当前查看的日期（未选中日则为今天）
+                                onOpenNote(
+                                    -1L,
+                                    state.selectedDay ?: DateUtils.startOfDay(System.currentTimeMillis())
+                                )
+                            }
+                        )
                     )
                 )
             }
@@ -378,7 +385,7 @@ fun CalendarHomeScreen(container: AppContainer) {
                             }
                             val shownNotes = if (notesExpanded) dayNotes else dayNotes.take(3)
                             items(shownNotes, key = { "note_${it.id}" }, span = { GridItemSpan(2) }) { note ->
-                                DayNotePreviewCard(note = note, onClick = { noteDetail = note })
+                                DayNotePreviewCard(note = note, onClick = { onOpenNote(note.id, 0L) })
                             }
                             if (dayNotes.size > 3) {
                                 item(span = { GridItemSpan(2) }, key = "notes_toggle") {
@@ -428,42 +435,6 @@ fun CalendarHomeScreen(container: AppContainer) {
             onSave = { plan ->
                 scope.launch { container.planRepository.save(plan) }
                 showAddPlan = false
-            }
-        )
-    }
-
-    // 快速备注弹层：默认关联当前查看的日期（未选中日则为今天）
-    if (showQuickNote) {
-        QuickNoteSheet(
-            defaultDate = state.selectedDay ?: DateUtils.startOfDay(System.currentTimeMillis()),
-            onDismiss = { showQuickNote = false },
-            onSave = { title, content, date, attachments ->
-                scope.launch {
-                    container.noteRepository.add(
-                        title = title,
-                        content = content,
-                        date = date,
-                        attachments = attachments.map { (type, uri) ->
-                            NoteAttachmentEntity(noteId = 0, type = type, uri = uri)
-                        }
-                    )
-                }
-                showQuickNote = false
-            }
-        )
-    }
-
-    // 备注详情弹窗
-    noteDetail?.let { note ->
-        val noteAttachments by container.noteRepository.observeAttachmentsOf(note.id)
-            .collectAsState(initial = emptyList())
-        NoteDetailDialog(
-            note = note,
-            attachments = noteAttachments,
-            onDismiss = { noteDetail = null },
-            onDelete = {
-                scope.launch { container.noteRepository.delete(note.id) }
-                noteDetail = null
             }
         )
     }
