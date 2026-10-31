@@ -81,6 +81,25 @@ interface FocusRecordDao {
     )
     suspend fun sumByDay(start: Long, end: Long): List<DayTotal>
 
+    /**
+     * 按**本地小时**聚合专注秒数，用于专注节律（一天里什么时候最专注）。
+     *
+     * 与 [sumByDay] 同理走 `localtime` 修饰符，只是这里取的是小时而非日期串；
+     * `strftime('%H')` 返回的是字符串，需 `CAST ... AS INTEGER` 才能映射成 [HourTotal.hour]。
+     *
+     * @param start 段起点时间戳（含）
+     * @param end 段终点时间戳（不含）
+     * @return 每个小时的 `[小时, 秒数]`，仅包含有记录的小时，按小时升序
+     */
+    @Query(
+        "SELECT CAST(strftime('%H', startAt / 1000, 'unixepoch', 'localtime') AS INTEGER) AS hour, " +
+            "SUM(durationSec) AS seconds " +
+            "FROM focus_records " +
+            "WHERE startAt >= :start AND startAt < :end AND phase = 'WORK' AND completed = 1 " +
+            "GROUP BY hour ORDER BY hour ASC"
+    )
+    suspend fun sumByHour(start: Long, end: Long): List<HourTotal>
+
     // ---- 备份 / 恢复：全量读写 ----
 
     /** 同步读取全部专注记录，用于导出备份。 */

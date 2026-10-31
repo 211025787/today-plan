@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.0.57-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.59-4772FA" alt="version">
 </p>
 
 **今日规划**是一个纯离线的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来。所有数据只保存在本机，不联网、不上传。
@@ -140,6 +140,13 @@ ffmpeg -y -framerate 25 -i .tmp_docs/frames/f%05d.jpg -i .tmp_docs/promo.wav \
 - **年度专注热力图**：GitHub 贡献图风格，列 = 周、行 = 周一…周日，颜色越深表示当天专注越久；横向可滚动，进入页面自动滚到最近一周，**点击任意格子**即可查看当天具体分钟数；
 - **年度总览**：过去一年的累计专注（时 + 分）、活跃天数、最佳单日、最长连续与活跃日日均。
 
+### 🕐 专注节律：你通常在几点专注
+
+- 统计页新增「**专注节律**」卡：把过去一年的番茄按**本地小时**铺成 24 根柱子，一眼看出自己是一早进入状态还是夜猫子；
+- 24 小时再归成 **六大时段**（凌晨 / 清晨 / 上午 / 午间 / 下午 / 晚间），每条给出占比与分钟数，**黄金时段**用高亮色标出；
+- 「**黄金时段是「上午」8–12 点，占 42%；峰值出现在 9 点、14 点、20 点**」这类一句话结论直接写在卡片顶部；
+- 底部还有**工作日 / 周末日均对比**（谁更投入、差多少分钟），周末掉队也能立刻发现。
+
 ### 🎯 每日专注目标
 
 - **我的 → 每日目标**设置每天想专注多久：15 / 30 / 45 / 60 / 90 / 120 分钟一键选，也可以按 ±5 分钟微调（范围 5–480）；
@@ -174,7 +181,7 @@ ffmpeg -y -framerate 25 -i .tmp_docs/frames/f%05d.jpg -i .tmp_docs/promo.wav \
 | 后台 | 前台 Service（番茄钟 / 计划秒表）+ AlarmManager 精确闹钟 |
 | 系统能力 | 通知、震动、悬浮窗（TYPE_APPLICATION_OVERLAY）、桌面小组件、系统文件选择器（SAF） |
 | 数据交换 | Gson（备份 JSON 编解码，纯 JVM 库，可直接单测） |
-| 测试 | JUnit 4 单元测试（`testDebugUnitTest`），覆盖日期工具、备份编解码与统计 |
+| 测试 | JUnit 4 单元测试（`testDebugUnitTest`），覆盖日期工具、备份编解码、节律与目标等统计 |
 | 构建 | Gradle Kotlin DSL + KSP，compileSdk 34 / minSdk 26 / JDK 17 |
 
 ## 架构
@@ -217,11 +224,11 @@ app/src/main/java/com/focuslist/app/
 │   ├── common/              # 玻璃组件、Dock、FAB、提示音/提醒播放、防烧屏
 │   ├── plan/                # 计划弹层（含一句话快速建计划、模板条）、秒表服务、计时持有者、悬浮胶囊
 │   ├── settings/            # 我的（分组设置）+ 胶囊设置页
-│   ├── stats/               # 统计页：目标进度环 + 总览卡 + 年度热力图（HeatmapChart）
+│   ├── stats/               # 统计页：目标进度环 + 总览卡 + 年度热力图（HeatmapChart）+ 专注节律（RhythmChart）
 │   └── theme/               # 主题色与配色
 ├── notify/                  # 通知、目标闹钟与广播、开机恢复
 ├── widget/                  # 四款桌面小组件
-└── util/                    # 日期工具、日期键、热力图计算、每日目标计算、计划模板、一句话建计划解析、搜索打分、前后台状态
+└── util/                    # 日期工具、日期键、热力图计算、专注节律计算、每日目标计算、计划模板、一句话建计划解析、搜索打分、前后台状态
 ```
 
 ## 构建与运行
@@ -284,6 +291,7 @@ build.bat test              # 只跑单元测试
 | `util/QuickPlanParserTest` | 一句话建计划解析：时长（含小时叠加、口语半小时、上下限夹取）、相对日与周几/下周、月日与完整日期、跨年顺延、区间与"到某天"、跨度天数与中文数字、标题清理与长度上限、emoji 提图标、颜色下标稳定性（共 23 条） |
 | `util/GoalTest` | 每日目标：取值约束到 5 的倍数与 5–480 区间、进度与百分比、剩余分钟、四档状态边界（0 / <60% / ≥60% / 达标）、达标天数统计、周目标与周进度、连续达标（今天未达标回落昨天）、按中位数建议目标与上下限夹取、进度文案（共 21 条） |
 | `util/PlanTemplateTest` | 计划模板：标题规范化与截断、时长/天数上下限夹取、空标题拒绝、指纹去重、含首尾天数与跨月区间推算、由计划反推模板、合并时复用次数 +1 且不回退创建时间、超上限淘汰最不常用、双层排序、JSON 往返与脏数据容错（共 20 条） |
+| `util/RhythmTest` | 专注节律：24 小时归一化（补齐/截断/负值归零）、时段划分边界与名称区间、时段聚合与占比、黄金时段与空态、峰值小时（降序 / 平局取小时小的 / topN）、一句话总结、周末判定、区间内工作日与周末天数统计、按天拆分与日均、工作日周末对比文案四种分支（共 26 条） |
 | `util/SearchTest` | 全局搜索：分词（空白/标点、去重、大小写归一）、四档打分与基准值、多关键词 AND 语义、位置惩罚封顶、大小写不敏感、高亮区间（多处命中与相邻合并、条数上限）、摘要截取与省略号、换行压平、排序（标题权重、降序、剔除未命中、条数上限、命中字段下标）（共 24 条） |
 
 HTML 报告在 `app/build/reports/tests/testDebugUnitTest/index.html`。

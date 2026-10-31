@@ -114,6 +114,9 @@ fun StatsScreen(container: AppContainer, onBack: () -> Unit = {}) {
                 }
             }
 
+            // 专注节律（一天里什么时候最专注）
+            RhythmCard(summary = summary)
+
             // 年度总览
             YearOverviewCard(summary = summary)
 

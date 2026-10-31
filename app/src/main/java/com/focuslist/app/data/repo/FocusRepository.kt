@@ -5,6 +5,7 @@ import com.focuslist.app.data.local.entity.FocusRecordEntity
 import com.focuslist.app.util.DateUtils
 import com.focuslist.app.util.DayKeys
 import com.focuslist.app.util.Heatmap
+import com.focuslist.app.util.Rhythm
 import com.focuslist.app.util.YearOverview
 import kotlinx.coroutines.flow.Flow
 
@@ -18,6 +19,9 @@ data class DayStat(val minutes: Int, val pomos: Int)
 
 /** 年度热力图统计区间天数（滚动一年，含今天） */
 const val HEATMAP_DAYS = 365
+
+/** 专注节律的统计区间天数：与热力图保持一致（滚动一年，含今天） */
+const val RHYTHM_DAYS = HEATMAP_DAYS
 
 /** 每日目标建议的采样天数（不含今天） */
 const val GOAL_SAMPLE_DAYS = 14
@@ -36,6 +40,7 @@ const val GOAL_SAMPLE_DAYS = 14
  * @property heatRangeEnd 热力图区间末日（本地 0 点，即今天）
  * @property heatByDay 热力图数据：本地 0 点时间戳 -> 当天专注分钟数（仅含有效日）
  * @property year 年度总览指标
+ * @property rhythmByHour 专注节律：24 个小时各自的累计专注分钟数（本地时区）
  */
 data class StatsSummary(
     val todayMinutes: Int = 0,
@@ -48,7 +53,8 @@ data class StatsSummary(
     val heatRangeStart: Long = 0L,
     val heatRangeEnd: Long = 0L,
     val heatByDay: Map<Long, Int> = emptyMap(),
-    val year: YearOverview = YearOverview()
+    val year: YearOverview = YearOverview(),
+    val rhythmByHour: List<Int> = List(Rhythm.HOURS) { 0 }
 )
 
 /**
@@ -125,8 +131,29 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
             heatRangeStart = heatStart,
             heatRangeEnd = todayStart,
             heatByDay = heatByDay,
-            year = Heatmap.overview(heatByDay, todayStart)
+            year = Heatmap.overview(heatByDay, todayStart),
+            rhythmByHour = rhythmByHour(heatStart, heatEndExclusive)
         )
+    }
+
+    /**
+     * 统计时间段内每个小时的专注分钟数，用于「专注节律」。
+     *
+     * 一次按小时聚合查询即可，不必逐小时循环查库；越界的小时会被丢弃而不是崩溃。
+     *
+     * @param start 段起点时间戳（含）
+     * @param end 段终点时间戳（不含）
+     * @return 长度 24 的列表，索引即本地小时 0~23
+     */
+    suspend fun rhythmByHour(start: Long, end: Long): List<Int> {
+        val minutes = IntArray(Rhythm.HOURS)
+        recordDao.sumByHour(start, end).forEach { total ->
+            val hour = total.hour
+            if (hour in 0 until Rhythm.HOURS) {
+                minutes[hour] += (total.seconds / 60L).toInt()
+            }
+        }
+        return minutes.toList()
     }
 
     /**

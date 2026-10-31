@@ -48,6 +48,22 @@
 - 测试 82 → 102 全绿（新增 PlanTemplateTest 20 条）；包 1.0.57（code 63→64）。
 - 坑：daily slider 原上限 180 会让模板 480 分钟被夹，已统一放宽到 `PlanTemplates.MAX_MINUTES`。模板在 DataStore 里，**不随备份 JSON 走**。
 
+### 2026-11-01（第 6 次）：全局搜索（计划 + 备注） → v1.0.58
+
+- `util/Search.kt`（纯 Kotlin）：分词 + 四档打分（全等/前缀/词首/包含，位置惩罚封顶 30）+ 高亮区间合并 + 摘要截取 + 带字段权重的 `rank`（标题权重 3 > 正文 1，返回 fieldIndex）。
+- `HomeViewModel` 接入 `noteRepository`，新增 `query` 与 `searchResults` 流；`HomeSearchHit`（PlanHit / NoteHit）；`focusPlan` 翻到计划生效期内离今天最近的一天。
+- 新增 `ui/home/SearchOverlay.kt`（内联搜索框自动聚焦 + 结果卡片高亮/摘要）；首页顶栏 🔍 入口、搜索态隐藏 FAB、返回键先退搜索。
+- 测试 102 → 126 全绿（新增 SearchTest 24 条）；包 1.0.58（code 65）；commit e65a2db。
+- 坑：给 Scaffold 内容 Column 套 `if/else` 用 Python 按行号区间改缩进最稳，闭合括号常落在区间外需单独补；`snippet` 换行 1:1 替换下标不变，不必做偏移修正。
+
+### 2026-11-01（第 7 次）：专注节律（时段分布 + 黄金时段 + 工作日/周末对比） → v1.0.59
+
+- `util/Rhythm.kt`（纯 Kotlin）：24 小时归一化、6 个 4 小时时段划分与名称区间、时段聚合/占比、黄金时段、峰值小时（降序、平局取小时小的）、一句话总结、周末判定、区间内工作日/周末天数、按天拆分与日均、对比文案。
+- `FocusRecordDao.sumByHour`（`CAST(strftime('%H',...,'localtime') AS INTEGER)` + 投影 POJO `HourTotal`）；`FocusRepository.rhythmByHour()`；`StatsSummary.rhythmByHour`，区间复用 `RHYTHM_DAYS = HEATMAP_DAYS`。
+- `ui/stats/RhythmChart.kt`：24 小时柱状（峰值小时 tertiary 高亮）+ 六大时段占比条 + 结论文案 + 工作日/周末对比，接入 StatsScreen；聚合全部 `remember` 缓存。
+- 测试 126 → 152 全绿（新增 RhythmTest 26 条）；包 1.0.59（code 66）。
+- 坑：const val 不允许前向引用（`RHYTHM_DAYS` 必须写在 `HEATMAP_DAYS` 之后）；`strftime('%H')` 要 CAST 成 INTEGER。
+
 ## 下次可选题
 
 - 把计划模板并入备份 JSON（当前备份恢复后模板会丢）
@@ -55,7 +71,6 @@
 - 热力图支持点击某天跳转到当日计划页
 - 目标达成提醒：当日达标时发一条通知（复用 Notifier 渠道）
 - 热力图按「是否达标」着色（而不只是按最大值分档）
-- 计划模板与一键复用
 - 日历周视图切换
 - 备份定时提醒（如 30 天未备份提示）
 - 一句话解析扩展到备注/任务（复用同一套 token 规则）
