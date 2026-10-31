@@ -51,6 +51,7 @@ import com.focuslist.app.ui.theme.ThemeColors
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.BackupNames
 import com.focuslist.app.util.Goal
+import com.focuslist.app.util.PlanTemplates
 import com.focuslist.app.widget.WidgetRefresher
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -77,6 +78,7 @@ fun SettingsScreen(
     }
     val settings by viewModel.settings.collectAsState()
     val suggestedGoal by viewModel.suggestedGoal.collectAsState()
+    val templates by viewModel.planTemplates.collectAsState()
     val context = LocalContext.current
     // 版本号从包信息读取，避免手写
     val versionName = remember {
@@ -278,6 +280,47 @@ fun SettingsScreen(
                                     modifier = Modifier.weight(1f)
                                 )
                                 TextButton(onClick = { viewModel.saveDailyGoal(suggestion) }) { Text("采用") }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 计划模板
+            SectionLabel("计划模板")
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (templates.isEmpty()) {
+                        Text(
+                            text = "还没有模板。添加计划后会自动记住配置，也可以长按计划卡选「存为模板」。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        templates.forEachIndexed { index, template ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(template.icon, style = MaterialTheme.typography.titleMedium)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(template.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                                    Text(
+                                        text = "${PlanTemplates.describe(template)} · 用过 ${template.useCount} 次",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                TextButton(onClick = { viewModel.removePlanTemplate(template.id) }) {
+                                    Text("删除")
+                                }
                             }
                         }
                     }

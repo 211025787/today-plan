@@ -6,6 +6,7 @@ import com.focuslist.app.data.prefs.SettingsStore
 import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.data.repo.FocusRepository
 import com.focuslist.app.util.Goal
+import com.focuslist.app.util.PlanTemplate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +30,10 @@ class SettingsViewModel(
     /** 当前设置状态流 */
     val settings: StateFlow<TimerSettings> = settingsStore.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TimerSettings())
+
+    /** 计划模板列表（按复用次数排序），来自 DataStore 中与设置同库的一条 JSON */
+    val planTemplates: StateFlow<List<PlanTemplate>> = settingsStore.planTemplates
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val mutableSuggestedGoal = MutableStateFlow<Int?>(null)
 
@@ -155,6 +160,17 @@ class SettingsViewModel(
     fun saveDailyGoal(minutes: Int) {
         viewModelScope.launch {
             settingsStore.updateDailyGoal(minutes)
+        }
+    }
+
+    /**
+     * 删除一条计划模板。
+     *
+     * @param id 模板 id
+     */
+    fun removePlanTemplate(id: String) {
+        viewModelScope.launch {
+            settingsStore.removePlanTemplate(id)
         }
     }
 }

@@ -40,7 +40,17 @@
 - 数据：`SettingsStore.dailyGoalMinutes`；`FocusRepository.recentDailyMinutes()`；`StatsViewModel` 改为依赖 settingsStore 并用 `combine` 重算 streak。
 - 测试 61 → 82 全绿（新增 GoalTest 21 条）；包 1.0.56（code 62）；commit b0b92d1。
 
+### 2026-11-01（第 5 次）：计划模板与一键复用 → v1.0.57
+
+- `util/PlanTemplate.kt`（纯 Kotlin + Gson + java.time）：模板只存配置不存日期，复用时从今天重算区间；`signature(title|分钟|天数|icon)` 当 id 去重，`merge` 命中即 useCount+1，排序后 `take(24)` 自动淘汰最不常用。
+- 存储：`SettingsStore` 增 `plan_templates` JSON key + `planTemplates` Flow + `remember/removePlanTemplate`。
+- UI：`ui/plan/PlanTemplateBar.kt`（横向 chip，点击填入 / 长按删除）+ AddPlanSheet 与 QuickPlanSheet 顶部接入并在保存时自动沉淀；长按计划卡加「存为模板」；我的页加「计划模板」分组。
+- 测试 82 → 102 全绿（新增 PlanTemplateTest 20 条）；包 1.0.57（code 63→64）。
+- 坑：daily slider 原上限 180 会让模板 480 分钟被夹，已统一放宽到 `PlanTemplates.MAX_MINUTES`。模板在 DataStore 里，**不随备份 JSON 走**。
+
 ## 下次可选题
+
+- 把计划模板并入备份 JSON（当前备份恢复后模板会丢）
 
 - 热力图支持点击某天跳转到当日计划页
 - 目标达成提醒：当日达标时发一条通知（复用 Notifier 渠道）

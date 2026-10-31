@@ -39,6 +39,8 @@ import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.PlanTemplate
+import com.focuslist.app.util.PlanTemplates
 import com.focuslist.app.util.QuickPlanDraft
 import com.focuslist.app.util.QuickPlanParser
 import java.text.SimpleDateFormat
@@ -61,17 +63,38 @@ private val quickDayFormat = SimpleDateFormat("M月d日", Locale.CHINA)
  * 交互约定：输入即时解析（名称 / 图标 / 每日时长 / 起止日期），
  * 预览区所见即所得，标题为空时不可保存。
  *
+ * @param templates 已保存的计划模板，点一下把配置反写成一句话填进输入框
  * @param onDismiss 关闭回调
  * @param onSave 保存回调（产出新计划实体）
+ * @param onRemember 记住本次配置的回调
+ * @param onDeleteTemplate 删除模板回调（长按 chip）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuickPlanSheet(onDismiss: () -> Unit, onSave: (PlanEntity) -> Unit) {
+fun QuickPlanSheet(
+    templates: List<PlanTemplate> = emptyList(),
+    onDismiss: () -> Unit,
+    onSave: (PlanEntity) -> Unit,
+    onRemember: (PlanTemplate) -> Unit = {},
+    onDeleteTemplate: (PlanTemplate) -> Unit = {}
+) {
     var input by remember { mutableStateOf("") }
     val today = remember { DateUtils.startOfDay(System.currentTimeMillis()) }
     val draft = remember(input) { QuickPlanParser.parse(input, today) }
     val colorHex = remember(draft.title) {
         PlanColorPool[QuickPlanParser.colorIndex(draft.title, PlanColorPool.size)]
+    }
+
+    /** 保存并把这套配置沉淀成模板 */
+    val commit: (QuickPlanDraft, String) -> Unit = { item, hex ->
+        onSave(item.toPlan(hex))
+        PlanTemplates.create(
+            title = item.title,
+            icon = item.icon,
+            dailyMinutes = item.dailyGoalMinutes,
+            durationDays = item.days,
+            colorHex = hex
+        )?.let(onRemember)
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -85,6 +108,15 @@ fun QuickPlanSheet(onDismiss: () -> Unit, onSave: (PlanEntity) -> Unit) {
         ) {
             Text("一句话建计划", style = MaterialTheme.typography.titleMedium)
 
+            PlanTemplateBar(
+                templates = templates,
+                onPick = { template ->
+                    // 模板反写成一句话，仍走同一套解析，预览即可见
+                    input = "${template.title} ${template.icon} 每天 ${template.dailyMinutes} 分钟 坚持 ${template.durationDays} 天"
+                },
+                onDelete = onDeleteTemplate
+            )
+
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
@@ -93,7 +125,7 @@ fun QuickPlanSheet(onDismiss: () -> Unit, onSave: (PlanEntity) -> Unit) {
                 shape = RoundedCornerShape(14.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(
-                    onDone = { if (draft.hasTitle()) onSave(draft.toPlan(colorHex)) }
+                    onDone = { if (draft.hasTitle()) commit(draft, colorHex) }
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -168,7 +200,7 @@ fun QuickPlanSheet(onDismiss: () -> Unit, onSave: (PlanEntity) -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("取消") }
                 Button(
-                    onClick = { onSave(draft.toPlan(colorHex)) },
+                    onClick = { commit(draft, colorHex) },
                     enabled = draft.hasTitle(),
                     modifier = Modifier.weight(1f)
                 ) { Text("保存") }

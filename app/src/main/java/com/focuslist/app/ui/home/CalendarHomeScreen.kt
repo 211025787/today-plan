@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -94,6 +95,8 @@ import com.focuslist.app.ui.plan.QuickPlanSheet
 import kotlinx.coroutines.launch
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.PlanTemplate
+import com.focuslist.app.util.PlanTemplates
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -185,6 +188,18 @@ fun CalendarHomeScreen(
     var deleteConfirmBatch by remember { mutableStateOf(false) }
     // 按日期范围删除计划对话框
     var showRangeDelete by remember { mutableStateOf(false) }
+    // 计划模板：添加计划与一句话建计划共用，点一下即可复用
+    val templates by container.settingsStore.planTemplates.collectAsState(initial = emptyList())
+    // 「已存为模板」提示
+    var templateHint by remember { mutableStateOf<String?>(null) }
+    /** 记住一条模板 */
+    val rememberTemplate: (PlanTemplate) -> Unit = { template ->
+        scope.launch { container.settingsStore.rememberPlanTemplate(template) }
+    }
+    /** 删除一条模板 */
+    val forgetTemplate: (PlanTemplate) -> Unit = { template ->
+        scope.launch { container.settingsStore.removePlanTemplate(template.id) }
+    }
 
     // 月历翻页器：跟手拖动 + 惯性吸附，页号即月份偏移
     val pagerState = rememberPagerState(initialPage = PAGER_INITIAL_PAGE) { PAGER_PAGE_COUNT }
@@ -444,7 +459,10 @@ fun CalendarHomeScreen(
     // 添加计划弹层
     if (showAddPlan) {
         AddPlanSheet(
+            templates = templates,
             onDismiss = { showAddPlan = false },
+            onRemember = rememberTemplate,
+            onDeleteTemplate = forgetTemplate,
             onSave = { plan ->
                 scope.launch { container.planRepository.save(plan) }
                 showAddPlan = false
@@ -455,7 +473,10 @@ fun CalendarHomeScreen(
     // 一句话建计划弹层：解析结果直接落库
     if (showQuickPlan) {
         QuickPlanSheet(
+            templates = templates,
             onDismiss = { showQuickPlan = false },
+            onRemember = rememberTemplate,
+            onDeleteTemplate = forgetTemplate,
             onSave = { plan ->
                 scope.launch { container.planRepository.save(plan) }
                 showQuickPlan = false
@@ -483,6 +504,33 @@ fun CalendarHomeScreen(
                     ) {
                         Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text("编辑今日已完成时长", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val template = PlanTemplates.fromPlan(
+                                    title = plan.title,
+                                    icon = plan.icon,
+                                    dailyMinutes = plan.dailyGoalMinutes,
+                                    startAt = plan.startDate,
+                                    endAt = plan.endDate,
+                                    colorHex = plan.colorHex
+                                )
+                                menuPlan = null
+                                if (template == null) {
+                                    templateHint = "该计划没有名称，无法存为模板"
+                                } else {
+                                    rememberTemplate(template)
+                                    templateHint = "已把「${template.title}」存为模板，下次添加时点一下就能复用"
+                                }
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text("存为模板（一键复用）", style = MaterialTheme.typography.bodyLarge)
                     }
                     Row(
                         modifier = Modifier
@@ -572,6 +620,17 @@ fun CalendarHomeScreen(
                 }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { deleteConfirmBatch = false }) { Text("取消") } }
+        )
+    }
+
+    // 存为模板后的提示
+    templateHint?.let { hint ->
+        AlertDialog(
+            onDismissRequest = { templateHint = null },
+            title = { Text("计划模板") },
+            text = { Text(hint, style = MaterialTheme.typography.bodySmall) },
+            confirmButton = { TextButton(onClick = { templateHint = null }) { Text("好") } },
+            dismissButton = null
         )
     }
 

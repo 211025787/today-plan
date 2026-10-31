@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.focuslist.app.util.Goal
+import com.focuslist.app.util.PlanTemplate
+import com.focuslist.app.util.PlanTemplates
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -171,6 +173,14 @@ class SettingsStore(private val context: Context) {
 
         /** 每日专注目标 key */
         val DAILY_GOAL = intPreferencesKey("daily_goal_minutes")
+
+        /** 计划模板（JSON）key */
+        val PLAN_TEMPLATES = stringPreferencesKey("plan_templates")
+    }
+
+    /** 计划模板流：已按「用得最多」排好序 */
+    val planTemplates: Flow<List<PlanTemplate>> = context.dataStore.data.map { prefs ->
+        PlanTemplates.sorted(PlanTemplates.decode(prefs[Keys.PLAN_TEMPLATES] ?: ""))
     }
 
     /** 设置流：任何字段变更都会发射最新完整快照 */
@@ -382,6 +392,30 @@ class SettingsStore(private val context: Context) {
     suspend fun updateDailyGoal(minutes: Int) {
         context.dataStore.edit { prefs ->
             prefs[Keys.DAILY_GOAL] = Goal.coerce(minutes)
+        }
+    }
+
+    /**
+     * 记住一条计划模板：已存在则复用次数 +1，超出上限时淘汰最不常用的。
+     *
+     * @param template 待记住的模板
+     */
+    suspend fun rememberPlanTemplate(template: PlanTemplate) {
+        context.dataStore.edit { prefs ->
+            val list = PlanTemplates.decode(prefs[Keys.PLAN_TEMPLATES] ?: "")
+            prefs[Keys.PLAN_TEMPLATES] = PlanTemplates.encode(PlanTemplates.merge(list, template))
+        }
+    }
+
+    /**
+     * 删除一条计划模板。
+     *
+     * @param id 模板 id
+     */
+    suspend fun removePlanTemplate(id: String) {
+        context.dataStore.edit { prefs ->
+            val list = PlanTemplates.decode(prefs[Keys.PLAN_TEMPLATES] ?: "")
+            prefs[Keys.PLAN_TEMPLATES] = PlanTemplates.encode(PlanTemplates.remove(list, id))
         }
     }
 }

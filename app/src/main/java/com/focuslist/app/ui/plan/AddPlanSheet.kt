@@ -37,6 +37,8 @@ import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.ui.common.DatePickerDialogWrapper
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.PlanTemplate
+import com.focuslist.app.util.PlanTemplates
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,12 +50,24 @@ private val dayFormat = SimpleDateFormat("M月d日", Locale.getDefault())
 /**
  * 添加计划底部弹层：名称、图标、颜色、每日目标时长、生效日期范围。
  *
+ * 顶部是模板条：点一下把名称 / 图标 / 配色 / 时长 / 区间一次性填好；
+ * 保存后这套配置会被自动记住，下次直接复用。
+ *
+ * @param templates 已保存的计划模板（按复用次数排序）
  * @param onDismiss 关闭回调
  * @param onSave 保存回调（产出新计划实体）
+ * @param onRemember 记住本次配置的回调
+ * @param onDeleteTemplate 删除模板回调（长按 chip）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddPlanSheet(onDismiss: () -> Unit, onSave: (PlanEntity) -> Unit) {
+fun AddPlanSheet(
+    templates: List<PlanTemplate> = emptyList(),
+    onDismiss: () -> Unit,
+    onSave: (PlanEntity) -> Unit,
+    onRemember: (PlanTemplate) -> Unit = {},
+    onDeleteTemplate: (PlanTemplate) -> Unit = {}
+) {
     var title by remember { mutableStateOf("") }
     var icon by remember { mutableStateOf(PlanIconPool.first()) }
     var colorHex by remember { mutableStateOf(PlanColorPool.first()) }
@@ -76,6 +90,20 @@ fun AddPlanSheet(onDismiss: () -> Unit, onSave: (PlanEntity) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("添加计划", style = MaterialTheme.typography.titleMedium)
+
+            PlanTemplateBar(
+                templates = templates,
+                onPick = { template ->
+                    title = template.title
+                    icon = if (template.icon in PlanIconPool) template.icon else PlanIconPool.first()
+                    colorHex = template.colorHex
+                    goalMinutes = template.dailyMinutes
+                    val (start, end) = PlanTemplates.range(template.durationDays, System.currentTimeMillis())
+                    startDate = start
+                    endDate = end
+                },
+                onDelete = onDeleteTemplate
+            )
 
             OutlinedTextField(
                 value = title,
@@ -132,7 +160,7 @@ fun AddPlanSheet(onDismiss: () -> Unit, onSave: (PlanEntity) -> Unit) {
             Slider(
                 value = goalMinutes.toFloat(),
                 onValueChange = { goalMinutes = (it / 5f).roundToInt() * 5 },
-                valueRange = 5f..180f
+                valueRange = PlanTemplates.MIN_MINUTES.toFloat()..PlanTemplates.MAX_MINUTES.toFloat()
             )
 
             // 生效日期范围
@@ -166,6 +194,14 @@ fun AddPlanSheet(onDismiss: () -> Unit, onSave: (PlanEntity) -> Unit) {
                                 endDate = end
                             )
                         )
+                        // 自动沉淀为模板，下次一键复用
+                        PlanTemplates.create(
+                            title = title,
+                            icon = icon,
+                            dailyMinutes = goalMinutes,
+                            durationDays = PlanTemplates.daysBetween(start, end),
+                            colorHex = colorHex
+                        )?.let(onRemember)
                     },
                     enabled = title.isNotBlank(),
                     modifier = Modifier.weight(1f)
