@@ -13,11 +13,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -36,10 +40,11 @@ import com.focuslist.app.ui.common.GlassCard
  * 统计页：今日数据、周/月/累计汇总、连续天数与本周柱状图。
  *
  * @param container 依赖容器
+ * @param onBack 返回上一页回调（从"我的"进入时由导航栈处理）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatsScreen(container: AppContainer) {
+fun StatsScreen(container: AppContainer, onBack: () -> Unit = {}) {
     val viewModel: StatsViewModel = viewModel { StatsViewModel(container.focusRepository) }
     val summary by viewModel.summary.collectAsState()
 
@@ -53,6 +58,15 @@ fun StatsScreen(container: AppContainer) {
         topBar = {
             TopAppBar(
                 title = { Text("专注统计", style = MaterialTheme.typography.headlineMedium) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "返回",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
             )
         }

@@ -59,12 +59,14 @@ import java.util.Locale
  * 每组一张玻璃卡，避免所有控件挤在一张卡里。
  *
  * @param container 依赖容器
+ * @param onOpenStats 打开专注统计页回调
  * @param onOpenCapsule 打开悬浮胶囊设置页回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     container: AppContainer,
+    onOpenStats: () -> Unit = {},
     onOpenCapsule: () -> Unit = {}
 ) {
     val viewModel: SettingsViewModel = viewModel { SettingsViewModel(container.settingsStore) }
@@ -265,6 +267,12 @@ fun SettingsScreen(
             SectionLabel("数据")
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    ActionRow(
+                        title = "专注统计",
+                        subtitle = "累计时长、连续天数与年度热力图",
+                        onClick = onOpenStats
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ActionRow(
                         title = "导出备份",
                         subtitle = "把全部数据保存成一个 JSON 文件",

@@ -90,6 +90,7 @@ import com.focuslist.app.ui.common.FabMenuItem
 import com.focuslist.app.ui.common.antiBurnInDrift
 import com.focuslist.app.ui.note.DayNotePreviewCard
 import com.focuslist.app.ui.plan.AddPlanSheet
+import com.focuslist.app.ui.plan.QuickPlanSheet
 import kotlinx.coroutines.launch
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
@@ -169,6 +170,7 @@ fun CalendarHomeScreen(
 
     // 添加计划/备注弹层
     var showAddPlan by remember { mutableStateOf(false) }
+    var showQuickPlan by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // 多选管理模式（纯 UI 状态）：选中日卡片页点击"管理"进入
@@ -244,6 +246,7 @@ fun CalendarHomeScreen(
             Box(modifier = Modifier.padding(bottom = 92.dp)) {
                 ExpandableFab(
                     items = listOf(
+                        FabMenuItem(icon = "⚡", label = "一句话建计划", onClick = { showQuickPlan = true }),
                         FabMenuItem(icon = "📋", label = "添加计划", onClick = { showAddPlan = true }),
                         FabMenuItem(
                             icon = "📝",
@@ -445,6 +448,17 @@ fun CalendarHomeScreen(
             onSave = { plan ->
                 scope.launch { container.planRepository.save(plan) }
                 showAddPlan = false
+            }
+        )
+    }
+
+    // 一句话建计划弹层：解析结果直接落库
+    if (showQuickPlan) {
+        QuickPlanSheet(
+            onDismiss = { showQuickPlan = false },
+            onSave = { plan ->
+                scope.launch { container.planRepository.save(plan) }
+                showQuickPlan = false
             }
         )
     }
