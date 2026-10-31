@@ -104,7 +104,7 @@ def screen_capsule():
         f'<rect x="134" y="100" width="204" height="3" rx="1.5" fill="{PRIMARY}" fill-opacity="0.15"/>',
         f'<rect x="134" y="100" width="122" height="3" rx="1.5" fill="{PRIMARY}"/>',
         f'<circle cx="142" cy="122" r="3" fill="{PRIMARY}"/>',
-        f'<text x="152" y="126" font-size="12" font-weight="500" fill="{INK}">学 Java</text>',
+        f'<text x="152" y="126" font-size="12" font-weight="500" fill="{INK}">学习英语</text>',
         f'<text x="340" y="126" font-size="12" font-weight="500" fill="{PRIMARY}" text-anchor="end">-03:20</text>',
         f'<rect x="134" y="134" width="204" height="3" rx="1.5" fill="{PRIMARY}" fill-opacity="0.15"/>',
         f'<rect x="134" y="134" width="204" height="3" rx="1.5" fill="{PRIMARY}"/>',
@@ -269,7 +269,7 @@ def screen_day():
         '<rect x="36" y="242" width="82" height="6" rx="3" fill="#FFFFFF"/>',
         # 计划卡 2
         '<rect x="188" y="104" width="152" height="164" rx="22" fill="url(#cardViolet)"/>',
-        '<text x="204" y="136" font-size="11" fill="#FFFFFF" fill-opacity="0.85">📚 学 Java</text>',
+        '<text x="204" y="136" font-size="11" fill="#FFFFFF" fill-opacity="0.85">📚 学习英语</text>',
         '<text x="204" y="204" font-size="30" font-weight="600" fill="#FFFFFF">32%</text>',
         '<text x="204" y="226" font-size="10" fill="#FFFFFF" fill-opacity="0.8">剩余 34 分钟</text>',
         '<circle cx="308" cy="132" r="14" fill="#FFFFFF" fill-opacity="0.22"/>',

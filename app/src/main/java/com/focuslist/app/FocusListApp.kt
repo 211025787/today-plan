@@ -76,9 +76,10 @@ class FocusListApp : Application() {
         // 预加载提示音（SoundPool 异步加载，启动时预热避免首次播放无声）
         ChimePlayer.preload(this)
         registerForegroundTracking()
-        // 首启写入内置清单
+        // 首启写入内置清单；旧示例计划「学 Java」统一更名为「学习英语」（幂等）
         appScope.launch {
             container.categoryRepository.seedIfEmpty()
+            container.planRepository.renamePlans("学 Java", "学习英语")
         }
     }
 

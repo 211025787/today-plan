@@ -131,7 +131,6 @@ class PlanRepository(private val planDao: PlanDao) {
     }
 
     /**
-
      * 按 ID 查询计划实体。
      *
      * @param id 计划 ID
@@ -139,6 +138,17 @@ class PlanRepository(private val planDao: PlanDao) {
      */
     suspend fun getPlan(id: Long): PlanEntity? {
         return planDao.getById(id)
+    }
+
+    /**
+     * 把标题为 [oldTitle] 的计划统一改名为 [newTitle]（仅命中时生效，可重复调用）。
+     *
+     * @param oldTitle 旧标题
+     * @param newTitle 新标题
+     * @return 受影响行数
+     */
+    suspend fun renamePlans(oldTitle: String, newTitle: String): Int {
+        return planDao.renameByTitle(oldTitle, newTitle)
     }
 
     /**

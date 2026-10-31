@@ -119,7 +119,7 @@ fun CapsuleSettingsScreen(container: AppContainer, onBack: () -> Unit) {
             capsule.show(
                 entries = listOf(
                     TimerCapsule.Entry("示例计划", 12 * 60, 30 * 60),
-                    TimerCapsule.Entry("学 Java", 5 * 60, 45 * 60)
+                    TimerCapsule.Entry("学习英语", 5 * 60, 45 * 60)
                 ),
                 config = settings.toCapsuleConfig()
             )

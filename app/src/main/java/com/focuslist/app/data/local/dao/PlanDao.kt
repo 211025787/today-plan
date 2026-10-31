@@ -144,5 +144,14 @@ interface PlanDao {
     @Query("UPDATE plan_logs SET accumulatedSec = :sec, updatedAt = :updatedAt WHERE planId = :planId AND date = :date")
     suspend fun setSeconds(planId: Long, date: Long, sec: Long, updatedAt: Long)
 
+    /**
+     * 按标题批量改名（用于旧示例计划的一次性更名）。
+     *
+     * @param oldTitle 旧标题
+     * @param newTitle 新标题
+     * @return 受影响行数
+     */
+    @Query("UPDATE plans SET title = :newTitle WHERE title = :oldTitle")
+    suspend fun renameByTitle(oldTitle: String, newTitle: String): Int
 
 }

@@ -32,6 +32,36 @@
 
 ---
 
+## 项目宣传片
+
+[`video/today-plan-promo.mp4`](video/today-plan-promo.mp4) —— 36 秒、1920×1080 / 25fps、配 **128 BPM 原创电子流行 BGM**（程序合成，无版权素材），可发 B 站 / 视频号。
+
+| 时间 | 内容 |
+| --- | --- |
+| 0–5s | 开场：图标落位 + 「今日规划 · 把今天，安排明白」 |
+| 5–12s | 日历：格子内的进度、滑动翻月、点开某天开始计时 |
+| 12–19s | 专注：唱片式光环、三种白噪音、五种提示音 |
+| 19–26s | 悬浮胶囊：后台可见、多计划逐行、拖动与配色 |
+| 26–32s | 备注：全屏页面、Markdown 与附件 |
+| 32–36s | 结尾：Logo + 纯离线说明 |
+
+**重新生成**（全部资源都是代码产出的，可随时改文案重做）：
+
+```bash
+python video/make_audio.py          # 合成 36s BGM（128 BPM，底鼓/拍手/贝斯/琶音/Pad）
+node video/render.mjs               # 逐帧渲染（Chromium + CDP，输出 .tmp_docs/frames）
+ffmpeg -y -framerate 25 -i .tmp_docs/frames/f%05d.jpg -i .tmp_docs/promo.wav \
+  -c:v libx264 -preset slow -crf 20 -pix_fmt yuv420p \
+  -af "loudnorm=I=-16:TP=-1.5:LRA=11" -c:a aac -b:a 160k \
+  -shortest -movflags +faststart video/today-plan-promo.mp4
+```
+
+> 动画在 `video/promo.html` 里由 `window.seek(t)` 驱动，时间轴可精确到帧；想改文案、节奏或配色，改这个文件即可。
+> BGM 为纯合成音源：抖音热门曲库中的歌曲均有版权，不能直接随片分发；这里用同风格的原创律动替代。
+
+
+---
+
 ## 功能一览
 
 ### 📅 日历（首页）
