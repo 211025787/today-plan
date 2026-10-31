@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.0.46-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.51-4772FA" alt="version">
 </p>
 
 **今日规划**是一个纯离线的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来。所有数据只保存在本机，不联网、不上传。
@@ -146,22 +146,41 @@ app/src/main/java/com/focuslist/app/
 
 环境要求：**JDK 17** + **Android SDK 34**（无需 Android Studio 也可以命令行打包）。
 
-```bash
-# Windows 一键打包（脚本内已写好本机 JDK / SDK 路径）
-build.bat
+### 一键打包（推荐）
 
-# 或使用 Gradle 直接构建
+双击 `build.bat`，按提示操作：
+
+1. **选择包类型**：`1` 开发包 Debug（可调试，自测用）/ `2` 生产包 Release（分发用）；
+2. **输入版本号**：如 `1.0.52`，直接回车则沿用当前 `version.properties` 中的版本；
+3. 脚本自动写入版本号并开始构建，结束后打印 APK 路径与 `adb install` 命令。
+
+也可以命令行非交互执行（便于脚本化）：
+
+```bash
+build.bat debug 1.0.52
+build.bat release 1.1.0
+```
+
+产物：
+
+| 包类型 | 路径 |
+| --- | --- |
+| 开发包 | `app/build/outputs/apk/debug/app-debug.apk` |
+| 生产包 | `app/build/outputs/apk/release/app-release.apk` |
+
+> `versionCode` 每次打包后自动 +1，`versionName` 保留你输入的值。
+
+### 正式签名
+
+在根目录放 `keystore.properties`（字段见 `keystore.properties.example`）即可启用正式签名；
+**没有该文件时 Release 会自动回退到 debug 签名**，保证产出的 APK 可直接安装（但不适合上架应用市场）。
+
+### 直接使用 Gradle
+
+```bash
 ./gradlew assembleDebug
+./gradlew assembleRelease
 ```
-
-产物位置：`app/build/outputs/apk/debug/app-debug.apk`，安装：
-
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-> `assembleDebug` / `assembleRelease` 执行后会自动把 `version.properties` 的 `versionCode` +1（本次打包仍用旧值，下次生效）。
-> 更换图标后若桌面仍显示旧图标，通常是启动器缓存，卸载重装或重启桌面即可。
 
 ## 数据与隐私
 
@@ -187,4 +206,5 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 - 提示音为程序化合成（正弦波 + 包络），不含第三方录音素材；横幅、界面预览图由 `docs/images/gen_mockups.py` 生成；
 - 启动图标为矢量自适应图标（渐变底 + 日历清单 + 完成角标），与「今日规划」的名称呼应；
+- 更换图标后若桌面仍显示旧图标，多为启动器缓存，卸载重装或重启桌面即可；
 - 项目为个人自用工具，暂未开源许可证约定，如需引用请先联系作者。

@@ -1,39 +1,114 @@
 @echo off
 rem ============================================================
-rem ä¸“æ³¨æ¸…å•ä¸€é”®æ‰“åŒ…è„šæœ¬ï¼ˆæ— éœ€ Android Studioï¼‰
-rem åŒå‡»è¿è¡Œå³å¯äº§å‡º app-debug.apk
+rem ½ñÈÕ¹æ»® ¡¤ Ò»¼ü´ò°ü½Å±¾£¨ÎÞÐè Android Studio£©
+rem
+rem ÓÃ·¨Ò»£¨½»»¥Ê½£©£ºË«»÷ÔËÐÐ£¬°´ÌáÊ¾Ñ¡Ôñ°üÀàÐÍ²¢ÊäÈë°æ±¾ºÅ
+rem ÓÃ·¨¶þ£¨ÃüÁîÐÐ£©£ºbuild.bat [debug^|release] [°æ±¾ºÅ]
+rem   Àý£ºbuild.bat debug 1.0.50
+rem       build.bat release 1.1.0
 rem ============================================================
-setlocal
+setlocal enabledelayedexpansion
 
-rem æœ¬æœºå·¥å…·é“¾è·¯å¾„
+rem ±¾»ú¹¤¾ßÁ´Â·¾¶
 set "JAVA_HOME=D:\develop\jdk\jdk17"
 set "ANDROID_HOME=D:\develop\android-sdk"
 set "PATH=%JAVA_HOME%\bin;%ANDROID_HOME%\platform-tools;%PATH%"
 
 cd /d "%~dp0"
 
-if "%~1"=="release" (
-    echo [1/1] æž„å»º Release APK ...
-    call gradlew.bat assembleRelease
-) else (
-    echo [1/1] æž„å»º Debug APK ...
-    call gradlew.bat assembleDebug
-)
+set "BUILD_TYPE=%~1"
+set "NEW_NAME=%~2"
 
-if %ERRORLEVEL% EQU 0 (
-    echo.
-    echo ============================================================
-    echo æž„å»ºæˆåŠŸï¼ŒAPK ä½äºŽï¼š
-    echo   app\build\outputs\apk\debug\app-debug.apk
-    echo   app\build\outputs\apk\release\app-release.apk
-    echo.
-    echo è¿žæŽ¥æ‰‹æœºå¹¶å¼€å¯ USB è°ƒè¯•åŽï¼Œå¯æ‰§è¡Œå®‰è£…ï¼š
-    echo   adb install app\build\outputs\apk\debug\app-debug.apk
-    echo ============================================================
-) else (
-    echo.
-    echo æž„å»ºå¤±è´¥ï¼Œè¯·æŸ¥çœ‹ä¸Šæ–¹æ—¥å¿—ã€‚
-)
+if /i "%BUILD_TYPE%"=="debug" goto :have_type
+if /i "%BUILD_TYPE%"=="release" goto :have_type
 
+rem ---------- ½»»¥Ê½Ñ¡Ôñ°üÀàÐÍ ----------
+echo ============================================================
+echo   ½ñÈÕ¹æ»® ¡¤ ´ò°ü½Å±¾
+echo ============================================================
+echo   [1] ¿ª·¢°ü Debug   ¡ª¡ª ¿Éµ÷ÊÔ¡¢Ìå»ý´ó£¬×Ô¼º²âÊÔÓÃ
+echo   [2] Éú²ú°ü Release ¡ª¡ª ÕýÊ½·Ö·¢ÓÃ
+echo ------------------------------------------------------------
+set /p BUILD_TYPE=ÇëÑ¡Ôñ¹¹½¨ÀàÐÍ [1/2]£¨»Ø³µÄ¬ÈÏ 1£©£º
+if "%BUILD_TYPE%"=="" set "BUILD_TYPE=1"
+if "%BUILD_TYPE%"=="1" set "BUILD_TYPE=debug"
+if "%BUILD_TYPE%"=="2" set "BUILD_TYPE=release"
+if /i "%BUILD_TYPE%"=="debug" goto :have_type
+if /i "%BUILD_TYPE%"=="release" goto :have_type
+echo.
+echo ÎÞÐ§µÄÑ¡Ôñ£º%BUILD_TYPE%
+goto :fail
+
+:have_type
+rem ---------- ¶ÁÈ¡µ±Ç°°æ±¾ ----------
+set "CURRENT_NAME="
+set "CURRENT_CODE="
+for /f "usebackq tokens=1,2 delims==" %%a in ("version.properties") do (
+    if /i "%%a"=="versionName" set "CURRENT_NAME=%%b"
+    if /i "%%a"=="versionCode" set "CURRENT_CODE=%%b"
+)
+if "%CURRENT_NAME%"=="" set "CURRENT_NAME=1.0.0"
+if "%CURRENT_CODE%"=="" set "CURRENT_CODE=1"
+
+if not "%NEW_NAME%"=="" goto :version_ready
+echo.
+echo µ±Ç°°æ±¾£º%CURRENT_NAME%  £¨versionCode %CURRENT_CODE%£©
+set /p NEW_NAME=ÇëÊäÈë°æ±¾ºÅ£¨Èç 1.0.50£¬»Ø³µ±£³Ö²»±ä£©£º
+:version_ready
+if "%NEW_NAME%"=="" set "NEW_NAME=%CURRENT_NAME%"
+
+rem ---------- Ð´Èë version.properties£¨versionCode ÓÉ Gradle ´ò°üºó×Ô¶¯ +1£©----------
+> version.properties echo #auto-incremented after assemble
+>> version.properties echo versionName=%NEW_NAME%
+>> version.properties echo versionCode=%CURRENT_CODE%
+echo.
+echo °æ±¾ºÅÒÑÉèÎª£º%NEW_NAME%  £¨versionCode ´ò°üºó×Ô¶¯ +1£©
+
+rem ---------- ¹¹½¨ ----------
+if /i "%BUILD_TYPE%"=="release" goto :build_release
+
+echo.
+echo [1/1] ¹¹½¨¿ª·¢°ü Debug APK ...
+call gradlew.bat assembleDebug
+if not "%ERRORLEVEL%"=="0" goto :fail
+set "APK_PATH=app\build\outputs\apk\debug\app-debug.apk"
+set "APK_TYPE=¿ª·¢°ü£¨Debug£©"
+goto :succeed
+
+:build_release
+echo.
+echo [1/1] ¹¹½¨Éú²ú°ü Release APK ...
+call gradlew.bat assembleRelease
+if not "%ERRORLEVEL%"=="0" goto :fail
+set "APK_PATH=app\build\outputs\apk\release\app-release.apk"
+set "APK_TYPE=Éú²ú°ü£¨Release£©"
+
+:succeed
+echo.
+echo ============================================================
+echo ¹¹½¨³É¹¦£º%APK_TYPE%  %NEW_NAME%
+echo   %APK_PATH%
+echo.
+echo °²×°µ½ÒÑÁ¬½ÓÉè±¸£¨Ðè¿ªÆô USB µ÷ÊÔ£©£º
+echo   adb install -r "%APK_PATH%"
+if /i "%BUILD_TYPE%"=="release" call :release_note
+echo ============================================================
+goto :done
+
+:release_note
+echo.
+echo Ç©ÃûËµÃ÷£º
+echo   ¸ùÄ¿Â¼ÓÐ keystore.properties Ê±Ê¹ÓÃÆäÖÐµÄÕýÊ½Ç©Ãû£»
+echo   Ã»ÓÐÊ±×Ô¶¯»ØÍËµ½ debug Ç©Ãû£¬±£Ö¤ APK ¿ÉÖ±½Ó°²×°¡£
+exit /b 0
+
+:fail
+echo.
+echo ============================================================
+echo ¹¹½¨Ê§°Ü£¬Çë²é¿´ÉÏ·½ÈÕÖ¾¡£
+echo ============================================================
+
+:done
+rem ÃüÁîÐÐ´ø²ÎÊýµ÷ÓÃÊ±²»ÔÝÍ££¬±ãÓÚ½Å±¾/CI Ê¹ÓÃ
+if "%~1"=="" pause
 endlocal
-pause

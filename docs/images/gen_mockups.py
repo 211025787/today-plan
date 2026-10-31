@@ -78,7 +78,7 @@ def banner():
     s.append('<text x="96" y="132" font-size="46" font-weight="600" fill="#FFFFFF">今日规划</text>')
     s.append('<text x="98" y="176" font-size="19" fill="#C9C7E8">日历计划 × 秒表投入 × 番茄专注，纯本地存储的轻量时间管理</text>')
     s.append(f'<rect x="98" y="204" width="126" height="34" rx="17" fill="#FFFFFF" fill-opacity="0.12"/>')
-    s.append('<text x="161" y="226" font-size="14" fill="#FFFFFF" text-anchor="middle">v1.0.46</text>')
+    s.append('<text x="161" y="226" font-size="14" fill="#FFFFFF" text-anchor="middle">纯离线</text>')
     s.append(f'<rect x="236" y="204" width="150" height="34" rx="17" fill="#FFFFFF" fill-opacity="0.12"/>')
     s.append('<text x="311" y="226" font-size="14" fill="#FFFFFF" text-anchor="middle">Kotlin · Compose</text>')
     s.append("</svg>")

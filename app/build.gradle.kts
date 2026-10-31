@@ -17,6 +17,14 @@ val versionProps = Properties().apply {
 val currentVersionCode = versionProps.getProperty("versionCode", "1").toInt()
 val currentVersionName = versionProps.getProperty("versionName", "1.0.$currentVersionCode")
 
+// 可选正式签名：根目录放 keystore.properties 即启用，否则 Release 回退 debug 签名（保证可安装）
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     namespace = "com.focuslist.app"
     compileSdk = 34
@@ -29,10 +37,27 @@ android {
         versionName = currentVersionName
     }
 
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // 有正式签名用正式签名，没有则回退 debug 签名，避免产出不可安装的 unsigned 包
+            signingConfig = if (keystorePropsFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             isMinifyEnabled = false
@@ -53,14 +78,15 @@ android {
     }
 }
 
-// 打包完成后版本号 +1（本次仍用当前值，下次打包生效）
+// 打包完成后 versionCode +1；versionName 保留脚本/手动写入的值（本次打包仍用旧值，下次生效）
 val bumpVersion = tasks.register("bumpVersionCode") {
     doLast {
         val nextCode = currentVersionCode + 1
+        val keptName = versionProps.getProperty("versionName", "").ifBlank { "1.0.$nextCode" }
         versionProps.setProperty("versionCode", nextCode.toString())
-        versionProps.setProperty("versionName", "1.0.$nextCode")
+        versionProps.setProperty("versionName", keptName)
         versionPropsFile.writer().use { versionProps.store(it, "auto-incremented after assemble") }
-        println(">>> 版本号已自增：$currentVersionCode -> $nextCode（versionName 1.0.$nextCode）")
+        println(">>> versionCode 已自增：$currentVersionCode -> $nextCode（versionName $keptName）")
     }
 }
 tasks.matching { it.name == "assembleDebug" || it.name == "assembleRelease" }.configureEach {
