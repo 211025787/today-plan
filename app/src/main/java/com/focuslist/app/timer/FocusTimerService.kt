@@ -3,15 +3,12 @@ package com.focuslist.app.timer
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
-import android.os.VibrationEffect
-import android.os.Vibrator
 import androidx.core.content.ContextCompat
 import com.focuslist.app.FocusListApp
 import com.focuslist.app.data.local.entity.FocusRecordEntity
 import com.focuslist.app.notify.Notifier
-import com.focuslist.app.ui.common.ChimePlayer
+import com.focuslist.app.ui.common.AlertPlayer
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.util.DateUtils
 import com.focuslist.app.widget.WidgetRefresher
@@ -289,7 +286,13 @@ class FocusTimerService : Service() {
                 }
             }
 
-            playAlarm(settings.soundEnabled, settings.vibrateEnabled, settings.chimeType)
+            playAlarm(
+                settings.soundEnabled,
+                settings.vibrateEnabled,
+                settings.chimeType,
+                settings.alertSoundSec,
+                settings.alertVibrateSec
+            )
 
             val newCycle = if (finished.phase == TimerPhase.WORK) {
                 finished.cyclePomos + 1
@@ -392,24 +395,18 @@ class FocusTimerService : Service() {
      * @param sound 是否响铃
      * @param vibrate 是否震动
      * @param chime 提示音音色标识（BELL / WOOD / DROP / BOWL / SOFT）
+     * @param soundSec 响铃持续秒数
+     * @param vibrateSec 震动持续秒数
      */
-    private fun playAlarm(sound: Boolean, vibrate: Boolean, chime: String) {
-        if (sound) {
-            try {
-                ChimePlayer.play(this, chime)
-            } catch (ignored: Exception) {
-                // 音频不可用时静默降级
-            }
-        }
-        if (vibrate) {
-            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(500L, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(500L)
-            }
-        }
+    private fun playAlarm(sound: Boolean, vibrate: Boolean, chime: String, soundSec: Int, vibrateSec: Int) {
+        AlertPlayer.play(
+            context = this,
+            chime = chime,
+            sound = sound,
+            vibrate = vibrate,
+            soundSec = soundSec,
+            vibrateSec = vibrateSec
+        )
     }
 
     override fun onDestroy() {

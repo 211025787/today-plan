@@ -1,7 +1,9 @@
 package com.focuslist.app
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.os.Bundle
 import com.focuslist.app.data.local.AppDatabase
 import com.focuslist.app.data.prefs.SettingsStore
 import com.focuslist.app.data.repo.CategoryRepository
@@ -13,6 +15,7 @@ import com.focuslist.app.data.repo.TagRepository
 import com.focuslist.app.data.repo.TaskRepository
 import com.focuslist.app.notify.Notifier
 import com.focuslist.app.ui.common.ChimePlayer
+import com.focuslist.app.util.AppForeground
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -72,9 +75,25 @@ class FocusListApp : Application() {
         Notifier(this).ensureChannels()
         // 预加载提示音（SoundPool 异步加载，启动时预热避免首次播放无声）
         ChimePlayer.preload(this)
+        registerForegroundTracking()
         // 首启写入内置清单
         appScope.launch {
             container.categoryRepository.seedIfEmpty()
         }
+    }
+
+    /**
+     * 注册前后台状态跟踪：供悬浮计时胶囊判断是否需要在桌面上方展示。
+     */
+    private fun registerForegroundTracking() {
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = AppForeground.onActivityStarted()
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = AppForeground.onActivityStopped()
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
     }
 }

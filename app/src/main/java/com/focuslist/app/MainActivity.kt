@@ -45,6 +45,7 @@ import androidx.navigation.navArgument
 import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.timer.TimerPhase
 import com.focuslist.app.timer.TimerStateHolder
+import com.focuslist.app.ui.common.DayDetailState
 import com.focuslist.app.ui.common.DockItem
 import com.focuslist.app.ui.common.GlassBackground
 import com.focuslist.app.ui.common.GlassDockBar
@@ -54,6 +55,7 @@ import com.focuslist.app.ui.home.CalendarHomeScreen
 import com.focuslist.app.ui.note.NoteScreen
 import com.focuslist.app.ui.note.NotesScreen
 import com.focuslist.app.ui.plan.PlanTimerHolder
+import com.focuslist.app.ui.settings.CapsuleSettingsScreen
 import com.focuslist.app.ui.settings.SettingsScreen
 import com.focuslist.app.ui.theme.FocusListTheme
 import kotlinx.coroutines.CoroutineScope
@@ -181,11 +183,18 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
-    // 专注中（番茄钟或计划秒表在跑）：Dock 自动隐藏防烧屏，任何触摸临时唤出，静止 5 秒后再隐去
+    // 专注中才隐藏 Dock，且只在真正的"计时页"生效：
+    // - 专注页：番茄钟运行中
+    // - 日历页：已展开某天的卡片页且有计划秒表在跑（月视图不隐藏）
+    // 切到其他 Tab 或返回月历后 Dock 正常显示
     val pomoState by TimerStateHolder.state.collectAsState()
     val planTimers by PlanTimerHolder.timers.collectAsState()
-    val focusing = (pomoState.running && pomoState.phase != TimerPhase.IDLE) ||
-        planTimers.values.any { it.running }
+    val dayDetailOpen by DayDetailState.open.collectAsState()
+    val focusing = when (currentRoute) {
+        Destinations.FOCUS.route -> pomoState.running && pomoState.phase != TimerPhase.IDLE
+        Destinations.HOME.route -> dayDetailOpen && planTimers.values.any { it.running }
+        else -> false
+    }
     var dockVisible by remember { mutableStateOf(true) }
     // 触摸计数：每次按下自增，用于重新计时隐藏
     var touchTick by remember { mutableStateOf(0) }
@@ -233,7 +242,14 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 composable(Destinations.FOCUS.route) { FocusScreen(container) }
                 composable(Destinations.HABITS.route) { HabitsScreen(container) }
                 composable(Destinations.MINE.route) {
-                    SettingsScreen(container, onOpenNotes = { navController.navigate("notes") })
+                    SettingsScreen(
+                        container = container,
+                        onOpenCapsule = { navController.navigate("capsule_settings") }
+                    )
+                }
+                // 悬浮胶囊设置页（外观 / 权限 / 预览）
+                composable("capsule_settings") {
+                    CapsuleSettingsScreen(container = container, onBack = { navController.popBackStack() })
                 }
                 composable("notes") {
                     NotesScreen(

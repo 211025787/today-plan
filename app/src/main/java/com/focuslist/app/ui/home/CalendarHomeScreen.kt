@@ -59,6 +59,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -83,6 +84,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
 import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.ui.common.AntiBurnInGlow
+import com.focuslist.app.ui.common.DayDetailState
 import com.focuslist.app.ui.common.ExpandableFab
 import com.focuslist.app.ui.common.FabMenuItem
 import com.focuslist.app.ui.common.antiBurnInDrift
@@ -151,6 +153,14 @@ fun CalendarHomeScreen(
     val state by viewModel.uiState.collectAsState()
     // 是否有计划正在计时：用于防烧屏（页面持续微动 + 隐藏 Dock）
     val anyPlanRunning = state.timers.values.any { it.running }
+
+    // 同步「当日卡片页」展开状态：主界面据此判断是否隐藏 Dock（月视图不隐藏）
+    LaunchedEffect(state.selectedDay) {
+        DayDetailState.set(state.selectedDay != null)
+    }
+    DisposableEffect(Unit) {
+        onDispose { DayDetailState.set(false) }
+    }
 
     // 卡片页（已选中某天）时拦截返回键：回到日历而不是退出应用
     androidx.activity.compose.BackHandler(enabled = state.selectedDay != null) {

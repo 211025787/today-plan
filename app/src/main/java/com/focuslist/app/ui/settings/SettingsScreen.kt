@@ -10,23 +10,27 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
@@ -35,35 +39,74 @@ import com.focuslist.app.ui.theme.ThemeColors
 import com.focuslist.app.ui.theme.parseThemeColor
 
 /**
- * 设置页（我的）：番茄参数、自动化开关、主题、备注入口与关于信息。
+ * 设置页（我的）：按「外观 / 提醒 / 悬浮胶囊 / 关于」分组，
+ * 每组一张玻璃卡，避免所有控件挤在一张卡里。
  *
  * @param container 依赖容器
- * @param onOpenNotes 打开备注页回调
+ * @param onOpenCapsule 打开悬浮胶囊设置页回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(container: AppContainer, onOpenNotes: () -> Unit = {}) {
+fun SettingsScreen(
+    container: AppContainer,
+    onOpenCapsule: () -> Unit = {}
+) {
     val viewModel: SettingsViewModel = viewModel { SettingsViewModel(container.settingsStore) }
     val settings by viewModel.settings.collectAsState()
+    val context = LocalContext.current
+    // 版本号从包信息读取，避免手写
+    val versionName = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: ""
+    }
 
     Scaffold(
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("我的", style = MaterialTheme.typography.headlineMedium) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         }
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(12.dp).padding(bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 主题卡片
+            // 概览
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("今日规划", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = if (versionName.isNotEmpty()) "v$versionName · 数据仅保存在本机" else "数据仅保存在本机",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Text("🍅", style = MaterialTheme.typography.headlineSmall)
+                }
+            }
+
+            // 外观
+            SectionLabel("外观")
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("外观主题", style = MaterialTheme.typography.titleSmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Text("主题模式", style = MaterialTheme.typography.bodyMedium)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
                         listOf("SYSTEM" to "跟随系统", "LIGHT" to "浅色", "DARK" to "深色").forEach { (mode, label) ->
                             FilterChip(
                                 selected = settings.themeMode == mode,
@@ -72,87 +115,113 @@ fun SettingsScreen(container: AppContainer, onOpenNotes: () -> Unit = {}) {
                             )
                         }
                     }
-                    // 主题色圆点选择（滴答式多彩主题）
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 12.dp)) {
+                    Text(
+                        "主题色",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 16.dp)
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(top = 10.dp)
+                    ) {
                         ThemeColors.forEach { (name, hex) ->
                             val color = parseThemeColor(hex)
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Box(
                                     modifier = Modifier
-                                        .size(32.dp)
+                                        .size(30.dp)
                                         .clip(CircleShape)
                                         .background(color)
-                                        .clickable { viewModel.saveThemeColor(hex) }
+                                        .clickable { viewModel.saveThemeColor(hex) },
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     if (settings.themeColor == hex) {
-                                        Text(
-                                            text = "✓",
-                                            color = androidx.compose.ui.graphics.Color.White,
-                                            modifier = Modifier.align(Alignment.Center)
-                                        )
+                                        Text("✓", color = Color.White)
                                     }
                                 }
-                                Text(text = name, style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    text = name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // 专注白噪音默认设置
+            // 提醒
+            SectionLabel("提醒")
             GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("专注白噪音", style = MaterialTheme.typography.titleSmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                        listOf("NONE" to "关闭", "WHITE" to "白噪声", "BROWN" to "棕噪声").forEach { (type, label) ->
-                            FilterChip(
-                                selected = settings.whiteNoiseType == type,
-                                onClick = { viewModel.saveWhiteNoise(type) },
-                                label = { Text(label) }
-                            )
-                        }
-                    }
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    SwitchRow(
+                        label = "计划到达目标时响铃",
+                        checked = settings.planReachGoalSound
+                    ) { checked -> viewModel.savePlanReachGoal(checked, settings.planReachGoalVibrate) }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    SwitchRow(
+                        label = "计划到达目标时震动",
+                        checked = settings.planReachGoalVibrate
+                    ) { checked -> viewModel.savePlanReachGoal(settings.planReachGoalSound, checked) }
                 }
             }
 
-            // 计划倒计时到达目标提醒
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("计划倒计时提醒", style = MaterialTheme.typography.titleSmall)
-                    SwitchRow(label = "到达目标时响铃", checked = settings.planReachGoalSound) { checked ->
-                        viewModel.savePlanReachGoal(checked, settings.planReachGoalVibrate)
-                    }
-                    SwitchRow(label = "到达目标时震动", checked = settings.planReachGoalVibrate) { checked ->
-                        viewModel.savePlanReachGoal(settings.planReachGoalSound, checked)
-                    }
-                }
-            }
-
-            // 备注入口卡片（FAB 里可添加，这里查看管理）
-            GlassCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenNotes)) {
+            // 悬浮胶囊
+            SectionLabel("悬浮胶囊")
+            GlassCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenCapsule)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().padding(16.dp)
                 ) {
-                    Text("📝 我的备注", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("后台计时胶囊", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = if (settings.capsuleEnabled) {
+                                "已开启 · 宽度 ${if (settings.capsuleWidthDp == 0) "自适应" else "${settings.capsuleWidthDp}dp"} · 不透明度 ${settings.capsuleAlpha}%"
+                            } else {
+                                "未开启，点此设置外观与权限"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Text(
+                        "›",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
-            // 关于卡片
+            // 关于
+            SectionLabel("关于")
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("关于", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        text = "滴答清单 · 离线版 2.0.0\n纯离线应用：所有任务、番茄记录与习惯数据仅保存在本机，不经过任何网络。\n垃圾桶/已完成入口在任务页左上角抽屉中。",
+                        text = "纯离线应用：所有计划、番茄记录与备注都只保存在本机，不经过网络。",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * 分组标题（卡片外的小标题）。
+ *
+ * @param text 标题文案
+ */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 6.dp, top = 6.dp)
+    )
 }
 
 /**
@@ -164,7 +233,10 @@ fun SettingsScreen(container: AppContainer, onOpenNotes: () -> Unit = {}) {
  */
 @Composable
 private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
         Text(text = label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
     }

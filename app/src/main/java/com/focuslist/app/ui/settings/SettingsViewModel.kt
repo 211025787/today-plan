@@ -23,6 +23,59 @@ class SettingsViewModel(private val settingsStore: SettingsStore) : ViewModel() 
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TimerSettings())
 
     /**
+     * 保存悬浮计时胶囊开关。
+     *
+     * @param enabled 是否启用
+     */
+    fun saveCapsule(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.updateCapsule(enabled)
+        }
+    }
+
+    /**
+     * 保存悬浮胶囊外观（背景 / 文字 / 进度条 / 尺寸）。
+     *
+     * @param colorHex 背景色 "#RRGGBB"
+     * @param alphaPercent 背景不透明度百分比
+     * @param widthDp 宽度（dp，0 表示自适应）
+     * @param rowHeightDp 单行高度（dp，0 表示自适应）
+     * @param textColorHex 文字颜色
+     * @param textAlpha 文字不透明度百分比
+     * @param progressColorHex 进度条颜色
+     * @param progressAlpha 进度条不透明度百分比
+     */
+    fun saveCapsuleStyle(
+        colorHex: String,
+        alphaPercent: Int,
+        widthDp: Int,
+        rowHeightDp: Int,
+        textColorHex: String,
+        textAlpha: Int,
+        progressColorHex: String,
+        progressAlpha: Int
+    ) {
+        viewModelScope.launch {
+            settingsStore.updateCapsuleStyle(
+                colorHex, alphaPercent, widthDp, rowHeightDp,
+                textColorHex, textAlpha, progressColorHex, progressAlpha
+            )
+        }
+    }
+
+    /**
+     * 保存悬浮胶囊位置（-1 恢复默认顶部居中）。
+     *
+     * @param x X 坐标（px）
+     * @param y Y 坐标（px）
+     */
+    fun saveCapsulePosition(x: Int, y: Int) {
+        viewModelScope.launch {
+            settingsStore.updateCapsulePosition(x, y)
+        }
+    }
+
+    /**
      * 保存主题模式。
      *
      * @param mode SYSTEM / LIGHT / DARK

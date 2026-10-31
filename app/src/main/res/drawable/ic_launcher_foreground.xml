@@ -1,17 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 启动图标前景：圆形番茄 + 白色对勾 -->
+<!--
+  启动图标前景：白色日历卡片 + 三条今日清单（圆点 + 条目）+ 右下角完成角标。
+  造型呼应应用名「今日规划」：今天要做什么，一目了然。
+  所有元素收在自适应图标安全区内，避免被圆形遮罩裁切。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- 卡片顶部的两个装订环 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,30c-14.4,0 -26,10.4 -26,23.2S39.6,76 54,76s26,-9.6 26,-22.8S68.4,30 54,30z" />
-    <path
-        android:fillColor="#FFE94B3C"
-        android:pathData="M44.6,56.4l6.2,6.2l13.6,-13.6l4,4l-17.6,17.6l-10.2,-10.2z" />
+        android:pathData="M35,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,26c-2.4,0 -4.4,-1.2 -5.6,-3h11.2C58.4,24.8 56.4,26 54,26z" />
+        android:pathData="M67,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z" />
+
+    <!-- 日历卡片 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M35,30h38a11,11 0 0 1 11,11v32a11,11 0 0 1 -11,11h-38a11,11 0 0 1 -11,-11v-32a11,11 0 0 1 11,-11z" />
+
+    <!-- 三条清单：状态点 -->
+    <path
+        android:fillColor="#4C6FFF"
+        android:pathData="M37,45.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z" />
+    <path
+        android:fillColor="#4C6FFF"
+        android:pathData="M37,57.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z" />
+    <path
+        android:fillColor="#4C6FFF"
+        android:pathData="M37,69.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z" />
+
+    <!-- 三条清单：条目横线（长度不同，暗示不同任务） -->
+    <path
+        android:fillColor="#AFBBEE"
+        android:pathData="M45,46h22a2,2 0 0 1 0,4h-22a2,2 0 0 1 0,-4z" />
+    <path
+        android:fillColor="#AFBBEE"
+        android:pathData="M45,58h15a2,2 0 0 1 0,4h-15a2,2 0 0 1 0,-4z" />
+    <path
+        android:fillColor="#AFBBEE"
+        android:pathData="M45,70h19a2,2 0 0 1 0,4h-19a2,2 0 0 1 0,-4z" />
+
+    <!-- 完成角标：白色描边圈 + 琥珀底 + 白色对勾 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M76,63a13,13 0 1 1 0,26a13,13 0 1 1 0,-26z" />
+    <path
+        android:fillColor="#FFB84D"
+        android:pathData="M76,65.5a10.5,10.5 0 1 1 0,21a10.5,10.5 0 1 1 0,-21z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M71.2,76.3l3.4,3.4l6.3,-7" />
 </vector>

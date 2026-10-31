@@ -75,6 +75,26 @@ class Notifier(private val context: Context) {
     }
 
     /**
+     * 发送计划到达每日目标提醒。
+     *
+     * @param title 计划标题
+     */
+    fun showPlanGoal(title: String) {
+        val intent = PendingIntent.getActivity(
+            context, 0, Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDER)
+            .setSmallIcon(R.drawable.ic_widget_circle_checked)
+            .setContentTitle("计划达成今日目标")
+            .setContentText(title)
+            .setAutoCancel(true)
+            .setContentIntent(intent)
+            .build()
+        manager.notify(NOTIFY_PLAN_GOAL, notification)
+    }
+
+    /**
      * 构造计时服务常驻通知。
      *
      * @param phaseText 阶段文案，如"专注中"
@@ -177,6 +197,9 @@ class Notifier(private val context: Context) {
 
         /** 计划秒表前台通知 ID */
         const val NOTIFY_PLAN_STOPWATCH = 1003
+
+        /** 计划达成目标提醒 ID */
+        const val NOTIFY_PLAN_GOAL = 1004
 
         /** 任务提醒通知 ID 基数（叠加任务 ID） */
         const val NOTIFY_TASK_BASE = 2000L

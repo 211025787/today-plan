@@ -23,6 +23,19 @@ private val Context.dataStore by preferencesDataStore(name = "focus_settings")
  * @property soundEnabled 计时结束是否响铃
  * @property vibrateEnabled 计时结束是否震动
  * @property chimeType 计时结束提示音音色：BELL 清脆铃 / WOOD 木鱼 / DROP 水滴 / BOWL 颂钵 / SOFT 柔音
+ * @property alertSoundSec 提醒响铃持续秒数，取值 1-20
+ * @property alertVibrateSec 提醒震动持续秒数，取值 1-20
+ * @property capsuleEnabled 是否在后台上方显示悬浮计时胶囊
+ * @property capsuleColorHex 胶囊背景色，格式 "#RRGGBB"
+ * @property capsuleAlpha 胶囊不透明度百分比，取值 10-100
+ * @property capsuleWidthDp 胶囊宽度（dp），0 表示自适应内容，取值范围 0-300
+ * @property capsuleRowHeightDp 胶囊单行高度（dp），0 表示自适应，取值范围 0-56
+ * @property capsuleTextColorHex 胶囊文字颜色，格式 "#RRGGBB"
+ * @property capsuleTextAlpha 文字不透明度百分比，取值 10-100
+ * @property capsuleProgressColorHex 进度条颜色，格式 "#RRGGBB"
+ * @property capsuleProgressAlpha 进度条不透明度百分比，取值 10-100
+ * @property capsuleX 胶囊拖动后的 X 坐标（px）；-1 表示默认顶部居中
+ * @property capsuleY 胶囊拖动后的 Y 坐标（px）；-1 表示默认顶部居中
  * @property strictMode 严格模式：开启后计时期间离开页面视为放弃
  * @property themeMode 主题模式：SYSTEM 跟随系统、LIGHT 浅色、DARK 深色
  * @property themeColor 主题色，格式 "#RRGGBB"，默认滴答蓝 #4772FA
@@ -40,6 +53,19 @@ data class TimerSettings(
     val soundEnabled: Boolean = true,
     val vibrateEnabled: Boolean = true,
     val chimeType: String = "BELL",
+    val alertSoundSec: Int = 4,
+    val alertVibrateSec: Int = 3,
+    val capsuleEnabled: Boolean = false,
+    val capsuleColorHex: String = "#FCFDFF",
+    val capsuleAlpha: Int = 65,
+    val capsuleWidthDp: Int = 196,
+    val capsuleRowHeightDp: Int = 34,
+    val capsuleTextColorHex: String = "#1B1B2F",
+    val capsuleTextAlpha: Int = 100,
+    val capsuleProgressColorHex: String = "#4772FA",
+    val capsuleProgressAlpha: Int = 100,
+    val capsuleX: Int = -1,
+    val capsuleY: Int = -1,
     val strictMode: Boolean = false,
     val themeMode: String = "SYSTEM",
     val themeColor: String = "#4772FA",
@@ -83,6 +109,45 @@ class SettingsStore(private val context: Context) {
         /** 提示音音色 key */
         val CHIME = stringPreferencesKey("chime_type")
 
+        /** 响铃持续秒数 key */
+        val ALERT_SOUND_SEC = intPreferencesKey("alert_sound_sec")
+
+        /** 震动持续秒数 key */
+        val ALERT_VIBRATE_SEC = intPreferencesKey("alert_vibrate_sec")
+
+        /** 悬浮计时胶囊开关 key */
+        val CAPSULE = booleanPreferencesKey("capsule_enabled")
+
+        /** 胶囊背景色 key */
+        val CAPSULE_COLOR = stringPreferencesKey("capsule_color")
+
+        /** 胶囊不透明度 key */
+        val CAPSULE_ALPHA = intPreferencesKey("capsule_alpha")
+
+        /** 胶囊宽度 key */
+        val CAPSULE_WIDTH = intPreferencesKey("capsule_width_dp")
+
+        /** 胶囊单行高度 key */
+        val CAPSULE_ROW_HEIGHT = intPreferencesKey("capsule_row_height_dp")
+
+        /** 胶囊文字颜色 key */
+        val CAPSULE_TEXT_COLOR = stringPreferencesKey("capsule_text_color")
+
+        /** 胶囊文字不透明度 key */
+        val CAPSULE_TEXT_ALPHA = intPreferencesKey("capsule_text_alpha")
+
+        /** 胶囊进度条颜色 key */
+        val CAPSULE_PROGRESS_COLOR = stringPreferencesKey("capsule_progress_color")
+
+        /** 胶囊进度条不透明度 key */
+        val CAPSULE_PROGRESS_ALPHA = intPreferencesKey("capsule_progress_alpha")
+
+        /** 胶囊位置 X key */
+        val CAPSULE_X = intPreferencesKey("capsule_x")
+
+        /** 胶囊位置 Y key */
+        val CAPSULE_Y = intPreferencesKey("capsule_y")
+
         /** 严格模式 key */
         val STRICT = booleanPreferencesKey("strict_mode")
 
@@ -114,6 +179,19 @@ class SettingsStore(private val context: Context) {
             soundEnabled = prefs[Keys.SOUND] ?: true,
             vibrateEnabled = prefs[Keys.VIBRATE] ?: true,
             chimeType = prefs[Keys.CHIME] ?: "BELL",
+            alertSoundSec = prefs[Keys.ALERT_SOUND_SEC] ?: 4,
+            alertVibrateSec = prefs[Keys.ALERT_VIBRATE_SEC] ?: 3,
+            capsuleEnabled = prefs[Keys.CAPSULE] ?: false,
+            capsuleColorHex = prefs[Keys.CAPSULE_COLOR] ?: "#FCFDFF",
+            capsuleAlpha = prefs[Keys.CAPSULE_ALPHA] ?: 65,
+            capsuleWidthDp = prefs[Keys.CAPSULE_WIDTH] ?: 196,
+            capsuleRowHeightDp = prefs[Keys.CAPSULE_ROW_HEIGHT] ?: 34,
+            capsuleTextColorHex = prefs[Keys.CAPSULE_TEXT_COLOR] ?: "#1B1B2F",
+            capsuleTextAlpha = prefs[Keys.CAPSULE_TEXT_ALPHA] ?: 100,
+            capsuleProgressColorHex = prefs[Keys.CAPSULE_PROGRESS_COLOR] ?: "#4772FA",
+            capsuleProgressAlpha = prefs[Keys.CAPSULE_PROGRESS_ALPHA] ?: 100,
+            capsuleX = prefs[Keys.CAPSULE_X] ?: -1,
+            capsuleY = prefs[Keys.CAPSULE_Y] ?: -1,
             strictMode = prefs[Keys.STRICT] ?: false,
             themeMode = prefs[Keys.THEME] ?: "SYSTEM",
             themeColor = prefs[Keys.THEME_COLOR] ?: "#4772FA",
@@ -167,6 +245,77 @@ class SettingsStore(private val context: Context) {
     suspend fun updateChime(type: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.CHIME] = type
+        }
+    }
+
+    /**
+     * 更新提醒的响铃与震动持续时长。
+     *
+     * @param soundSec 响铃秒数（1-20）
+     * @param vibrateSec 震动秒数（1-20）
+     */
+    suspend fun updateAlertDurations(soundSec: Int, vibrateSec: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.ALERT_SOUND_SEC] = soundSec.coerceIn(1, 20)
+            prefs[Keys.ALERT_VIBRATE_SEC] = vibrateSec.coerceIn(1, 20)
+        }
+    }
+
+    /**
+     * 更新悬浮计时胶囊开关。
+     *
+     * @param enabled 是否启用
+     */
+    suspend fun updateCapsule(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.CAPSULE] = enabled
+        }
+    }
+
+    /**
+     * 更新悬浮计时胶囊外观（背景 / 文字 / 进度条 / 尺寸）。
+     *
+     * @param colorHex 背景色，格式 "#RRGGBB"
+     * @param alphaPercent 背景不透明度百分比（10-100）
+     * @param widthDp 宽度（dp，0 表示自适应，0-300）
+     * @param rowHeightDp 单行高度（dp，0 表示自适应，0-56）
+     * @param textColorHex 文字颜色
+     * @param textAlpha 文字不透明度百分比（10-100）
+     * @param progressColorHex 进度条颜色
+     * @param progressAlpha 进度条不透明度百分比（10-100）
+     */
+    suspend fun updateCapsuleStyle(
+        colorHex: String,
+        alphaPercent: Int,
+        widthDp: Int,
+        rowHeightDp: Int,
+        textColorHex: String,
+        textAlpha: Int,
+        progressColorHex: String,
+        progressAlpha: Int
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.CAPSULE_COLOR] = colorHex
+            prefs[Keys.CAPSULE_ALPHA] = alphaPercent.coerceIn(10, 100)
+            prefs[Keys.CAPSULE_WIDTH] = widthDp.coerceIn(0, 300)
+            prefs[Keys.CAPSULE_ROW_HEIGHT] = rowHeightDp.coerceIn(0, 56)
+            prefs[Keys.CAPSULE_TEXT_COLOR] = textColorHex
+            prefs[Keys.CAPSULE_TEXT_ALPHA] = textAlpha.coerceIn(10, 100)
+            prefs[Keys.CAPSULE_PROGRESS_COLOR] = progressColorHex
+            prefs[Keys.CAPSULE_PROGRESS_ALPHA] = progressAlpha.coerceIn(10, 100)
+        }
+    }
+
+    /**
+     * 更新悬浮胶囊拖动后的位置（-1 恢复默认顶部居中）。
+     *
+     * @param x X 坐标（px）
+     * @param y Y 坐标（px）
+     */
+    suspend fun updateCapsulePosition(x: Int, y: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.CAPSULE_X] = x
+            prefs[Keys.CAPSULE_Y] = y
         }
     }
 

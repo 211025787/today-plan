@@ -343,6 +343,9 @@ fun FocusScreen(container: AppContainer) {
             onUpdateChime = { type ->
                 scope.launch { container.settingsStore.updateChime(type) }
             },
+            onUpdateAlertDurations = { soundSec, vibrateSec ->
+                scope.launch { container.settingsStore.updateAlertDurations(soundSec, vibrateSec) }
+            },
             onDismiss = { showSettings = false }
         )
     }
@@ -355,6 +358,7 @@ fun FocusScreen(container: AppContainer) {
  * @param onUpdateDurations 保存时长参数回调（专注、短休息、长休息、长休息间隔）
  * @param onUpdateSwitches 保存开关回调（自动休息、自动下一番茄、铃声、震动、严格模式）
  * @param onUpdateChime 保存提示音音色回调
+ * @param onUpdateAlertDurations 保存提醒时长回调（响铃秒数, 震动秒数）
  * @param onDismiss 关闭弹层回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -364,6 +368,7 @@ private fun FocusSettingsSheet(
     onUpdateDurations: (Int, Int, Int, Int) -> Unit,
     onUpdateSwitches: (Boolean, Boolean, Boolean, Boolean, Boolean) -> Unit,
     onUpdateChime: (String) -> Unit,
+    onUpdateAlertDurations: (Int, Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -443,6 +448,28 @@ private fun FocusSettingsSheet(
             }
             Text(
                 text = "点击试听，选中的音色用于番茄与计划计时结束提醒",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+
+            Text(
+                "提醒时长",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 16.dp, bottom = 2.dp)
+            )
+            StepperRow(
+                label = "响铃时长", value = settings.alertSoundSec, unit = "秒", range = 1..20
+            ) { v ->
+                onUpdateAlertDurations(v, settings.alertVibrateSec)
+            }
+            StepperRow(
+                label = "震动时长", value = settings.alertVibrateSec, unit = "秒", range = 1..20
+            ) { v ->
+                onUpdateAlertDurations(settings.alertSoundSec, v)
+            }
+            Text(
+                text = "计时结束时按该时长循环响铃/震动，应用在后台也会准点提醒",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp)

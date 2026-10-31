@@ -64,24 +64,73 @@ def banner():
     # 背景光斑
     s.append(f'<circle cx="150" cy="60" r="220" fill="{PRIMARY}" opacity="0.35" filter="url(#soft)"/>')
     s.append(f'<circle cx="1020" cy="260" r="240" fill="{VIOLET}" opacity="0.30" filter="url(#soft)"/>')
-    # 右侧装饰：光环
-    for i in range(9):
-        r = 60 + i * 18
-        op = 0.20 - i * 0.017
-        s.append(
-            f'<circle cx="960" cy="150" r="{r}" fill="none" stroke="{VIOLET}" '
-            f'stroke-opacity="{op:.3f}" stroke-width="1"/>'
-        )
-    s.append(f'<circle cx="960" cy="150" r="52" fill="none" stroke="white" stroke-opacity="0.85" stroke-width="8"/>')
-    s.append(f'<path d="M960 98 A52 52 0 0 1 1005 124" fill="none" stroke="{VIOLET}" stroke-width="8" stroke-linecap="round"/>')
-    s.append('<text x="96" y="132" font-size="46" font-weight="600" fill="#FFFFFF">滴答清单 · 离线版</text>')
-    s.append('<text x="98" y="176" font-size="19" fill="#C9C7E8">日历计划 × 番茄专注 × 当日备注，纯本地存储的轻量时间管理</text>')
+    # 右侧装饰：新图标造型（日历 + 清单 + 完成角标）
+    s.append(f'<rect x="860" y="70" width="160" height="160" rx="44" fill="{PRIMARY}"/>')
+    s.append('<path d="M900 108a6,6 0 0 1 12,0v16a6,6 0 0 1 -12,0z" fill="#FFFFFF"/>')
+    s.append('<path d="M968 108a6,6 0 0 1 12,0v16a6,6 0 0 1 -12,0z" fill="#FFFFFF"/>')
+    s.append('<path d="M906 128h68a16,16 0 0 1 16,16v46a16,16 0 0 1 -16,16h-68a16,16 0 0 1 -16,-16v-46a16,16 0 0 1 16,-16z" fill="#FFFFFF"/>')
+    for i, (yy, ww) in enumerate([(152, 44), (172, 30), (192, 38)]):
+        s.append(f'<circle cx="{910}" cy="{yy + 4}" r="4" fill="{PRIMARY}"/>')
+        s.append(f'<rect x="922" y="{yy}" width="{ww}" height="8" rx="4" fill="#AFBBEE"/>')
+    s.append('<circle cx="976" cy="196" r="26" fill="#FFFFFF"/>')
+    s.append('<circle cx="976" cy="196" r="21" fill="#FFB84D"/>')
+    s.append('<path d="M966 196l7 7l13 -14" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>')
+    s.append('<text x="96" y="132" font-size="46" font-weight="600" fill="#FFFFFF">今日规划</text>')
+    s.append('<text x="98" y="176" font-size="19" fill="#C9C7E8">日历计划 × 秒表投入 × 番茄专注，纯本地存储的轻量时间管理</text>')
     s.append(f'<rect x="98" y="204" width="126" height="34" rx="17" fill="#FFFFFF" fill-opacity="0.12"/>')
-    s.append('<text x="161" y="226" font-size="14" fill="#FFFFFF" text-anchor="middle">v1.0.30</text>')
+    s.append('<text x="161" y="226" font-size="14" fill="#FFFFFF" text-anchor="middle">v1.0.46</text>')
     s.append(f'<rect x="236" y="204" width="150" height="34" rx="17" fill="#FFFFFF" fill-opacity="0.12"/>')
     s.append('<text x="311" y="226" font-size="14" fill="#FFFFFF" text-anchor="middle">Kotlin · Compose</text>')
     s.append("</svg>")
     return s
+
+
+def screen_capsule():
+    """悬浮计时胶囊示意：浅色 / 深色两种可自定义外观。"""
+    w, h = 760, 360
+    body = [
+        # 桌面壁纸底
+        '<rect width="760" height="360" rx="20" fill="#EEF1FB"/>',
+        f'<circle cx="140" cy="60" r="150" fill="{PRIMARY}" opacity="0.16" filter="url(#soft)"/>',
+        f'<circle cx="640" cy="300" r="170" fill="{VIOLET}" opacity="0.18" filter="url(#soft)"/>',
+        # 状态栏
+        f'<text x="34" y="34" font-size="13" fill="{MUTED}">9:41</text>',
+        f'<rect x="676" y="24" width="26" height="12" rx="4" fill="{MUTED}" opacity="0.5"/>',
+        # 胶囊 1（浅色玻璃）
+        f'<rect x="120" y="64" width="232" height="86" rx="22" fill="#FFFFFF" fill-opacity="0.65" stroke="{PRIMARY}" stroke-opacity="0.16"/>',
+        f'<circle cx="142" cy="88" r="3" fill="{PRIMARY}"/>',
+        f'<text x="152" y="92" font-size="12" font-weight="500" fill="{INK}">健身</text>',
+        f'<text x="340" y="92" font-size="12" font-weight="500" fill="{PRIMARY}" text-anchor="end">18:20</text>',
+        f'<rect x="134" y="100" width="204" height="3" rx="1.5" fill="{PRIMARY}" fill-opacity="0.15"/>',
+        f'<rect x="134" y="100" width="122" height="3" rx="1.5" fill="{PRIMARY}"/>',
+        f'<circle cx="142" cy="122" r="3" fill="{PRIMARY}"/>',
+        f'<text x="152" y="126" font-size="12" font-weight="500" fill="{INK}">学 Java</text>',
+        f'<text x="340" y="126" font-size="12" font-weight="500" fill="{PRIMARY}" text-anchor="end">-03:20</text>',
+        f'<rect x="134" y="134" width="204" height="3" rx="1.5" fill="{PRIMARY}" fill-opacity="0.15"/>',
+        f'<rect x="134" y="134" width="204" height="3" rx="1.5" fill="{PRIMARY}"/>',
+        # 胶囊 2（深色自定义）
+        f'<rect x="410" y="64" width="232" height="86" rx="22" fill="#1B1B2F" fill-opacity="0.86" stroke="{VIOLET}" stroke-opacity="0.5"/>',
+        f'<circle cx="432" cy="88" r="3" fill="#FFB84D"/>',
+        '<text x="442" y="92" font-size="12" font-weight="500" fill="#FFFFFF">读书</text>',
+        '<text x="630" y="92" font-size="12" font-weight="500" fill="#AFC3FF" text-anchor="end">06:45</text>',
+        '<rect x="424" y="100" width="204" height="3" rx="1.5" fill="#FFFFFF" fill-opacity="0.2"/>',
+        '<rect x="424" y="100" width="86" height="3" rx="1.5" fill="#FFB84D"/>',
+        f'<circle cx="432" cy="122" r="3" fill="#FFB84D"/>',
+        '<text x="442" y="126" font-size="12" font-weight="500" fill="#FFFFFF">复盘</text>',
+        '<text x="630" y="126" font-size="12" font-weight="500" fill="#AFC3FF" text-anchor="end">21:10</text>',
+        '<rect x="424" y="134" width="204" height="3" rx="1.5" fill="#FFFFFF" fill-opacity="0.2"/>',
+        '<rect x="424" y="134" width="140" height="3" rx="1.5" fill="#FFB84D"/>',
+        # 说明
+        f'<text x="120" y="196" font-size="14" font-weight="500" fill="{INK}">浅色玻璃</text>',
+        f'<text x="120" y="218" font-size="11.5" fill="{MUTED}">背景色 / 不透明度可调</text>',
+        f'<text x="410" y="196" font-size="14" font-weight="500" fill="{INK}">深色自定义</text>',
+        f'<text x="410" y="218" font-size="11.5" fill="{MUTED}">文字与进度条颜色独立设置</text>',
+        # 位置与拖动提示
+        f'<rect x="120" y="252" width="522" height="64" rx="16" fill="#FFFFFF" fill-opacity="0.72" stroke="{LINE}"/>',
+        f'<text x="140" y="278" font-size="12" fill="{INK}">按住可拖到屏幕任意位置，松手自动记住</text>',
+        f'<text x="140" y="300" font-size="11.5" fill="{MUTED}">时间显示为「距今日目标还剩多少」，超出目标时显示负值</text>',
+    ]
+    return "".join(body)
 
 
 def screen_calendar():
@@ -298,3 +347,4 @@ if __name__ == "__main__":
     write("screen-focus.svg", [head(360, 760, defs_common()), screen_focus(), "</svg>"])
     write("screen-day.svg", [head(360, 760, defs_common()), screen_day(), "</svg>"])
     write("screen-note.svg", [head(360, 700, defs_common()), screen_note(), "</svg>"])
+    write("screen-capsule.svg", [head(760, 360, defs_common()), screen_capsule(), "</svg>"])

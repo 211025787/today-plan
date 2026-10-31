@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body { margin: 0; background: #f2f3f8; font-family: "PingFang SC", sans-serif; }
+  .row { display: flex; gap: 36px; padding: 30px; align-items: center; }
+  .box { text-align: center; color: #555; font-size: 13px; }
+  svg { display: block; }
+  .round { border-radius: 50%; overflow: hidden; width: 240px; height: 240px; }
+  .squircle { border-radius: 56px; overflow: hidden; width: 240px; height: 240px; }
+</style></head>
+<body>
+<div class="row">
+  <div class="box">
+    <div class="squircle"><svg width="240" height="240" viewBox="0 0 108 108">
+      <defs><linearGradient id="bg" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#4C6FFF"/><stop offset="1" stop-color="#7A4BE8"/></linearGradient></defs>
+      <rect width="108" height="108" fill="url(#bg)"/>
+      <path fill="#FFFFFF" d="M35,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+      <path fill="#FFFFFF" d="M67,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+      <path fill="#FFFFFF" d="M35,30h38a11,11 0 0 1 11,11v32a11,11 0 0 1 -11,11h-38a11,11 0 0 1 -11,-11v-32a11,11 0 0 1 11,-11z"/>
+      <path fill="#4C6FFF" d="M37,45.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+      <path fill="#4C6FFF" d="M37,57.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+      <path fill="#4C6FFF" d="M37,69.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+      <path fill="#AFBBEE" d="M45,46h22a2,2 0 0 1 0,4h-22a2,2 0 0 1 0,-4z"/>
+      <path fill="#AFBBEE" d="M45,58h15a2,2 0 0 1 0,4h-15a2,2 0 0 1 0,-4z"/>
+      <path fill="#AFBBEE" d="M45,70h19a2,2 0 0 1 0,4h-19a2,2 0 0 1 0,-4z"/>
+      <path fill="#FFFFFF" d="M76,63a13,13 0 1 1 0,26a13,13 0 1 1 0,-26z"/>
+      <path fill="#FFB84D" d="M76,65.5a10.5,10.5 0 1 1 0,21a10.5,10.5 0 1 1 0,-21z"/>
+      <path stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M71.2,76.3l3.4,3.4l6.3,-7"/>
+    </svg></div>
+    <div>圆角方形</div>
+  </div>
+  <div class="box">
+    <div class="round"><svg width="240" height="240" viewBox="0 0 108 108">
+      <rect width="108" height="108" fill="url(#bg)"/>
+      <path fill="#FFFFFF" d="M35,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+      <path fill="#FFFFFF" d="M67,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+      <path fill="#FFFFFF" d="M35,30h38a11,11 0 0 1 11,11v32a11,11 0 0 1 -11,11h-38a11,11 0 0 1 -11,-11v-32a11,11 0 0 1 11,-11z"/>
+      <path fill="#4C6FFF" d="M37,45.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+      <path fill="#4C6FFF" d="M37,57.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+      <path fill="#4C6FFF" d="M37,69.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+      <path fill="#AFBBEE" d="M45,46h22a2,2 0 0 1 0,4h-22a2,2 0 0 1 0,-4z"/>
+      <path fill="#AFBBEE" d="M45,58h15a2,2 0 0 1 0,4h-15a2,2 0 0 1 0,-4z"/>
+      <path fill="#AFBBEE" d="M45,70h19a2,2 0 0 1 0,4h-19a2,2 0 0 1 0,-4z"/>
+      <path fill="#FFFFFF" d="M76,63a13,13 0 1 1 0,26a13,13 0 1 1 0,-26z"/>
+      <path fill="#FFB84D" d="M76,65.5a10.5,10.5 0 1 1 0,21a10.5,10.5 0 1 1 0,-21z"/>
+      <path stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M71.2,76.3l3.4,3.4l6.3,-7"/>
+    </svg></div>
+    <div>圆形遮罩</div>
+  </div>
+  <div class="box">
+    <svg width="96" height="96" viewBox="0 0 108 108">
+      <rect width="108" height="108" rx="24" fill="url(#bg)"/>
+      <path fill="#FFFFFF" d="M35,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+      <path fill="#FFFFFF" d="M67,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+      <path fill="#FFFFFF" d="M35,30h38a11,11 0 0 1 11,11v32a11,11 0 0 1 -11,11h-38a11,11 0 0 1 -11,-11v-32a11,11 0 0 1 11,-11z"/>
+      <path fill="#4C6FFF" d="M37,45.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+      <path fill="#4C6FFF" d="M37,57.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+      <path fill="#4C6FFF" d="M37,69.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+      <path fill="#AFBBEE" d="M45,46h22a2,2 0 0 1 0,4h-22a2,2 0 0 1 0,-4z"/>
+      <path fill="#AFBBEE" d="M45,58h15a2,2 0 0 1 0,4h-15a2,2 0 0 1 0,-4z"/>
+      <path fill="#AFBBEE" d="M45,70h19a2,2 0 0 1 0,4h-19a2,2 0 0 1 0,-4z"/>
+      <path fill="#FFFFFF" d="M76,63a13,13 0 1 1 0,26a13,13 0 1 1 0,-26z"/>
+      <path fill="#FFB84D" d="M76,65.5a10.5,10.5 0 1 1 0,21a10.5,10.5 0 1 1 0,-21z"/>
+      <path stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M71.2,76.3l3.4,3.4l6.3,-7"/>
+    </svg>
+    <div>小尺寸 96px</div>
+  </div>
+</div>
+</body></html>

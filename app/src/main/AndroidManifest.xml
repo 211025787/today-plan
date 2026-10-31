@@ -10,11 +10,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 悬浮计时胶囊：应用退到后台时在桌面上方显示当前计时 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".FocusListApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.FocusList"
@@ -54,6 +57,11 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="plan_stopwatch" />
         </service>
+
+        <!-- 计划到达每日目标的精确闹钟提醒（进程被杀也能触发） -->
+        <receiver
+            android:name=".notify.PlanGoalReceiver"
+            android:exported="false" />
 
         <!-- 任务到期提醒广播接收器 -->
         <receiver

@@ -3,27 +3,29 @@ package com.focuslist.app.ui.plan
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
-import android.os.VibrationEffect
-import android.os.Vibrator
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.focuslist.app.FocusListApp
 import com.focuslist.app.notify.Notifier
-import com.focuslist.app.ui.common.ChimePlayer
+import com.focuslist.app.notify.PlanGoalAlarms
+import com.focuslist.app.util.AppForeground
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
- * 计划秒表前台服务：多计划并行计时的保活进程 + 聚合计时通知。
+ * 计划秒表前台服务：多计划并行计时的保活进程 + 聚合计时通知 + 悬浮胶囊。
  *
  * 服务本身不做计时计算——秒数由 [PlanTimerHolder] 基于系统时钟换算；
- * 服务职责：前台保活（息屏/后台不被杀）+ 监听计时 Map 更新聚合通知。
+ * 服务职责：
+ * 1. 前台保活（息屏/后台不被杀）+ 监听计时 Map 更新聚合通知；
+ * 2. 为每个运行中的计划安排「到达每日目标」的精确闹钟（后台也能准点提醒）；
+ * 3. 应用退到后台时展示悬浮玻璃胶囊（需悬浮窗权限）。
  */
 class PlanTimerService : Service() {
 
@@ -33,16 +35,29 @@ class PlanTimerService : Service() {
     /** 是否正在监听 */
     private var observing = false
 
-    /** 已提醒到达目标的计划集合（避免重复提醒，剩余恢复正数时重置） */
-    private val alertedPlans = mutableSetOf<Long>()
+    /** 已安排的闹钟触发时刻：planId -> 时间戳 */
+    private val scheduledGoalAt = mutableMapOf<Long, Long>()
 
     private val notifier by lazy { Notifier(this) }
+
+    /** 悬浮计时胶囊 */
+    private val capsule by lazy { TimerCapsule(this) }
 
     /** 依赖容器：读取计划目标与设置开关 */
     private val container by lazy { (application as FocusListApp).container }
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        // 胶囊拖动松手后持久化位置，下次展示沿用
+        capsule.onPositionChanged = { x, y ->
+            serviceScope.launch {
+                container.settingsStore.updateCapsulePosition(x, y)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -79,83 +94,135 @@ class PlanTimerService : Service() {
     }
 
     /**
-     * 监听秒表 Map：更新聚合通知；全部清空时关闭服务；状态变化即持久化防杀。
+     * 监听秒表 Map：更新聚合通知、同步目标闹钟与悬浮胶囊；全部清空时关闭服务。
      */
     private fun observeHolder() {
         if (observing) {
             return
         }
         observing = true
+        // 前后台切换时立刻刷新胶囊，不必等下一次秒表刷新
         serviceScope.launch {
-            PlanTimerHolder.timers.collectLatest { map ->
-                if (map.isEmpty()) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                } else {
-                    val entry = currentEntry()
-                    notifier.updateStopwatchNotification(entry.runningCount, entry.pausedCount, entry.baseSec, entry.anyRunning)
-                    PlanTimerHolder.persist(this@PlanTimerService)
-                    // 检测计划倒计时到达目标（剩余从正变 0/负）
-                    checkPlanReachGoal(map)
+            AppForeground.state.collect {
+                try {
+                    updateCapsule(PlanTimerHolder.timers.value)
+                } catch (_: Exception) {
+                    // 单次刷新失败不影响后续
+                }
+            }
+        }
+        serviceScope.launch {
+            // 用 collect 而非 collectLatest：每秒的状态更新都必须完整走完闹钟/胶囊同步，
+            // 避免上一次同步被取消导致漏排闹钟
+            PlanTimerHolder.timers.collect { map ->
+                try {
+                    if (map.isEmpty()) {
+                        capsule.hide()
+                        scheduledGoalAt.keys.toList().forEach { PlanGoalAlarms.cancel(this@PlanTimerService, it) }
+                        scheduledGoalAt.clear()
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    } else {
+                        val entry = currentEntry()
+                        notifier.updateStopwatchNotification(entry.runningCount, entry.pausedCount, entry.baseSec, entry.anyRunning)
+                        PlanTimerHolder.persist(this@PlanTimerService)
+                        syncGoalAlarms(map)
+                        updateCapsule(map)
+                    }
+                } catch (_: Exception) {
+                    // 数据库或系统限制导致单次刷新失败时保持监听
                 }
             }
         }
     }
 
     /**
-     * 检测运行中计划的剩余秒数是否跨过 0（到达目标），触发响铃与震动。
-     * 每个计划仅提醒一次，剩余恢复正数时重置允许下次再提醒。
+     * 同步「到达每日目标」闹钟：运行中的计划按剩余秒数安排精确闹钟，暂停/超出的取消。
+     *
+     * 只在触发时刻变化超过 5 秒时才重新安排，避免每秒重复设置闹钟。
      *
      * @param map 当前秒表 Map
      */
-    private suspend fun checkPlanReachGoal(map: Map<Long, PlanTimerEntry>) {
-        val settings = container.settingsStore.settings.first()
-        if (!settings.planReachGoalSound && !settings.planReachGoalVibrate) {
-            return
-        }
-        for ((planId, entry) in map) {
+    private suspend fun syncGoalAlarms(map: Map<Long, PlanTimerEntry>) {
+        map.forEach { (planId, entry) ->
             if (!entry.running) {
-                continue
+                if (scheduledGoalAt.remove(planId) != null) {
+                    PlanGoalAlarms.cancel(this, planId)
+                }
+                return@forEach
             }
-            val plan = container.planRepository.getPlan(planId) ?: continue
+            val plan = container.planRepository.getPlan(planId) ?: return@forEach
             val goalSec = plan.dailyGoalMinutes * 60L
             if (goalSec <= 0) {
-                continue
+                return@forEach
             }
             val savedSec = container.planRepository.getTodaySeconds(planId)
-            val remain = goalSec - (savedSec + entry.sessionSec)
-            if (remain <= 0 && planId !in alertedPlans) {
-                alertedPlans.add(planId)
-                playReachGoalAlert(settings.planReachGoalSound, settings.planReachGoalVibrate, settings.chimeType)
-            } else if (remain > 0) {
-                alertedPlans.remove(planId)
+            val remainSec = goalSec - (savedSec + entry.sessionSec)
+            if (remainSec <= 0) {
+                // 已达成：不需要再提醒
+                if (scheduledGoalAt.remove(planId) != null) {
+                    PlanGoalAlarms.cancel(this, planId)
+                }
+                return@forEach
             }
+            val triggerAt = System.currentTimeMillis() + remainSec * 1000L
+            val previous = scheduledGoalAt[planId]
+            if (previous == null || abs(previous - triggerAt) > 5000L) {
+                PlanGoalAlarms.schedule(this, planId, plan.title, triggerAt)
+                scheduledGoalAt[planId] = triggerAt
+            }
+        }
+        // 已不存在的计划取消闹钟
+        (scheduledGoalAt.keys - map.keys).toList().forEach { planId ->
+            PlanGoalAlarms.cancel(this, planId)
+            scheduledGoalAt.remove(planId)
         }
     }
 
     /**
-     * 播放到达目标的响铃与震动提醒。
+     * 更新悬浮胶囊：仅在已开启、有运行中的计时、应用在后台且已授予悬浮窗权限时展示。
+     * 多计划并行时逐行展示（至多 3 行，超出折叠为提示行）。
      *
-     * @param sound 是否响铃
-     * @param vibrate 是否震动
-     * @param chime 提示音音色标识（BELL / WOOD / DROP / BOWL / SOFT）
+     * @param map 当前秒表 Map
      */
-    private fun playReachGoalAlert(sound: Boolean, vibrate: Boolean, chime: String) {
-        if (sound) {
-            try {
-                ChimePlayer.play(this, chime)
-            } catch (e: Exception) {
-                // 音频不可用时静默降级
-            }
+    private suspend fun updateCapsule(map: Map<Long, PlanTimerEntry>) {
+        val settings = container.settingsStore.settings.first()
+        val running = map.values.filter { it.running }
+        if (!settings.capsuleEnabled || running.isEmpty() || AppForeground.isForeground || !Settings.canDrawOverlays(this)) {
+            capsule.hide()
+            return
         }
-        if (vibrate) {
-            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(500L, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(500L)
-            }
+        val shown = running.take(3)
+        val entries = shown.mapNotNull { entry ->
+            val plan = container.planRepository.getPlan(entry.planId) ?: return@mapNotNull null
+            val savedSec = container.planRepository.getTodaySeconds(entry.planId)
+            TimerCapsule.Entry(
+                title = plan.title,
+                sessionSec = savedSec + entry.sessionSec,
+                goalSec = plan.dailyGoalMinutes * 60L
+            )
+        }.toMutableList()
+        if (running.size > shown.size) {
+            entries.add(TimerCapsule.Entry("… 还有 ${running.size - shown.size} 个", 0L, 0L))
+        }
+        if (entries.isEmpty()) {
+            capsule.hide()
+        } else {
+            capsule.show(
+                entries = entries,
+                config = TimerCapsule.Config(
+                    bgColorHex = settings.capsuleColorHex,
+                    alphaPercent = settings.capsuleAlpha,
+                    widthDp = settings.capsuleWidthDp,
+                    rowHeightDp = settings.capsuleRowHeightDp,
+                    textColorHex = settings.capsuleTextColorHex,
+                    textAlphaPercent = settings.capsuleTextAlpha,
+                    progressColorHex = settings.capsuleProgressColorHex,
+                    progressAlphaPercent = settings.capsuleProgressAlpha,
+                    xPx = settings.capsuleX,
+                    yPx = settings.capsuleY
+                )
+            )
         }
     }
 
@@ -189,6 +256,7 @@ class PlanTimerService : Service() {
     }
 
     override fun onDestroy() {
+        capsule.hide()
         serviceScope.cancel()
         observing = false
         super.onDestroy()

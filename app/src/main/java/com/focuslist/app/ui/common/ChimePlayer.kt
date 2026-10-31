@@ -72,4 +72,28 @@ object ChimePlayer {
         val id = ids[type] ?: ids[DEFAULT] ?: return
         pool?.play(id, 1f, 1f, 1, 0, 1f)
     }
+
+    /**
+     * 循环播放指定音色，返回音频流 ID（用于稍后停止）。
+     *
+     * @param context 应用上下文
+     * @param type 音色标识
+     * @return 流 ID；无法播放时返回 0
+     */
+    fun playLoop(context: Context, type: String): Int {
+        preload(context)
+        val id = ids[type] ?: ids[DEFAULT] ?: return 0
+        return pool?.play(id, 1f, 1f, 1, -1, 1f) ?: 0
+    }
+
+    /**
+     * 停止指定音频流。
+     *
+     * @param streamId [playLoop] 返回的流 ID
+     */
+    fun stop(streamId: Int) {
+        if (streamId != 0) {
+            pool?.stop(streamId)
+        }
+    }
 }
