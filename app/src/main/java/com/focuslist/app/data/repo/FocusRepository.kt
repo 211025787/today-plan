@@ -19,6 +19,9 @@ data class DayStat(val minutes: Int, val pomos: Int)
 /** 年度热力图统计区间天数（滚动一年，含今天） */
 const val HEATMAP_DAYS = 365
 
+/** 每日目标建议的采样天数（不含今天） */
+const val GOAL_SAMPLE_DAYS = 14
+
 /**
  * 统计页汇总数据。
  *
@@ -124,5 +127,20 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
             heatByDay = heatByDay,
             year = Heatmap.overview(heatByDay, todayStart)
         )
+    }
+
+    /**
+     * 取最近若干天（不含今天）的每日专注分钟数，用于推算建议的每日目标。
+     *
+     * @param days 采样天数，默认 [GOAL_SAMPLE_DAYS]
+     * @return 按日期升序排列的每日分钟数，长度为 days
+     */
+    suspend fun recentDailyMinutes(days: Int = GOAL_SAMPLE_DAYS): List<Int> {
+        val todayStart = DateUtils.startOfDay(System.currentTimeMillis())
+        val start = DateUtils.addDays(todayStart, -days)
+        val byDay = recordDao.sumByDay(start, todayStart)
+            .map { DayKeys.parse(it.day) to (it.seconds / 60L).toInt() }
+            .toMap()
+        return (0 until days).map { offset -> byDay[DateUtils.addDays(start, offset)] ?: 0 }
     }
 }

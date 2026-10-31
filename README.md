@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.0.53-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.56-4772FA" alt="version">
 </p>
 
 **今日规划**是一个纯离线的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来。所有数据只保存在本机，不联网、不上传。
@@ -123,6 +123,13 @@ ffmpeg -y -framerate 25 -i .tmp_docs/frames/f%05d.jpg -i .tmp_docs/promo.wav \
 - **年度专注热力图**：GitHub 贡献图风格，列 = 周、行 = 周一…周日，颜色越深表示当天专注越久；横向可滚动，进入页面自动滚到最近一周，**点击任意格子**即可查看当天具体分钟数；
 - **年度总览**：过去一年的累计专注（时 + 分）、活跃天数、最佳单日、最长连续与活跃日日均。
 
+### 🎯 每日专注目标
+
+- **我的 → 每日目标**设置每天想专注多久：15 / 30 / 45 / 60 / 90 / 120 分钟一键选，也可以按 ±5 分钟微调（范围 5–480）；
+- 按近 14 天的实际表现**推荐目标**（取有效日中位数并向上取整到 5 的倍数），一键「采用」；有效样本不足 3 天时给默认值 30 分钟；
+- 统计页顶部**目标进度环**：显示完成百分比与「已完成 / 目标」分钟数，配一句话进度文案，下方还有**连续达标天数**与**本周达标 X/7 天**；
+- 本周柱状图叠加**每日目标虚线参考线**，达标当天柱子为实心、未达标淡化，一眼看出哪几天掉队。
+
 ### ✅ 习惯与小组件
 
 - 习惯打卡、连续天数统计；
@@ -193,11 +200,11 @@ app/src/main/java/com/focuslist/app/
 │   ├── plan/                # 计划弹层（含一句话快速建计划）、秒表服务、计时持有者、悬浮胶囊
 │   ├── common/              # 玻璃组件、Dock、FAB、提示音/提醒播放、防烧屏
 │   ├── settings/            # 我的（分组设置）+ 胶囊设置页
-│   ├── stats/               # 统计页：总览卡 + 年度热力图（HeatmapChart）
+│   ├── stats/               # 统计页：目标进度环 + 总览卡 + 年度热力图（HeatmapChart）
 │   └── theme/               # 主题色与配色
 ├── notify/                  # 通知、目标闹钟与广播、开机恢复
 ├── widget/                  # 四款桌面小组件
-└── util/                    # 日期工具、日期键、热力图计算、一句话建计划解析、前后台状态
+└── util/                    # 日期工具、日期键、热力图计算、每日目标计算、一句话建计划解析、前后台状态
 ```
 
 ## 构建与运行
@@ -258,6 +265,7 @@ build.bat test              # 只跑单元测试
 | `util/HeatmapTest` | 热力图等级四档边界、按周分列的网格排布与前置占位、每行对应正确星期、月份标签间距、连续天数（最长 / 当前 / 断档）、年度总览聚合、一年窗口约 53 列 |
 | `util/DayKeysTest` | 日期串 ↔ 本地 0 点时间戳往返一致、同一天不同时刻归到同日、相邻两日相差一天 |
 | `util/QuickPlanParserTest` | 一句话建计划解析：时长（含小时叠加、口语半小时、上下限夹取）、相对日与周几/下周、月日与完整日期、跨年顺延、区间与"到某天"、跨度天数与中文数字、标题清理与长度上限、emoji 提图标、颜色下标稳定性（共 23 条） |
+| `util/GoalTest` | 每日目标：取值约束到 5 的倍数与 5–480 区间、进度与百分比、剩余分钟、四档状态边界（0 / <60% / ≥60% / 达标）、达标天数统计、周目标与周进度、连续达标（今天未达标回落昨天）、按中位数建议目标与上下限夹取、进度文案（共 21 条） |
 
 HTML 报告在 `app/build/reports/tests/testDebugUnitTest/index.html`。
 

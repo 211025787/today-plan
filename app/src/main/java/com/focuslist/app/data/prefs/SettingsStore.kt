@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.focuslist.app.util.Goal
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -42,6 +43,7 @@ private val Context.dataStore by preferencesDataStore(name = "focus_settings")
  * @property whiteNoiseType 专注时白噪音类型：NONE 关闭、WHITE 白噪声、BROWN 棕噪声
  * @property planReachGoalSound 计划倒计时到达目标时是否响铃
  * @property planReachGoalVibrate 计划倒计时到达目标时是否震动
+ * @property dailyGoalMinutes 每日专注目标（分钟），取值 5-480 且为 5 的倍数，默认 30
  */
 data class TimerSettings(
     val focusMinutes: Int = 25,
@@ -71,7 +73,8 @@ data class TimerSettings(
     val themeColor: String = "#4772FA",
     val whiteNoiseType: String = "NONE",
     val planReachGoalSound: Boolean = true,
-    val planReachGoalVibrate: Boolean = true
+    val planReachGoalVibrate: Boolean = true,
+    val dailyGoalMinutes: Int = 30
 )
 
 /**
@@ -165,6 +168,9 @@ class SettingsStore(private val context: Context) {
 
         /** 计划到目标震动 key */
         val PLAN_REACH_VIBRATE = booleanPreferencesKey("plan_reach_goal_vibrate")
+
+        /** 每日专注目标 key */
+        val DAILY_GOAL = intPreferencesKey("daily_goal_minutes")
     }
 
     /** 设置流：任何字段变更都会发射最新完整快照 */
@@ -197,7 +203,8 @@ class SettingsStore(private val context: Context) {
             themeColor = prefs[Keys.THEME_COLOR] ?: "#4772FA",
             whiteNoiseType = prefs[Keys.WHITE_NOISE] ?: "NONE",
             planReachGoalSound = prefs[Keys.PLAN_REACH_SOUND] ?: true,
-            planReachGoalVibrate = prefs[Keys.PLAN_REACH_VIBRATE] ?: true
+            planReachGoalVibrate = prefs[Keys.PLAN_REACH_VIBRATE] ?: true,
+            dailyGoalMinutes = prefs[Keys.DAILY_GOAL] ?: 30
         )
     }
 
@@ -362,6 +369,19 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs[Keys.PLAN_REACH_SOUND] = sound
             prefs[Keys.PLAN_REACH_VIBRATE] = vibrate
+        }
+    }
+
+    /**
+     * 更新每日专注目标（分钟）。
+     *
+     * 写入前统一约束到 5-480 且为 5 的倍数，避免非法值让进度环失真。
+     *
+     * @param minutes 目标分钟数
+     */
+    suspend fun updateDailyGoal(minutes: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.DAILY_GOAL] = Goal.coerce(minutes)
         }
     }
 }

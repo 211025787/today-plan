@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +50,7 @@ import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.ThemeColors
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.BackupNames
+import com.focuslist.app.util.Goal
 import com.focuslist.app.widget.WidgetRefresher
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -69,8 +72,11 @@ fun SettingsScreen(
     onOpenStats: () -> Unit = {},
     onOpenCapsule: () -> Unit = {}
 ) {
-    val viewModel: SettingsViewModel = viewModel { SettingsViewModel(container.settingsStore) }
+    val viewModel: SettingsViewModel = viewModel {
+        SettingsViewModel(container.settingsStore, container.focusRepository)
+    }
     val settings by viewModel.settings.collectAsState()
+    val suggestedGoal by viewModel.suggestedGoal.collectAsState()
     val context = LocalContext.current
     // 版本号从包信息读取，避免手写
     val versionName = remember {
@@ -213,6 +219,65 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     modifier = Modifier.padding(top = 4.dp)
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 每日目标
+            SectionLabel("每日目标")
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("每天想专注多久", style = MaterialTheme.typography.bodyMedium)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Goal.PRESETS.forEach { minutes ->
+                            FilterChip(
+                                selected = settings.dailyGoalMinutes == minutes,
+                                onClick = { viewModel.saveDailyGoal(minutes) },
+                                label = { Text("$minutes") }
+                            )
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 12.dp)
+                    ) {
+                        Text(
+                            text = "${settings.dailyGoalMinutes}",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "分钟 / 天",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        TextButton(onClick = { viewModel.saveDailyGoal(settings.dailyGoalMinutes - Goal.STEP_MINUTES) }) {
+                            Text("−${Goal.STEP_MINUTES}")
+                        }
+                        TextButton(onClick = { viewModel.saveDailyGoal(settings.dailyGoalMinutes + Goal.STEP_MINUTES) }) {
+                            Text("+${Goal.STEP_MINUTES}")
+                        }
+                    }
+                    suggestedGoal?.let { suggestion ->
+                        if (suggestion != settings.dailyGoalMinutes) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                            ) {
+                                Text(
+                                    text = "按近 14 天表现建议 $suggestion 分钟",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { viewModel.saveDailyGoal(suggestion) }) { Text("采用") }
                             }
                         }
                     }

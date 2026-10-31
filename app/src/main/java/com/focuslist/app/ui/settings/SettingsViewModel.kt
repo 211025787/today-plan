@@ -4,8 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.focuslist.app.data.prefs.SettingsStore
 import com.focuslist.app.data.prefs.TimerSettings
+import com.focuslist.app.data.repo.FocusRepository
+import com.focuslist.app.util.Goal
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -15,12 +19,35 @@ import kotlinx.coroutines.launch
  * 番茄参数与自动化开关已迁移到专注页（FocusScreen），不在本页维护。
  *
  * @property settingsStore 设置存储
+ * @property focusRepository 专注记录仓库，仅用于推算建议目标；胶囊设置页不传
  */
-class SettingsViewModel(private val settingsStore: SettingsStore) : ViewModel() {
+class SettingsViewModel(
+    private val settingsStore: SettingsStore,
+    private val focusRepository: FocusRepository? = null
+) : ViewModel() {
 
     /** 当前设置状态流 */
     val settings: StateFlow<TimerSettings> = settingsStore.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TimerSettings())
+
+    private val mutableSuggestedGoal = MutableStateFlow<Int?>(null)
+
+    /** 按近 14 天表现推算出的建议目标（分钟）；样本不足时为 null */
+    val suggestedGoal: StateFlow<Int?> = mutableSuggestedGoal.asStateFlow()
+
+    init {
+        refreshSuggestedGoal()
+    }
+
+    /**
+     * 重新推算建议目标：读取近期每日分钟数后交给 [Goal.suggest]。
+     */
+    fun refreshSuggestedGoal() {
+        val repository = focusRepository ?: return
+        viewModelScope.launch {
+            mutableSuggestedGoal.value = Goal.suggest(repository.recentDailyMinutes())
+        }
+    }
 
     /**
      * 保存悬浮计时胶囊开关。
@@ -117,6 +144,17 @@ class SettingsViewModel(private val settingsStore: SettingsStore) : ViewModel() 
     fun savePlanReachGoal(sound: Boolean, vibrate: Boolean) {
         viewModelScope.launch {
             settingsStore.updatePlanReachGoal(sound, vibrate)
+        }
+    }
+
+    /**
+     * 保存每日专注目标（分钟）。
+     *
+     * @param minutes 目标分钟数，越界值由 [SettingsStore] 统一收敛
+     */
+    fun saveDailyGoal(minutes: Int) {
+        viewModelScope.launch {
+            settingsStore.updateDailyGoal(minutes)
         }
     }
 }
