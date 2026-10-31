@@ -56,8 +56,8 @@ class AppContainer(private val appContext: Context) {
     /** 设置存储单例 */
     val settingsStore: SettingsStore by lazy { SettingsStore(appContext) }
 
-    /** 备份管理器单例（数据导出 / 导入） */
-    val backupManager: BackupManager by lazy { BackupManager(database) }
+    /** 备份管理器单例（数据 + 设置 + 模板的导出 / 导入） */
+    val backupManager: BackupManager by lazy { BackupManager(database, settingsStore) }
 }
 
 /**

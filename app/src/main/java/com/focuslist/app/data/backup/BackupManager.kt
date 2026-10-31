@@ -2,18 +2,26 @@ package com.focuslist.app.data.backup
 
 import androidx.room.withTransaction
 import com.focuslist.app.data.local.AppDatabase
+import com.focuslist.app.data.prefs.SettingsStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
  * 备份管理器：把本机全部数据导出成一份 JSON，或从 JSON 恢复回来。
  *
- * 所有读写都在单个数据库事务内完成，保证导出的是一致快照、
+ * 导出内容包含 Room 业务数据，以及 DataStore 里的偏好设置与计划模板（schema 2 起）。
+ *
+ * 数据库读写都在单个事务内完成，保证导出的是一致快照、
  * 导入过程要么整体成功要么整体回滚（不会留下半份数据）。
  *
  * @property database 应用数据库
+ * @property settingsStore 偏好设置存储；为空时只备份数据库部分（供测试或无上下文场景使用）
  */
-class BackupManager(private val database: AppDatabase) {
+class BackupManager(
+    private val database: AppDatabase,
+    private val settingsStore: SettingsStore? = null
+) {
 
     /**
      * 收集当前数据库中的全部数据。
@@ -22,6 +30,8 @@ class BackupManager(private val database: AppDatabase) {
      * @return 备份内容
      */
     suspend fun collect(appVersion: String = ""): BackupPayload = withContext(Dispatchers.IO) {
+        val settings = settingsStore?.settings?.first()?.toBackupSettings()
+        val templates = settingsStore?.planTemplates?.first()?.map { it.toBackupTemplate() } ?: emptyList()
         database.withTransaction {
             val taskDao = database.taskDao()
             val habitDao = database.habitDao()
@@ -81,13 +91,19 @@ class BackupManager(private val database: AppDatabase) {
                 },
                 noteAttachments = noteDao.getAllAttachments().map {
                     BackupAttachment(id = it.id, noteId = it.noteId, type = it.type, uri = it.uri, createdAt = it.createdAt)
-                }
+                },
+                settings = settings,
+                templates = templates
             )
         }
     }
 
     /**
      * 将备份内容写回数据库。
+     *
+     * 设置与模板的恢复策略与数据一致：
+     * - 覆盖式：用备份中的设置整体替换本机设置，模板也整体替换；
+     * - 合并式：设置保持本机不变，模板只补充本机没有的（按指纹去重）。
      *
      * @param payload 备份内容
      * @param overwrite true 为覆盖式（先清空全部表，结果等同于备份文件）；
@@ -114,6 +130,16 @@ class BackupManager(private val database: AppDatabase) {
             database.noteDao().apply {
                 insertNotes(payload.notes.map { it.toEntity() })
                 insertAttachments(payload.noteAttachments.map { it.toEntity() })
+            }
+        }
+        val store = settingsStore
+        if (store != null) {
+            val templates = payload.templates.map { it.toPlanTemplate() }
+            if (overwrite) {
+                payload.settings?.let { store.applyBackupSettings(it) }
+                store.replacePlanTemplates(templates)
+            } else {
+                store.mergePlanTemplates(templates)
             }
         }
     }

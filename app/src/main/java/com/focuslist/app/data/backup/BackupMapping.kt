@@ -11,6 +11,8 @@ import com.focuslist.app.data.local.entity.QuickNoteEntity
 import com.focuslist.app.data.local.entity.SubTaskEntity
 import com.focuslist.app.data.local.entity.TagEntity
 import com.focuslist.app.data.local.entity.TaskEntity
+import com.focuslist.app.data.prefs.TimerSettings
+import com.focuslist.app.util.PlanTemplate
 
 /** 备份 DTO → Room 实体 的映射集合（导入时使用）。 */
 
@@ -58,3 +60,93 @@ fun BackupNote.toEntity(): QuickNoteEntity =
 
 fun BackupAttachment.toEntity(): NoteAttachmentEntity =
     NoteAttachmentEntity(id = id, noteId = noteId, type = type, uri = uri, createdAt = createdAt)
+
+/** 备份的偏好设置 → 应用内设置对象 */
+fun BackupSettings.toTimerSettings(): TimerSettings = TimerSettings(
+    focusMinutes = focusMinutes,
+    shortBreakMinutes = shortBreakMinutes,
+    longBreakMinutes = longBreakMinutes,
+    longBreakInterval = longBreakInterval,
+    autoStartBreak = autoStartBreak,
+    autoStartNextPomo = autoStartNextPomo,
+    soundEnabled = soundEnabled,
+    vibrateEnabled = vibrateEnabled,
+    chimeType = chimeType,
+    alertSoundSec = alertSoundSec,
+    alertVibrateSec = alertVibrateSec,
+    capsuleEnabled = capsuleEnabled,
+    capsuleColorHex = capsuleColorHex,
+    capsuleAlpha = capsuleAlpha,
+    capsuleWidthDp = capsuleWidthDp,
+    capsuleRowHeightDp = capsuleRowHeightDp,
+    capsuleTextColorHex = capsuleTextColorHex,
+    capsuleTextAlpha = capsuleTextAlpha,
+    capsuleProgressColorHex = capsuleProgressColorHex,
+    capsuleProgressAlpha = capsuleProgressAlpha,
+    capsuleX = capsuleX,
+    capsuleY = capsuleY,
+    strictMode = strictMode,
+    themeMode = themeMode,
+    themeColor = themeColor,
+    whiteNoiseType = whiteNoiseType,
+    planReachGoalSound = planReachGoalSound,
+    planReachGoalVibrate = planReachGoalVibrate,
+    dailyGoalMinutes = dailyGoalMinutes
+)
+
+/** 应用内设置对象 → 备份的偏好设置 */
+fun TimerSettings.toBackupSettings(): BackupSettings = BackupSettings(
+    focusMinutes = focusMinutes,
+    shortBreakMinutes = shortBreakMinutes,
+    longBreakMinutes = longBreakMinutes,
+    longBreakInterval = longBreakInterval,
+    autoStartBreak = autoStartBreak,
+    autoStartNextPomo = autoStartNextPomo,
+    soundEnabled = soundEnabled,
+    vibrateEnabled = vibrateEnabled,
+    chimeType = chimeType,
+    alertSoundSec = alertSoundSec,
+    alertVibrateSec = alertVibrateSec,
+    capsuleEnabled = capsuleEnabled,
+    capsuleColorHex = capsuleColorHex,
+    capsuleAlpha = capsuleAlpha,
+    capsuleWidthDp = capsuleWidthDp,
+    capsuleRowHeightDp = capsuleRowHeightDp,
+    capsuleTextColorHex = capsuleTextColorHex,
+    capsuleTextAlpha = capsuleTextAlpha,
+    capsuleProgressColorHex = capsuleProgressColorHex,
+    capsuleProgressAlpha = capsuleProgressAlpha,
+    capsuleX = capsuleX,
+    capsuleY = capsuleY,
+    strictMode = strictMode,
+    themeMode = themeMode,
+    themeColor = themeColor,
+    whiteNoiseType = whiteNoiseType,
+    planReachGoalSound = planReachGoalSound,
+    planReachGoalVibrate = planReachGoalVibrate,
+    dailyGoalMinutes = dailyGoalMinutes
+)
+
+/** 备份的模板 → 应用内模板 */
+fun BackupTemplate.toPlanTemplate(): PlanTemplate = PlanTemplate(
+    id = id,
+    title = title,
+    icon = icon,
+    dailyMinutes = dailyMinutes,
+    durationDays = durationDays,
+    colorHex = colorHex,
+    useCount = useCount,
+    createdAt = createdAt
+)
+
+/** 应用内模板 → 备份的模板 */
+fun PlanTemplate.toBackupTemplate(): BackupTemplate = BackupTemplate(
+    id = id,
+    title = title,
+    icon = icon,
+    dailyMinutes = dailyMinutes,
+    durationDays = durationDays,
+    colorHex = colorHex,
+    useCount = useCount,
+    createdAt = createdAt
+)

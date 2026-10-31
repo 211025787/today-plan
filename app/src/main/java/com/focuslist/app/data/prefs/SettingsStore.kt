@@ -4,8 +4,11 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.focuslist.app.data.backup.BackupSettings
+import com.focuslist.app.data.backup.toTimerSettings
 import com.focuslist.app.util.Goal
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanTemplates
@@ -176,6 +179,14 @@ class SettingsStore(private val context: Context) {
 
         /** 计划模板（JSON）key */
         val PLAN_TEMPLATES = stringPreferencesKey("plan_templates")
+
+        /** 上次成功导出备份的时间戳（毫秒），0 表示从未备份 */
+        val LAST_BACKUP_AT = longPreferencesKey("last_backup_at")
+    }
+
+    /** 上次成功导出备份的时间戳；从未备份时为 0 */
+    val lastBackupAt: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[Keys.LAST_BACKUP_AT] ?: 0L
     }
 
     /** 计划模板流：已按「用得最多」排好序 */
@@ -417,5 +428,94 @@ class SettingsStore(private val context: Context) {
             val list = PlanTemplates.decode(prefs[Keys.PLAN_TEMPLATES] ?: "")
             prefs[Keys.PLAN_TEMPLATES] = PlanTemplates.encode(PlanTemplates.remove(list, id))
         }
+    }
+
+    /**
+     * 记录一次成功的备份导出时间，供「备份体检」判断是否该再备份一次。
+     *
+     * @param at 导出时刻（毫秒），默认取当前时间
+     */
+    suspend fun markBackupExported(at: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_BACKUP_AT] = at
+        }
+    }
+
+    /**
+     * 用备份里的偏好设置整体覆盖本机设置。
+     *
+     * 所有数值都沿用各字段原有的取值范围约束，避免备份文件里的脏值让界面失真。
+     *
+     * @param settings 备份中的设置快照
+     */
+    suspend fun applyBackupSettings(settings: BackupSettings) {
+        val safe = settings.toTimerSettings()
+        context.dataStore.edit { prefs ->
+            prefs[Keys.FOCUS_MINUTES] = safe.focusMinutes.coerceIn(5, 120)
+            prefs[Keys.SHORT_BREAK] = safe.shortBreakMinutes.coerceIn(1, 30)
+            prefs[Keys.LONG_BREAK] = safe.longBreakMinutes.coerceIn(5, 60)
+            prefs[Keys.LONG_INTERVAL] = safe.longBreakInterval.coerceIn(2, 8)
+            prefs[Keys.AUTO_BREAK] = safe.autoStartBreak
+            prefs[Keys.AUTO_POMO] = safe.autoStartNextPomo
+            prefs[Keys.SOUND] = safe.soundEnabled
+            prefs[Keys.VIBRATE] = safe.vibrateEnabled
+            prefs[Keys.CHIME] = safe.chimeType.ifBlank { "BELL" }
+            prefs[Keys.ALERT_SOUND_SEC] = safe.alertSoundSec.coerceIn(1, 20)
+            prefs[Keys.ALERT_VIBRATE_SEC] = safe.alertVibrateSec.coerceIn(1, 20)
+            prefs[Keys.CAPSULE] = safe.capsuleEnabled
+            prefs[Keys.CAPSULE_COLOR] = safe.capsuleColorHex
+            prefs[Keys.CAPSULE_ALPHA] = safe.capsuleAlpha.coerceIn(10, 100)
+            prefs[Keys.CAPSULE_WIDTH] = safe.capsuleWidthDp.coerceIn(0, 300)
+            prefs[Keys.CAPSULE_ROW_HEIGHT] = safe.capsuleRowHeightDp.coerceIn(0, 56)
+            prefs[Keys.CAPSULE_TEXT_COLOR] = safe.capsuleTextColorHex
+            prefs[Keys.CAPSULE_TEXT_ALPHA] = safe.capsuleTextAlpha.coerceIn(10, 100)
+            prefs[Keys.CAPSULE_PROGRESS_COLOR] = safe.capsuleProgressColorHex
+            prefs[Keys.CAPSULE_PROGRESS_ALPHA] = safe.capsuleProgressAlpha.coerceIn(10, 100)
+            prefs[Keys.CAPSULE_X] = safe.capsuleX
+            prefs[Keys.CAPSULE_Y] = safe.capsuleY
+            prefs[Keys.STRICT] = safe.strictMode
+            prefs[Keys.THEME] = if (safe.themeMode in THEME_MODES) safe.themeMode else "SYSTEM"
+            prefs[Keys.THEME_COLOR] = safe.themeColor
+            prefs[Keys.WHITE_NOISE] = safe.whiteNoiseType
+            prefs[Keys.PLAN_REACH_SOUND] = safe.planReachGoalSound
+            prefs[Keys.PLAN_REACH_VIBRATE] = safe.planReachGoalVibrate
+            prefs[Keys.DAILY_GOAL] = Goal.coerce(safe.dailyGoalMinutes)
+        }
+    }
+
+    /**
+     * 整体替换本机计划模板（覆盖式导入用）。
+     *
+     * @param templates 备份中的模板列表
+     */
+    suspend fun replacePlanTemplates(templates: List<PlanTemplate>) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.PLAN_TEMPLATES] = PlanTemplates.encode(
+                PlanTemplates.sorted(templates).take(PlanTemplates.MAX_COUNT)
+            )
+        }
+    }
+
+    /**
+     * 把备份里的模板合并进本机（合并式导入用）：本机已有的按指纹去重，不覆盖本机配置。
+     *
+     * @param templates 备份中的模板列表
+     */
+    suspend fun mergePlanTemplates(templates: List<PlanTemplate>) {
+        if (templates.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val local = PlanTemplates.decode(prefs[Keys.PLAN_TEMPLATES] ?: "")
+            val known = local.map { it.id }.toSet()
+            val incoming = templates.filter { it.id !in known }
+            if (incoming.isEmpty()) return@edit
+            prefs[Keys.PLAN_TEMPLATES] = PlanTemplates.encode(
+                PlanTemplates.sorted(local + incoming).take(PlanTemplates.MAX_COUNT)
+            )
+        }
+    }
+
+    private companion object {
+        /** 合法的主题模式取值 */
+        val THEME_MODES = setOf("SYSTEM", "LIGHT", "DARK")
     }
 }

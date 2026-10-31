@@ -53,4 +53,35 @@ class BackupPayloadTest {
     fun defaultPayload_carriesCurrentSchemaVersion() {
         assertEquals(BACKUP_SCHEMA_VERSION, BackupPayload().schemaVersion)
     }
+
+    @Test
+    fun totalCount_includesTemplates() {
+        val payload = BackupPayload(
+            plans = List(2) { BackupPlan(id = it.toLong()) },
+            templates = List(3) { BackupTemplate(id = "t$it") }
+        )
+        assertEquals(5, payload.totalCount())
+    }
+
+    @Test
+    fun describe_mentionsTemplatesAndSettings() {
+        val payload = BackupPayload(
+            templates = List(2) { BackupTemplate(id = "t$it") },
+            settings = BackupSettings()
+        )
+        val text = payload.describe()
+        assertTrue(text.contains("模板 2"))
+        assertTrue(text.contains("设置"))
+        assertTrue(payload.hasSettings())
+    }
+
+    @Test
+    fun settings_defaultsMatchAppDefaults() {
+        val settings = BackupSettings()
+        assertEquals(25, settings.focusMinutes)
+        assertEquals(30, settings.dailyGoalMinutes)
+        assertEquals("BELL", settings.chimeType)
+        assertEquals("SYSTEM", settings.themeMode)
+        assertEquals(-1, settings.capsuleX)
+    }
 }

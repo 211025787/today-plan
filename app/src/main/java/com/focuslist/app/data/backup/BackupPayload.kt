@@ -1,7 +1,7 @@
 package com.focuslist.app.data.backup
 
 /** 备份文件结构版本；结构变更时递增，导入时据此判断是否兼容 */
-const val BACKUP_SCHEMA_VERSION: Int = 1
+const val BACKUP_SCHEMA_VERSION: Int = 2
 
 /** 任务 */
 data class BackupTask(
@@ -126,11 +126,63 @@ data class BackupAttachment(
 )
 
 /**
+ * 偏好设置快照（schema 2 起纳入备份）。
+ *
+ * 字段与 `TimerSettings` 一一对应，但独立定义在备份包内，
+ * 保证备份结构不依赖 Android 的 DataStore，单元测试可直接使用。
+ */
+data class BackupSettings(
+    val focusMinutes: Int = 25,
+    val shortBreakMinutes: Int = 5,
+    val longBreakMinutes: Int = 15,
+    val longBreakInterval: Int = 4,
+    val autoStartBreak: Boolean = true,
+    val autoStartNextPomo: Boolean = false,
+    val soundEnabled: Boolean = true,
+    val vibrateEnabled: Boolean = true,
+    val chimeType: String = "BELL",
+    val alertSoundSec: Int = 4,
+    val alertVibrateSec: Int = 3,
+    val capsuleEnabled: Boolean = false,
+    val capsuleColorHex: String = "#FCFDFF",
+    val capsuleAlpha: Int = 65,
+    val capsuleWidthDp: Int = 196,
+    val capsuleRowHeightDp: Int = 34,
+    val capsuleTextColorHex: String = "#1B1B2F",
+    val capsuleTextAlpha: Int = 100,
+    val capsuleProgressColorHex: String = "#4772FA",
+    val capsuleProgressAlpha: Int = 100,
+    val capsuleX: Int = -1,
+    val capsuleY: Int = -1,
+    val strictMode: Boolean = false,
+    val themeMode: String = "SYSTEM",
+    val themeColor: String = "#4772FA",
+    val whiteNoiseType: String = "NONE",
+    val planReachGoalSound: Boolean = true,
+    val planReachGoalVibrate: Boolean = true,
+    val dailyGoalMinutes: Int = 30
+)
+
+/** 计划模板快照（schema 2 起纳入备份） */
+data class BackupTemplate(
+    val id: String = "",
+    val title: String = "",
+    val icon: String = "🎯",
+    val dailyMinutes: Int = 30,
+    val durationDays: Int = 30,
+    val colorHex: String = "#4772FA",
+    val useCount: Int = 0,
+    val createdAt: Long = 0
+)
+
+/**
  * 备份文件整体结构：一份 JSON 就是一个 [BackupPayload]。
  *
  * @property schemaVersion 结构版本，导入时校验
  * @property appVersion 导出时的应用版本名，仅作记录
  * @property exportedAt 导出时间戳（毫秒）
+ * @property settings 偏好设置快照；schema 1 的旧备份没有这一项，导入时跳过
+ * @property templates 计划模板快照；schema 1 的旧备份没有这一项，导入时跳过
  */
 data class BackupPayload(
     val schemaVersion: Int = BACKUP_SCHEMA_VERSION,
@@ -146,13 +198,18 @@ data class BackupPayload(
     val plans: List<BackupPlan> = emptyList(),
     val planLogs: List<BackupPlanLog> = emptyList(),
     val notes: List<BackupNote> = emptyList(),
-    val noteAttachments: List<BackupAttachment> = emptyList()
+    val noteAttachments: List<BackupAttachment> = emptyList(),
+    val settings: BackupSettings? = null,
+    val templates: List<BackupTemplate> = emptyList()
 ) {
 
     /** 备份中包含的记录总条数（用于导出结果提示）。 */
     fun totalCount(): Int = tasks.size + subTasks.size + focusRecords.size + habits.size +
         habitChecks.size + categories.size + tags.size + plans.size + planLogs.size +
-        notes.size + noteAttachments.size
+        notes.size + noteAttachments.size + templates.size
+
+    /** 备份中是否带偏好设置快照 */
+    fun hasSettings(): Boolean = settings != null
 
     /**
      * 生成人类可读的摘要，只列出非空的分类。
@@ -172,6 +229,8 @@ data class BackupPayload(
             if (subTasks.isNotEmpty()) add("子任务 ${subTasks.size}")
             if (categories.isNotEmpty()) add("清单 ${categories.size}")
             if (tags.isNotEmpty()) add("标签 ${tags.size}")
+            if (templates.isNotEmpty()) add("模板 ${templates.size}")
+            if (settings != null) add("设置")
         }
         return parts.joinToString(" · ").ifEmpty { "空备份" }
     }

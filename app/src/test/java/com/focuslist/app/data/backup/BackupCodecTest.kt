@@ -1,6 +1,7 @@
 package com.focuslist.app.data.backup
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,7 +39,11 @@ class BackupCodecTest {
                 durationSec = 1500, phase = "WORK", completed = true)
         ),
         categories = listOf(BackupCategory(id = 1, name = "收集箱", colorHex = "#E94B3C", isDefault = true)),
-        tags = listOf(BackupTag(id = 1, name = "紧急", colorHex = "#FF5A5F"))
+        tags = listOf(BackupTag(id = 1, name = "紧急", colorHex = "#FF5A5F")),
+        settings = BackupSettings(focusMinutes = 40, themeColor = "#E94B3C", dailyGoalMinutes = 60, strictMode = true),
+        templates = listOf(
+            BackupTemplate(id = "学习英语#30#21#📚", title = "学习英语", icon = "📚", dailyMinutes = 30, durationDays = 21, useCount = 4)
+        )
     )
 
     @Test
@@ -59,6 +64,26 @@ class BackupCodecTest {
         assertEquals(original.focusRecords, restored.focusRecords)
         assertEquals(original.categories, restored.categories)
         assertEquals(original.tags, restored.tags)
+        assertEquals(original.settings, restored.settings)
+        assertEquals(original.templates, restored.templates)
+    }
+
+    @Test
+    fun encodeThenDecode_keepsSettingsSnapshot() {
+        val restored = BackupCodec.decode(BackupCodec.encode(sample()))
+        assertEquals(40, restored.settings?.focusMinutes)
+        assertEquals("#E94B3C", restored.settings?.themeColor)
+        assertEquals(60, restored.settings?.dailyGoalMinutes)
+        assertEquals(true, restored.settings?.strictMode)
+    }
+
+    @Test
+    fun encodeThenDecode_keepsTemplates() {
+        val restored = BackupCodec.decode(BackupCodec.encode(sample()))
+        assertEquals(1, restored.templates.size)
+        assertEquals("学习英语#30#21#📚", restored.templates[0].id)
+        assertEquals(21, restored.templates[0].durationDays)
+        assertEquals(4, restored.templates[0].useCount)
     }
 
     @Test
@@ -104,5 +129,16 @@ class BackupCodecTest {
         val payload = BackupCodec.decode("{\"schemaVersion\": 1, \"plans\": []}")
         assertEquals(1, payload.schemaVersion)
         assertTrue(payload.plans.isEmpty())
+    }
+
+    @Test
+    fun decode_oldSchemaWithoutSettings_leavesThemEmpty() {
+        val payload = BackupCodec.decode(
+            "{\"schemaVersion\": 1, \"plans\": [{\"id\": 1, \"title\": \"旧备份\"}]}"
+        )
+        assertEquals(null, payload.settings)
+        assertTrue(payload.templates.isEmpty())
+        assertFalse(payload.hasSettings())
+        assertEquals(1, payload.totalCount())
     }
 }

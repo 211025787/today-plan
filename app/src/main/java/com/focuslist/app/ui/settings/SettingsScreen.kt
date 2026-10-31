@@ -10,13 +10,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +52,7 @@ import com.focuslist.app.data.backup.BackupPayload
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.ThemeColors
 import com.focuslist.app.ui.theme.parseThemeColor
+import com.focuslist.app.util.BackupHealth
 import com.focuslist.app.util.BackupNames
 import com.focuslist.app.util.Goal
 import com.focuslist.app.util.PlanTemplates
@@ -79,6 +83,7 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsState()
     val suggestedGoal by viewModel.suggestedGoal.collectAsState()
     val templates by viewModel.planTemplates.collectAsState()
+    val lastBackupAt by viewModel.lastBackupAt.collectAsState()
     val context = LocalContext.current
     // 版本号从包信息读取，避免手写
     val versionName = remember {
@@ -106,6 +111,7 @@ fun SettingsScreen(
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(json.toByteArray(Charsets.UTF_8))
                 } ?: error("无法写入所选位置")
+                viewModel.markBackupExported()
                 "已导出 ${payload.totalCount()} 条：${payload.describe()}"
             }.getOrElse { "导出失败：${it.message ?: "未知错误"}" }
             backupBusy = false
@@ -375,6 +381,64 @@ fun SettingsScreen(
             SectionLabel("数据")
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    // 备份体检：上次备份多久了 / 是否该再备份一次
+                    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("备份状态", style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    text = "${BackupHealth.statusText(lastBackupAt)} · ${BackupHealth.level(lastBackupAt).label}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
+                            Text(
+                                text = BackupHealth.countdownText(lastBackupAt),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (BackupHealth.shouldRemind(lastBackupAt)) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.tertiary
+                                }
+                            )
+                        }
+                        // 距提醒线的进度条：用两个 Box 画，避免依赖高版本进度条 API
+                        val progress = BackupHealth.progress(lastBackupAt)
+                        val barColor = if (BackupHealth.shouldRemind(lastBackupAt)) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.tertiary
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp)
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            if (progress > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(progress)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(50))
+                                        .background(barColor)
+                                )
+                            }
+                        }
+                        Text(
+                            text = BackupHealth.adviceText(lastBackupAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ActionRow(
                         title = "专注统计",
                         subtitle = "累计时长、连续天数与年度热力图",
@@ -383,7 +447,7 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ActionRow(
                         title = "导出备份",
-                        subtitle = "把全部数据保存成一个 JSON 文件",
+                        subtitle = "把数据、偏好设置与计划模板保存成一个 JSON 文件",
                         enabled = !backupBusy,
                         onClick = { exportLauncher.launch(BackupNames.suggestFileName(System.currentTimeMillis())) }
                     )
@@ -436,8 +500,8 @@ fun SettingsScreen(
                     text = "备份导出于 $exportedText" +
                         (if (payload.appVersion.isNotBlank()) "（v${payload.appVersion}）" else "") +
                         "\n共 ${payload.totalCount()} 条：${payload.describe()}\n\n" +
-                        "覆盖导入：先清空本机数据，导入结果等同于这份备份。\n" +
-                        "合并导入：保留本机数据，仅覆盖 ID 相同的记录。",
+                        "覆盖导入：先清空本机数据，结果等同于这份备份，并一并还原偏好设置与模板。\n" +
+                        "合并导入：保留本机数据与设置，仅覆盖 ID 相同的记录，并补充本机没有的模板。",
                     style = MaterialTheme.typography.bodySmall
                 )
             },

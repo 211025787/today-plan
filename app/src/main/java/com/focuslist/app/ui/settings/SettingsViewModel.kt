@@ -35,6 +35,10 @@ class SettingsViewModel(
     val planTemplates: StateFlow<List<PlanTemplate>> = settingsStore.planTemplates
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** 上次成功导出备份的时间戳；0 表示从未备份 */
+    val lastBackupAt: StateFlow<Long> = settingsStore.lastBackupAt
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
     private val mutableSuggestedGoal = MutableStateFlow<Int?>(null)
 
     /** 按近 14 天表现推算出的建议目标（分钟）；样本不足时为 null */
@@ -171,6 +175,17 @@ class SettingsViewModel(
     fun removePlanTemplate(id: String) {
         viewModelScope.launch {
             settingsStore.removePlanTemplate(id)
+        }
+    }
+
+    /**
+     * 记一次成功的备份导出，用于「备份体检」判断是否该再备份。
+     *
+     * @param at 导出时刻（毫秒），默认当前时间
+     */
+    fun markBackupExported(at: Long = System.currentTimeMillis()) {
+        viewModelScope.launch {
+            settingsStore.markBackupExported(at)
         }
     }
 }
