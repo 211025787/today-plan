@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.0.51-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.53-4772FA" alt="version">
 </p>
 
 **今日规划**是一个纯离线的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来。所有数据只保存在本机，不联网、不上传。
@@ -112,6 +112,14 @@ ffmpeg -y -framerate 25 -i .tmp_docs/frames/f%05d.jpg -i .tmp_docs/promo.wav \
 - 习惯打卡、连续天数统计；
 - 四款**桌面小组件**：任务列表、番茄计时、统计概览、习惯打卡。
 
+### 💾 数据备份与恢复
+
+- 一键**导出**：把计划、投入记录、番茄记录、任务、习惯、备注与附件整体写成一个 JSON 文件（系统「另存为」选择保存位置，文件名自动带日期）；
+- 一键**导入**：选一个备份文件后先预览摘要，再选**覆盖导入**（清空本机后写入，结果等同于备份）或**合并导入**（保留本机数据，仅覆盖相同 ID 的记录）；
+- 整个导出 / 导入都在**单个数据库事务**内完成，要么整体成功要么整体回滚；
+- 备份文件带 `schemaVersion`，版本不兼容时明确拒绝而不是写入脏数据；
+- 走系统文件选择器（SAF），**不需要任何存储权限**，文件始终由你自己保管。
+
 ---
 
 ## 技术栈
@@ -124,7 +132,9 @@ ffmpeg -y -framerate 25 -i .tmp_docs/frames/f%05d.jpg -i .tmp_docs/promo.wav \
 | 导航 | Navigation Compose，单 Activity + 底部 Dock |
 | 异步 | Kotlin Coroutines + StateFlow |
 | 后台 | 前台 Service（番茄钟 / 计划秒表）+ AlarmManager 精确闹钟 |
-| 系统能力 | 通知、震动、悬浮窗（TYPE_APPLICATION_OVERLAY）、桌面小组件 |
+| 系统能力 | 通知、震动、悬浮窗（TYPE_APPLICATION_OVERLAY）、桌面小组件、系统文件选择器（SAF） |
+| 数据交换 | Gson（备份 JSON 编解码，纯 JVM 库，可直接单测） |
+| 测试 | JUnit 4 单元测试（`testDebugUnitTest`），覆盖日期工具、备份编解码与统计 |
 | 构建 | Gradle Kotlin DSL + KSP，compileSdk 34 / minSdk 26 / JDK 17 |
 
 ## 架构
@@ -156,6 +166,7 @@ app/src/main/java/com/focuslist/app/
 ├── data/
 │   ├── local/               # Room：实体、DAO、数据库与迁移
 │   ├── repo/                # 仓库层（计划、备注、习惯、任务…）
+│   ├── backup/              # 备份：数据结构、JSON 编解码、导入导出管理器
 │   └── prefs/               # DataStore 设置（时长、音色、胶囊外观、主题…）
 ├── timer/                   # 番茄钟状态机与前台服务
 ├── ui/
@@ -180,15 +191,16 @@ app/src/main/java/com/focuslist/app/
 
 双击 `build.bat`，按提示操作：
 
-1. **选择包类型**：`1` 开发包 Debug（可调试，自测用）/ `2` 生产包 Release（分发用）；
-2. **输入版本号**：如 `1.0.52`，直接回车则沿用当前 `version.properties` 中的版本；
+1. **选择操作**：`1` 开发包 Debug（可调试，自测用）/ `2` 生产包 Release（分发用）/ `3` 运行单元测试（不打包）；
+2. **输入版本号**：如 `1.0.53`，直接回车则沿用当前 `version.properties` 中的版本；
 3. 脚本自动写入版本号并开始构建，结束后打印 APK 路径与 `adb install` 命令。
 
 也可以命令行非交互执行（便于脚本化）：
 
 ```bash
-build.bat debug 1.0.52
+build.bat debug 1.0.53
 build.bat release 1.1.0
+build.bat test              # 只跑单元测试
 ```
 
 产物：
@@ -212,9 +224,27 @@ build.bat release 1.1.0
 ./gradlew assembleRelease
 ```
 
+## 自动化测试
+
+单元测试放在 `app/src/test/java/`，全部是纯 JVM 测试，不需要模拟器或真机：
+
+```bash
+./gradlew :app:testDebugUnitTest      # 等价于 build.bat test
+```
+
+| 测试类 | 覆盖内容 |
+| --- | --- |
+| `util/DateUtilsTest` | 当天 0 点 / 当日最后一刻、跨月加减天数、周起点为周一、月初、`MM:SS` 倒计时（含负值） |
+| `data/backup/BackupCodecTest` | 备份 JSON 导出→导入的字段级往返一致、缩进可读且不转义中文、可空字段、非法 JSON 与不兼容版本被拒绝 |
+| `data/backup/BackupPayloadTest` | 备份条数统计与摘要文案 |
+| `util/BackupNamesTest` | 备份文件名（前缀 / 时间戳 / 扩展名）与文件类型判断 |
+
+HTML 报告在 `app/build/reports/tests/testDebugUnitTest/index.html`。
+
 ## 数据与隐私
 
 - 全部数据保存在应用私有目录：Room 数据库 `focus_list.db` + DataStore，**不申请网络权限、不发起任何请求**；
+- 备份导出 / 导入走系统文件选择器，文件保存在你自己选的位置，**不申请任何存储权限**，应用也不会读写备份之外的文件；
 - 申请的权限都与功能直接相关：
 
 | 权限 | 用途 |

@@ -1,11 +1,12 @@
 @echo off
 rem ============================================================
-rem 今日规划 · 一键打包脚本（无需 Android Studio）
+rem 今日规划 · 一键打包 / 测试脚本（无需 Android Studio）
 rem
-rem 用法一（交互式）：双击运行，按提示选择包类型并输入版本号
-rem 用法二（命令行）：build.bat [debug^|release] [版本号]
+rem 用法一（交互式）：双击运行，按提示选择操作并输入版本号
+rem 用法二（命令行）：build.bat [debug^|release^|test] [版本号]
 rem   例：build.bat debug 1.0.50
 rem       build.bat release 1.1.0
+rem       build.bat test
 rem ============================================================
 setlocal enabledelayedexpansion
 
@@ -21,18 +22,21 @@ set "NEW_NAME=%~2"
 
 if /i "%BUILD_TYPE%"=="debug" goto :have_type
 if /i "%BUILD_TYPE%"=="release" goto :have_type
+if /i "%BUILD_TYPE%"=="test" goto :run_test
 
-rem ---------- 交互式选择包类型 ----------
+rem ---------- 交互式选择操作 ----------
 echo ============================================================
-echo   今日规划 · 打包脚本
+echo   今日规划 · 打包 / 测试脚本
 echo ============================================================
 echo   [1] 开发包 Debug   —— 可调试、体积大，自己测试用
 echo   [2] 生产包 Release —— 正式分发用
+echo   [3] 运行单元测试   —— 不打包，只执行 testDebugUnitTest
 echo ------------------------------------------------------------
-set /p BUILD_TYPE=请选择构建类型 [1/2]（回车默认 1）：
+set /p BUILD_TYPE=请选择 [1/2/3]（回车默认 1）：
 if "%BUILD_TYPE%"=="" set "BUILD_TYPE=1"
 if "%BUILD_TYPE%"=="1" set "BUILD_TYPE=debug"
 if "%BUILD_TYPE%"=="2" set "BUILD_TYPE=release"
+if "%BUILD_TYPE%"=="3" goto :run_test
 if /i "%BUILD_TYPE%"=="debug" goto :have_type
 if /i "%BUILD_TYPE%"=="release" goto :have_type
 echo.
@@ -102,10 +106,23 @@ echo   根目录有 keystore.properties 时使用其中的正式签名；
 echo   没有时自动回退到 debug 签名，保证 APK 可直接安装。
 exit /b 0
 
+:run_test
+echo.
+echo ============================================================
+echo 运行单元测试（testDebugUnitTest）...
+call gradlew.bat :app:testDebugUnitTest
+if not "%ERRORLEVEL%"=="0" goto :fail
+echo.
+echo 测试全部通过。
+echo   HTML 报告：app\build\reports\tests\testDebugUnitTest\index.html
+echo   XML  结果：app\build\test-results\testDebugUnitTest\
+echo ============================================================
+goto :done
+
 :fail
 echo.
 echo ============================================================
-echo 构建失败，请查看上方日志。
+echo 失败，请查看上方日志。
 echo ============================================================
 
 :done

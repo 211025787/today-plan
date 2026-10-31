@@ -154,4 +154,29 @@ interface PlanDao {
     @Query("UPDATE plans SET title = :newTitle WHERE title = :oldTitle")
     suspend fun renameByTitle(oldTitle: String, newTitle: String): Int
 
+    // ---- 备份 / 恢复：全量读写 ----
+
+    /** 同步读取全部计划（含已归档），用于导出备份。 */
+    @Query("SELECT * FROM plans ORDER BY id ASC")
+    suspend fun getAllPlans(): List<PlanEntity>
+
+    /** 同步读取全部计划投入日志，用于导出备份。 */
+    @Query("SELECT * FROM plan_logs ORDER BY id ASC")
+    suspend fun getAllLogs(): List<PlanLogEntity>
+
+    /** 批量写入计划（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlans(plans: List<PlanEntity>)
+
+    /** 批量写入投入日志（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLogs(logs: List<PlanLogEntity>)
+
+    /** 清空计划表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM plans")
+    suspend fun clearPlans()
+
+    /** 清空投入日志表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM plan_logs")
+    suspend fun clearLogs()
 }

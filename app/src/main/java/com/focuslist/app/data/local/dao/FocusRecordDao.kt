@@ -62,4 +62,18 @@ interface FocusRecordDao {
             "WHERE phase = 'WORK' AND completed = 1 ORDER BY dayStart DESC"
     )
     suspend fun getActiveDays(): List<Long>
+
+    // ---- 备份 / 恢复：全量读写 ----
+
+    /** 同步读取全部专注记录，用于导出备份。 */
+    @Query("SELECT * FROM focus_records ORDER BY id ASC")
+    suspend fun getAll(): List<FocusRecordEntity>
+
+    /** 批量写入专注记录（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(records: List<FocusRecordEntity>)
+
+    /** 清空专注记录表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM focus_records")
+    suspend fun clearAll()
 }

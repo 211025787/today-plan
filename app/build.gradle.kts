@@ -118,4 +118,11 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // 备份文件的 JSON 编解码（纯 Java 库，单元测试也能直接跑）
+    implementation("com.google.code.gson:gson:2.10.1")
+
+    // ---- 自动化测试 ----
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.google.code.gson:gson:2.10.1")
 }

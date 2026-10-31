@@ -81,4 +81,30 @@ interface NoteDao {
      */
     @Query("DELETE FROM note_attachments WHERE noteId = :noteId")
     suspend fun deleteAttachmentsOf(noteId: Long)
+
+    // ---- 备份 / 恢复：全量读写 ----
+
+    /** 同步读取全部备注，用于导出备份。 */
+    @Query("SELECT * FROM quick_notes ORDER BY id ASC")
+    suspend fun getAllNotes(): List<QuickNoteEntity>
+
+    /** 同步读取全部备注附件，用于导出备份。 */
+    @Query("SELECT * FROM note_attachments ORDER BY id ASC")
+    suspend fun getAllAttachments(): List<NoteAttachmentEntity>
+
+    /** 批量写入备注（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertNotes(notes: List<QuickNoteEntity>)
+
+    /** 批量写入备注附件（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAttachments(attachments: List<NoteAttachmentEntity>)
+
+    /** 清空备注表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM quick_notes")
+    suspend fun clearNotes()
+
+    /** 清空备注附件表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM note_attachments")
+    suspend fun clearAttachments()
 }

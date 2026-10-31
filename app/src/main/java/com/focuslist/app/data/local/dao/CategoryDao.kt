@@ -62,4 +62,18 @@ interface CategoryDao {
      */
     @Query("SELECT COUNT(*) FROM categories")
     suspend fun count(): Int
+
+    // ---- 备份 / 恢复：全量读写 ----
+
+    /** 同步读取全部清单，用于导出备份。 */
+    @Query("SELECT * FROM categories ORDER BY id ASC")
+    suspend fun getAll(): List<CategoryEntity>
+
+    /** 批量写入清单（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(categories: List<CategoryEntity>)
+
+    /** 清空清单表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM categories")
+    suspend fun clearAll()
 }

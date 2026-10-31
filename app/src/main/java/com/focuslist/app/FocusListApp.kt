@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
+import com.focuslist.app.data.backup.BackupManager
 import com.focuslist.app.data.local.AppDatabase
 import com.focuslist.app.data.prefs.SettingsStore
 import com.focuslist.app.data.repo.CategoryRepository
@@ -54,6 +55,9 @@ class AppContainer(private val appContext: Context) {
 
     /** 设置存储单例 */
     val settingsStore: SettingsStore by lazy { SettingsStore(appContext) }
+
+    /** 备份管理器单例（数据导出 / 导入） */
+    val backupManager: BackupManager by lazy { BackupManager(database) }
 }
 
 /**

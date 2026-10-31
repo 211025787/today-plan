@@ -118,4 +118,30 @@ interface HabitDao {
      */
     @Query("SELECT date FROM habit_checks WHERE habitId = :habitId ORDER BY date DESC")
     suspend fun getCheckDates(habitId: Long): List<Long>
+
+    // ---- 备份 / 恢复：全量读写 ----
+
+    /** 同步读取全部习惯（含已归档），用于导出备份。 */
+    @Query("SELECT * FROM habits ORDER BY id ASC")
+    suspend fun getAllHabits(): List<HabitEntity>
+
+    /** 同步读取全部打卡记录，用于导出备份。 */
+    @Query("SELECT * FROM habit_checks ORDER BY id ASC")
+    suspend fun getAllChecks(): List<HabitCheckEntity>
+
+    /** 批量写入习惯（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHabits(habits: List<HabitEntity>)
+
+    /** 批量写入打卡记录（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChecks(checks: List<HabitCheckEntity>)
+
+    /** 清空习惯表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM habits")
+    suspend fun clearHabits()
+
+    /** 清空打卡记录表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM habit_checks")
+    suspend fun clearChecks()
 }

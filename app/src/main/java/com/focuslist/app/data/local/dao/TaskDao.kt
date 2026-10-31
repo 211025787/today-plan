@@ -254,4 +254,30 @@ interface TaskDao {
      */
     @Query("DELETE FROM sub_tasks WHERE taskId = :taskId")
     suspend fun deleteSubTasksOf(taskId: Long)
+
+    // ---- 备份 / 恢复：全量读写 ----
+
+    /** 同步读取全部任务（含垃圾桶与已完成），用于导出备份。 */
+    @Query("SELECT * FROM tasks ORDER BY id ASC")
+    suspend fun getAllTasks(): List<TaskEntity>
+
+    /** 同步读取全部子任务，用于导出备份。 */
+    @Query("SELECT * FROM sub_tasks ORDER BY id ASC")
+    suspend fun getAllSubTasks(): List<SubTaskEntity>
+
+    /** 批量写入任务（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTasks(tasks: List<TaskEntity>)
+
+    /** 批量写入子任务（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSubTasks(subTasks: List<SubTaskEntity>)
+
+    /** 清空任务表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM tasks")
+    suspend fun clearTasks()
+
+    /** 清空子任务表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM sub_tasks")
+    suspend fun clearSubTasks()
 }

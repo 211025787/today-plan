@@ -1,5 +1,8 @@
 package com.focuslist.app.ui.settings
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -20,12 +24,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,9 +42,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
+import com.focuslist.app.data.backup.BackupCodec
+import com.focuslist.app.data.backup.BackupPayload
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.ThemeColors
 import com.focuslist.app.ui.theme.parseThemeColor
+import com.focuslist.app.util.BackupNames
+import com.focuslist.app.widget.WidgetRefresher
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 设置页（我的）：按「外观 / 提醒 / 悬浮胶囊 / 关于」分组，
@@ -59,6 +75,57 @@ fun SettingsScreen(
         runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull() ?: ""
+    }
+
+    // ---- 数据备份 / 恢复 ----
+    val scope = rememberCoroutineScope()
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var backupBusy by remember { mutableStateOf(false) }
+    var pendingImport by remember { mutableStateOf<BackupPayload?>(null) }
+
+    /** 导出：拉起系统「另存为」，把全部数据写成一个 JSON 文件 */
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        backupBusy = true
+        scope.launch {
+            backupMessage = runCatching {
+                val payload = container.backupManager.collect(versionName)
+                val json = BackupCodec.encode(payload)
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(json.toByteArray(Charsets.UTF_8))
+                } ?: error("无法写入所选位置")
+                "已导出 ${payload.totalCount()} 条：${payload.describe()}"
+            }.getOrElse { "导出失败：${it.message ?: "未知错误"}" }
+            backupBusy = false
+        }
+    }
+
+    /** 导入：选一个备份文件，先解析出摘要再让用户确认导入方式 */
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        backupBusy = true
+        scope.launch {
+            runCatching {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+                val text = context.contentResolver.openInputStream(uri)?.use { it.reader().readText() }
+                    ?: error("无法读取所选文件")
+                BackupCodec.decode(text)
+            }.onSuccess { payload ->
+                pendingImport = payload
+                backupMessage = null
+            }.onFailure {
+                backupMessage = "导入失败：${it.message ?: "无法解析该文件"}"
+            }
+            backupBusy = false
+        }
     }
 
     Scaffold(
@@ -194,6 +261,34 @@ fun SettingsScreen(
                 }
             }
 
+            // 数据
+            SectionLabel("数据")
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    ActionRow(
+                        title = "导出备份",
+                        subtitle = "把全部数据保存成一个 JSON 文件",
+                        enabled = !backupBusy,
+                        onClick = { exportLauncher.launch(BackupNames.suggestFileName(System.currentTimeMillis())) }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ActionRow(
+                        title = "导入备份",
+                        subtitle = "从之前导出的 JSON 文件恢复",
+                        enabled = !backupBusy,
+                        onClick = { importLauncher.launch(arrayOf("application/json", "text/plain")) }
+                    )
+                    backupMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+
             // 关于
             SectionLabel("关于")
             GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -206,6 +301,62 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    // 导入确认：解析成功后先展示备份内容，再让用户选择合并或覆盖
+    pendingImport?.let { payload ->
+        val exportedText = remember(payload) {
+            if (payload.exportedAt > 0) {
+                SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(Date(payload.exportedAt))
+            } else {
+                "未知时间"
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text("导入备份") },
+            text = {
+                Text(
+                    text = "备份导出于 $exportedText" +
+                        (if (payload.appVersion.isNotBlank()) "（v${payload.appVersion}）" else "") +
+                        "\n共 ${payload.totalCount()} 条：${payload.describe()}\n\n" +
+                        "覆盖导入：先清空本机数据，导入结果等同于这份备份。\n" +
+                        "合并导入：保留本机数据，仅覆盖 ID 相同的记录。",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingImport = null
+                    backupBusy = true
+                    scope.launch {
+                        backupMessage = runCatching {
+                            container.backupManager.restore(payload, overwrite = true)
+                            WidgetRefresher.refreshAll(context)
+                            "已覆盖导入 ${payload.totalCount()} 条数据"
+                        }.getOrElse { "导入失败：${it.message ?: "未知错误"}" }
+                        backupBusy = false
+                    }
+                }) { Text("覆盖导入") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        pendingImport = null
+                        backupBusy = true
+                        scope.launch {
+                            backupMessage = runCatching {
+                                container.backupManager.restore(payload, overwrite = false)
+                                WidgetRefresher.refreshAll(context)
+                                "已合并导入 ${payload.totalCount()} 条数据"
+                            }.getOrElse { "导入失败：${it.message ?: "未知错误"}" }
+                            backupBusy = false
+                        }
+                    }) { Text("合并导入") }
+                    TextButton(onClick = { pendingImport = null }) { Text("取消") }
+                }
+            }
+        )
     }
 }
 
@@ -239,5 +390,52 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     ) {
         Text(text = label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/**
+ * 可点击的操作行（标题 + 副标题 + 右箭头）。
+ *
+ * @param title 主文案
+ * @param subtitle 副文案
+ * @param enabled 是否可点击
+ * @param onClick 点击回调
+ */
+@Composable
+private fun ActionRow(
+    title: String,
+    subtitle: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 10.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        Text(
+            "›",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

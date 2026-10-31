@@ -46,4 +46,18 @@ interface TagDao {
      */
     @Query("DELETE FROM tags WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    // ---- 备份 / 恢复：全量读写 ----
+
+    /** 同步读取全部标签，用于导出备份。 */
+    @Query("SELECT * FROM tags ORDER BY id ASC")
+    suspend fun getAll(): List<TagEntity>
+
+    /** 批量写入标签（同 ID 覆盖），用于导入备份。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(tags: List<TagEntity>)
+
+    /** 清空标签表（覆盖式导入前调用）。 */
+    @Query("DELETE FROM tags")
+    suspend fun clearAll()
 }
