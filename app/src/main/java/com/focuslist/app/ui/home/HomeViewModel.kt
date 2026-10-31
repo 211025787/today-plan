@@ -5,11 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.data.local.entity.PlanLogEntity
+import com.focuslist.app.data.local.entity.QuickNoteEntity
+import com.focuslist.app.data.repo.NoteRepository
 import com.focuslist.app.data.repo.PlanRepository
 import com.focuslist.app.ui.plan.PlanTimerEntry
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.ui.plan.PlanTimerService
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.Search
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,7 +22,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 /**
  * 首页（日历主页）UI 状态。
@@ -39,14 +45,53 @@ data class HomeUiState(
 )
 
 /**
- * 首页 ViewModel：月历网格数据（事项标签 + 每日完成度）与选中日卡片数据，多计划并行计时。
+ * 首页搜索命中项：计划与备注统一排序后的展示模型。
+ *
+ * @property score 匹配得分（越大越靠前）
+ * @property title 主标题（命中的字段；计划备注命中时为备注内容摘要）
+ * @property ranges 标题内的高亮区间
+ * @property snippet 副标题摘要
+ */
+sealed class HomeSearchHit {
+    abstract val score: Int
+    abstract val title: String
+    abstract val ranges: List<IntRange>
+    abstract val snippet: String
+
+    /** 命中的计划 */
+    data class PlanHit(
+        val plan: PlanEntity,
+        override val score: Int,
+        override val title: String,
+        override val ranges: List<IntRange>,
+        override val snippet: String
+    ) : HomeSearchHit()
+
+    /** 命中的备注 */
+    data class NoteHit(
+        val note: QuickNoteEntity,
+        override val score: Int,
+        override val title: String,
+        override val ranges: List<IntRange>,
+        override val snippet: String
+    ) : HomeSearchHit()
+}
+
+/** 搜索字段权重：标题比正文重要 */
+private const val WEIGHT_TITLE = 3
+
+/**
+ * 首页 ViewModel：月历网格数据（事项标签 + 每日完成度）与选中日卡片数据，多计划并行计时，
+ * 另提供跨「计划 + 备注」的全局搜索。
  *
  * @property planRepository 计划仓库
+ * @property noteRepository 备注仓库（搜索备注用）
  * @property appContext 应用上下文（启动前台计时服务用）
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val planRepository: PlanRepository,
+    private val noteRepository: NoteRepository,
     private val appContext: Context
 ) : ViewModel() {
 
@@ -61,6 +106,79 @@ class HomeViewModel(
 
     /** 多选模式选中集合（只读暴露） */
     val selectMode: StateFlow<Set<Long>> = selectedPlanIds.asStateFlow()
+
+    /** 搜索关键词（空串表示未进入搜索态） */
+    private val query = MutableStateFlow("")
+
+    /** 搜索关键词只读暴露 */
+    val queryText: StateFlow<String> = query.asStateFlow()
+
+    /**
+     * 全局搜索结果：计划（标题 + 备注）与备注（标题 + 正文）混合排序。
+     * 关键词为空白时返回空列表——UI 据此回到日历而不是展示全量列表。
+     */
+    val searchResults: StateFlow<List<HomeSearchHit>> = combine(
+        planRepository.observeAllPlans(),
+        noteRepository.observeAll(),
+        query
+    ) { plans, notes, text ->
+        val tokens = Search.tokenize(text)
+        if (Search.isBlank(text) || tokens.isEmpty()) {
+            return@combine emptyList<HomeSearchHit>()
+        }
+        val planHits = Search.rank(plans, tokens) { plan ->
+            listOf(
+                Search.Field(plan.title, WEIGHT_TITLE),
+                Search.Field(plan.note, 1)
+            )
+        }.map { m ->
+            val plan = m.item
+            if (m.fieldIndex == 0) {
+                HomeSearchHit.PlanHit(
+                    plan = plan,
+                    score = m.score,
+                    title = plan.title,
+                    ranges = m.ranges,
+                    snippet = plan.note.ifBlank { dateRangeText(plan) }
+                )
+            } else {
+                HomeSearchHit.PlanHit(
+                    plan = plan,
+                    score = m.score,
+                    title = Search.snippet(plan.note, m.ranges),
+                    ranges = emptyList(),
+                    snippet = plan.title
+                )
+            }
+        }
+        val noteHits = Search.rank(notes, tokens) { note ->
+            listOf(
+                Search.Field(note.title, WEIGHT_TITLE),
+                Search.Field(note.content, 1)
+            )
+        }.map { m ->
+            val note = m.item
+            val heading = note.title.ifBlank { "无标题备注" }
+            if (m.fieldIndex == 0) {
+                HomeSearchHit.NoteHit(
+                    note = note,
+                    score = m.score,
+                    title = heading,
+                    ranges = m.ranges,
+                    snippet = Search.snippet(note.content, emptyList())
+                )
+            } else {
+                HomeSearchHit.NoteHit(
+                    note = note,
+                    score = m.score,
+                    title = heading,
+                    ranges = emptyList(),
+                    snippet = Search.snippet(note.content, m.ranges)
+                )
+            }
+        }
+        (planHits + noteHits).sortedByDescending { it.score }.take(Search.DEFAULT_LIMIT)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         // 跨天自动落库回调：秒表跨过 0 点时把各计划已跑段写入当天
@@ -135,6 +253,57 @@ class HomeViewModel(
         }
         monthOffset.value = offset
         selectedDay.value = null
+    }
+
+    /** 「2026/11/1 - 2026/11/30」形式的计划生效区间文案 */
+    private fun dateRangeText(plan: PlanEntity): String {
+        val fmt = SimpleDateFormat("yyyy/M/d", Locale.getDefault())
+        return "${fmt.format(Date(plan.startDate))} - ${fmt.format(Date(plan.endDate))}"
+    }
+
+    /**
+     * 目标日期所在月相对当月的偏移月数。
+     *
+     * @param dayStart 目标日期 0 点时间戳
+     * @return 偏移月数（0 为当月）
+     */
+    private fun monthDeltaOf(dayStart: Long): Int {
+        val base = Calendar.getInstance().apply { timeInMillis = monthStartOf(0) }
+        val target = Calendar.getInstance().apply {
+            timeInMillis = dayStart
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
+        return (target.get(Calendar.YEAR) - base.get(Calendar.YEAR)) * 12 +
+            (target.get(Calendar.MONTH) - base.get(Calendar.MONTH))
+    }
+
+    /**
+     * 更新搜索关键词；空白输入即视为退出搜索态。
+     *
+     * @param text 用户输入
+     */
+    fun setQuery(text: String) {
+        query.value = text
+    }
+
+    /**
+     * 清空搜索关键词（退出搜索态）。
+     */
+    fun clearQuery() {
+        query.value = ""
+    }
+
+    /**
+     * 搜索结果跳计划：把日历翻到该计划生效期内离今天最近的一天并展开日卡片。
+     *
+     * @param plan 命中的计划
+     */
+    fun focusPlan(plan: PlanEntity) {
+        val today = DateUtils.startOfDay(System.currentTimeMillis())
+        val day = today.coerceIn(plan.startDate, plan.endDate)
+        monthOffset.value = monthDeltaOf(day)
+        selectedDay.value = day
+        query.value = ""
     }
 
     /**

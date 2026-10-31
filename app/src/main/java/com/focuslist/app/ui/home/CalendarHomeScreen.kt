@@ -40,9 +40,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -153,8 +155,14 @@ fun CalendarHomeScreen(
 ) {
     // LocalContext 需在 Composable 作用域先取出，再传入 ViewModel 工厂
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
-    val viewModel: HomeViewModel = viewModel { HomeViewModel(container.planRepository, appContext) }
+    val viewModel: HomeViewModel = viewModel {
+        HomeViewModel(container.planRepository, container.noteRepository, appContext)
+    }
     val state by viewModel.uiState.collectAsState()
+    // 搜索态：顶栏变搜索框，内容区换成结果列表
+    var searchActive by remember { mutableStateOf(false) }
+    val query by viewModel.queryText.collectAsState()
+    val results by viewModel.searchResults.collectAsState()
     // 是否有计划正在计时：用于防烧屏（页面持续微动 + 隐藏 Dock）
     val anyPlanRunning = state.timers.values.any { it.running }
 
@@ -169,6 +177,12 @@ fun CalendarHomeScreen(
     // 卡片页（已选中某天）时拦截返回键：回到日历而不是退出应用
     androidx.activity.compose.BackHandler(enabled = state.selectedDay != null) {
         viewModel.clearSelection()
+    }
+
+    // 搜索态拦截返回键：先退出搜索
+    androidx.activity.compose.BackHandler(enabled = searchActive) {
+        searchActive = false
+        viewModel.clearQuery()
     }
 
     // 添加计划/备注弹层
@@ -215,15 +229,39 @@ fun CalendarHomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        // 日历展开时标题跟随翻页器目标页，拖动过半即预告新月
-                        text = state.selectedDay?.let { dayTitleFormat.format(Date(it)) }
-                            ?: monthTitleFormat.format(Date(monthStartForOffset(pagerState.targetPage - PAGER_INITIAL_PAGE))),
-                        style = MaterialTheme.typography.headlineMedium
-                    )
+                    if (searchActive) {
+                        HomeSearchField(
+                            value = query,
+                            onValueChange = viewModel::setQuery,
+                            onClose = { viewModel.clearQuery() }
+                        )
+                    } else {
+                        Text(
+                            // 日历展开时标题跟随翻页器目标页，拖动过半即预告新月
+                            text = state.selectedDay?.let { dayTitleFormat.format(Date(it)) }
+                                ?: monthTitleFormat.format(Date(monthStartForOffset(pagerState.targetPage - PAGER_INITIAL_PAGE))),
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
                 },
                 actions = {
-                    if (state.selectedDay == null) {
+                    if (searchActive) {
+                        // 退出搜索：清空关键词回到日历
+                        IconButton(onClick = {
+                            searchActive = false
+                            viewModel.clearQuery()
+                        }) {
+                            Icon(Icons.Default.Close, contentDescription = "退出搜索")
+                        }
+                    } else if (state.selectedDay == null) {
+                        // 搜索入口（仅日历展开时提供）
+                        IconButton(onClick = {
+                            manageMode = false
+                            viewModel.exitSelectMode()
+                            searchActive = true
+                        }) {
+                            Icon(Icons.Default.Search, contentDescription = "搜索")
+                        }
                         // 日历展开时允许翻月（与手势滑动共用翻页器，带动画）
                         IconButton(onClick = {
                             scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
@@ -257,200 +295,219 @@ fun CalendarHomeScreen(
             )
         },
         floatingActionButton = {
-            // 右下角圆点：添加计划 / 备注
-            Box(modifier = Modifier.padding(bottom = 92.dp)) {
-                ExpandableFab(
-                    items = listOf(
-                        FabMenuItem(icon = "⚡", label = "一句话建计划", onClick = { showQuickPlan = true }),
-                        FabMenuItem(icon = "📋", label = "添加计划", onClick = { showAddPlan = true }),
-                        FabMenuItem(
-                            icon = "📝",
-                            label = "备注",
-                            onClick = {
-                                // 新备注默认关联当前查看的日期（未选中日则为今天）
-                                onOpenNote(
-                                    -1L,
-                                    state.selectedDay ?: DateUtils.startOfDay(System.currentTimeMillis())
-                                )
-                            }
+            // 右下角圆点：添加计划 / 备注；搜索态下隐藏，避免遮挡结果
+            if (!searchActive) {
+                Box(modifier = Modifier.padding(bottom = 92.dp)) {
+                    ExpandableFab(
+                        items = listOf(
+                            FabMenuItem(icon = "⚡", label = "一句话建计划", onClick = { showQuickPlan = true }),
+                            FabMenuItem(icon = "📋", label = "添加计划", onClick = { showAddPlan = true }),
+                            FabMenuItem(
+                                icon = "📝",
+                                label = "备注",
+                                onClick = {
+                                    // 新备注默认关联当前查看的日期（未选中日则为今天）
+                                    onOpenNote(
+                                        -1L,
+                                        state.selectedDay ?: DateUtils.startOfDay(System.currentTimeMillis())
+                                    )
+                                }
+                            )
                         )
                     )
-                )
+                }
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // 月历区：未选中日期时展示；选中后动画收起
-            AnimatedVisibility(
-                visible = state.selectedDay == null,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                // 填满剩余屏幕高度：星期表头固定，月份网格按行均分其余空间；
-                // 底部留出系统导航条 + 悬浮 Dock 栏（62+10*2=82dp，再加 6dp 间隙）的空间
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .navigationBarsPadding()
-                        .padding(bottom = 88.dp)
-                        // 计划计时中缓慢漂移，防止长期停留烧屏
-                        .antiBurnInDrift(anyPlanRunning)
+        if (searchActive) {
+            SearchResultList(
+                results = results,
+                query = query,
+                onOpenPlan = { plan ->
+                    searchActive = false
+                    viewModel.focusPlan(plan)
+                },
+                onOpenNote = { noteId, day ->
+                    searchActive = false
+                    viewModel.clearQuery()
+                    onOpenNote(noteId, day)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                // 月历区：未选中日期时展示；选中后动画收起
+                AnimatedVisibility(
+                    visible = state.selectedDay == null,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
                 ) {
-                    // 星期表头（固定不动，月份网格在其下方滑动）
-                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                        weekHeaders.forEach { label ->
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.weight(1f)
+                    // 填满剩余屏幕高度：星期表头固定，月份网格按行均分其余空间；
+                    // 底部留出系统导航条 + 悬浮 Dock 栏（62+10*2=82dp，再加 6dp 间隙）的空间
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .navigationBarsPadding()
+                            .padding(bottom = 88.dp)
+                            // 计划计时中缓慢漂移，防止长期停留烧屏
+                            .antiBurnInDrift(anyPlanRunning)
+                    ) {
+                        // 星期表头（固定不动，月份网格在其下方滑动）
+                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                            weekHeaders.forEach { label ->
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        // 月份网格翻页器：左右滑动跟手移动，松手后惯性吸附到相邻月（一次至多翻一页）
+                        HorizontalPager(
+                            state = pagerState,
+                            flingBehavior = PagerDefaults.flingBehavior(
+                                state = pagerState,
+                                pagerSnapDistance = PagerSnapDistance.atMost(1)
+                            ),
+                            modifier = Modifier.fillMaxWidth().weight(1f)
+                        ) { page ->
+                            HomeMonthGrid(
+                                state = state,
+                                viewModel = viewModel,
+                                monthStart = monthStartForOffset(page - PAGER_INITIAL_PAGE),
+                                onSelectDay = viewModel::selectDay
                             )
                         }
                     }
-                    // 月份网格翻页器：左右滑动跟手移动，松手后惯性吸附到相邻月（一次至多翻一页）
-                    HorizontalPager(
-                        state = pagerState,
-                        flingBehavior = PagerDefaults.flingBehavior(
-                            state = pagerState,
-                            pagerSnapDistance = PagerSnapDistance.atMost(1)
-                        ),
-                        modifier = Modifier.fillMaxWidth().weight(1f)
-                    ) { page ->
-                        HomeMonthGrid(
-                            state = state,
-                            viewModel = viewModel,
-                            monthStart = monthStartForOffset(page - PAGER_INITIAL_PAGE),
-                            onSelectDay = viewModel::selectDay
+                }
+
+                // 选中日后：渐变方形计划卡片
+                state.selectedDay?.let { day ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "‹ 返回日历",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable {
+                                if (manageMode) {
+                                    manageMode = false
+                                    viewModel.exitSelectMode()
+                                }
+                                viewModel.clearSelection()
+                            }
                         )
                     }
-                }
-            }
+                    val dayPlans = viewModel.plansOfDay(state, day)
+                    // 当日备注：按关联日期查询
+                    val dayNotes by container.noteRepository.observeByDate(day).collectAsState(initial = emptyList())
+                    // 备注默认最多展示 3 条，更多可展开（随日期重置）
+                    var notesExpanded by remember(day) { mutableStateOf(false) }
 
-            // 选中日后：渐变方形计划卡片
-            state.selectedDay?.let { day ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "‹ 返回日历",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable {
-                            if (manageMode) {
-                                manageMode = false
-                                viewModel.exitSelectMode()
-                            }
-                            viewModel.clearSelection()
+                    Box(modifier = Modifier.fillMaxSize().antiBurnInDrift(anyPlanRunning)) {
+                        // 计时中叠加呼吸光晕，画面持续流动
+                        if (anyPlanRunning) {
+                            AntiBurnInGlow()
                         }
-                    )
-                }
-                val dayPlans = viewModel.plansOfDay(state, day)
-                // 当日备注：按关联日期查询
-                val dayNotes by container.noteRepository.observeByDate(day).collectAsState(initial = emptyList())
-                // 备注默认最多展示 3 条，更多可展开（随日期重置）
-                var notesExpanded by remember(day) { mutableStateOf(false) }
-
-                Box(modifier = Modifier.fillMaxSize().antiBurnInDrift(anyPlanRunning)) {
-                    // 计时中叠加呼吸光晕，画面持续流动
-                    if (anyPlanRunning) {
-                        AntiBurnInGlow()
-                    }
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = if (manageMode) 200.dp else 170.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // 当天没有计划时的提示（仍可展示备注）
-                        if (dayPlans.isEmpty()) {
-                            item(span = { GridItemSpan(2) }, key = "empty_hint") {
-                                Text(
-                                    text = "这一天没有生效中的计划，点右下角圆点添加",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(vertical = 16.dp, horizontal = 4.dp)
-                                )
-                            }
-                        }
-                        items(dayPlans, key = { it.id }) { plan ->
-                            // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
-                            val totalSec = viewModel.daySecondsOf(state, plan.id, day)
-                            val isSelected = plan.id in selectedIds
-                            GradientPlanCard(
-                                plan = plan,
-                                todaySec = totalSec,
-                                running = state.timers[plan.id]?.running == true,
-                                manageMode = manageMode,
-                                selected = isSelected,
-                                onToggleTimer = { viewModel.toggleTimer(plan.id) },
-                                onClick = {
-                                    if (manageMode) {
-                                        viewModel.toggleSelectPlan(plan.id)
-                                    }
-                                },
-                                onLongClick = {
-                                    if (manageMode) {
-                                        viewModel.toggleSelectPlan(plan.id)
-                                    } else {
-                                        menuPlan = plan
-                                    }
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = if (manageMode) 200.dp else 170.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // 当天没有计划时的提示（仍可展示备注）
+                            if (dayPlans.isEmpty()) {
+                                item(span = { GridItemSpan(2) }, key = "empty_hint") {
+                                    Text(
+                                        text = "这一天没有生效中的计划，点右下角圆点添加",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(vertical = 16.dp, horizontal = 4.dp)
+                                    )
                                 }
-                            )
-                        }
-
-                        // 当日备注区：标题 + 最多 3 条预览 + 展开全部
-                        if (dayNotes.isNotEmpty()) {
-                            item(span = { GridItemSpan(2) }, key = "notes_header") {
-                                Text(
-                                    text = "📝 当日备注 · ${dayNotes.size} 条",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 6.dp, start = 2.dp)
+                            }
+                            items(dayPlans, key = { it.id }) { plan ->
+                                // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
+                                val totalSec = viewModel.daySecondsOf(state, plan.id, day)
+                                val isSelected = plan.id in selectedIds
+                                GradientPlanCard(
+                                    plan = plan,
+                                    todaySec = totalSec,
+                                    running = state.timers[plan.id]?.running == true,
+                                    manageMode = manageMode,
+                                    selected = isSelected,
+                                    onToggleTimer = { viewModel.toggleTimer(plan.id) },
+                                    onClick = {
+                                        if (manageMode) {
+                                            viewModel.toggleSelectPlan(plan.id)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        if (manageMode) {
+                                            viewModel.toggleSelectPlan(plan.id)
+                                        } else {
+                                            menuPlan = plan
+                                        }
+                                    }
                                 )
                             }
-                            val shownNotes = if (notesExpanded) dayNotes else dayNotes.take(3)
-                            items(shownNotes, key = { "note_${it.id}" }, span = { GridItemSpan(2) }) { note ->
-                                DayNotePreviewCard(note = note, onClick = { onOpenNote(note.id, 0L) })
-                            }
-                            if (dayNotes.size > 3) {
-                                item(span = { GridItemSpan(2) }, key = "notes_toggle") {
-                                    TextButton(
-                                        onClick = { notesExpanded = !notesExpanded },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = if (notesExpanded) "收起备注" else "展开全部 ${dayNotes.size} 条备注",
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
+
+                            // 当日备注区：标题 + 最多 3 条预览 + 展开全部
+                            if (dayNotes.isNotEmpty()) {
+                                item(span = { GridItemSpan(2) }, key = "notes_header") {
+                                    Text(
+                                        text = "📝 当日备注 · ${dayNotes.size} 条",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 6.dp, start = 2.dp)
+                                    )
+                                }
+                                val shownNotes = if (notesExpanded) dayNotes else dayNotes.take(3)
+                                items(shownNotes, key = { "note_${it.id}" }, span = { GridItemSpan(2) }) { note ->
+                                    DayNotePreviewCard(note = note, onClick = { onOpenNote(note.id, 0L) })
+                                }
+                                if (dayNotes.size > 3) {
+                                    item(span = { GridItemSpan(2) }, key = "notes_toggle") {
+                                        TextButton(
+                                            onClick = { notesExpanded = !notesExpanded },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = if (notesExpanded) "收起备注" else "展开全部 ${dayNotes.size} 条备注",
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                        // 多选模式底部：删除所选按钮
-                        if (manageMode && selectedIds.isNotEmpty()) {
-                            Row(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 100.dp)
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .background(MaterialTheme.colorScheme.error)
-                                    .clickable { deleteConfirmBatch = true }
-                                    .padding(horizontal = 28.dp, vertical = 13.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                Text(
-                                    text = "删除所选 (${selectedIds.size})",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.titleSmall
-                                )
+                            // 多选模式底部：删除所选按钮
+                            if (manageMode && selectedIds.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 100.dp)
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .background(MaterialTheme.colorScheme.error)
+                                        .clickable { deleteConfirmBatch = true }
+                                        .padding(horizontal = 28.dp, vertical = 13.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    Text(
+                                        text = "删除所选 (${selectedIds.size})",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                }
                             }
-                        }
+                    }
                 }
             }
         }
