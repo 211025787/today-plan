@@ -3,6 +3,9 @@ package com.focuslist.app.data.repo
 import com.focuslist.app.data.local.dao.FocusRecordDao
 import com.focuslist.app.data.local.entity.FocusRecordEntity
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.DayKeys
+import com.focuslist.app.util.Heatmap
+import com.focuslist.app.util.YearOverview
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -12,6 +15,9 @@ import kotlinx.coroutines.flow.Flow
  * @property pomos 完整番茄个数
  */
 data class DayStat(val minutes: Int, val pomos: Int)
+
+/** 年度热力图统计区间天数（滚动一年，含今天） */
+const val HEATMAP_DAYS = 365
 
 /**
  * 统计页汇总数据。
@@ -23,6 +29,10 @@ data class DayStat(val minutes: Int, val pomos: Int)
  * @property totalMinutes 累计专注分钟数
  * @property streakDays 连续专注天数（今天或昨天有番茄即连续）
  * @property weekDaily 本周 7 天每日分钟数（从周一开始）
+ * @property heatRangeStart 热力图区间首日（本地 0 点）
+ * @property heatRangeEnd 热力图区间末日（本地 0 点，即今天）
+ * @property heatByDay 热力图数据：本地 0 点时间戳 -> 当天专注分钟数（仅含有效日）
+ * @property year 年度总览指标
  */
 data class StatsSummary(
     val todayMinutes: Int = 0,
@@ -31,7 +41,11 @@ data class StatsSummary(
     val monthMinutes: Int = 0,
     val totalMinutes: Int = 0,
     val streakDays: Int = 0,
-    val weekDaily: List<Int> = List(7) { 0 }
+    val weekDaily: List<Int> = List(7) { 0 },
+    val heatRangeStart: Long = 0L,
+    val heatRangeEnd: Long = 0L,
+    val heatByDay: Map<Long, Int> = emptyMap(),
+    val year: YearOverview = YearOverview()
 )
 
 /**
@@ -81,10 +95,17 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
 
         // 逐天聚合本周 7 天数据
         val weekDaily = (0 until 7).map { offset ->
-            val dayStart = weekStart + offset * DateUtils.DAY_MILLIS
-            val dayEnd = dayStart + DateUtils.DAY_MILLIS
+            val dayStart = DateUtils.addDays(weekStart, offset)
+            val dayEnd = DateUtils.addDays(dayStart, 1)
             ((recordDao.sumWorkSeconds(dayStart, dayEnd) ?: 0L) / 60L).toInt()
         }
+
+        // 年度热力图：滚动一年（含今天），一次按天聚合查询，避免逐日循环查库
+        val heatStart = DateUtils.addDays(todayStart, -(HEATMAP_DAYS - 1))
+        val heatEndExclusive = DateUtils.addDays(todayStart, 1)
+        val heatByDay = recordDao.sumByDay(heatStart, heatEndExclusive)
+            .map { DayKeys.parse(it.day) to (it.seconds / 60L).toInt() }
+            .toMap()
 
         return StatsSummary(
             todayMinutes = (todaySec / 60L).toInt(),
@@ -92,34 +113,16 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
             weekMinutes = (weekSec / 60L).toInt(),
             monthMinutes = (monthSec / 60L).toInt(),
             totalMinutes = (totalSec / 60L).toInt(),
-            streakDays = calcStreak(recordDao.getActiveDays()),
-            weekDaily = weekDaily
+            // 连续天数基于全量活跃日，不受热力图一年窗口截断
+            streakDays = Heatmap.currentStreak(
+                recordDao.getActiveDayKeys().map { DayKeys.parse(it) }.toSet(),
+                todayStart
+            ),
+            weekDaily = weekDaily,
+            heatRangeStart = heatStart,
+            heatRangeEnd = todayStart,
+            heatByDay = heatByDay,
+            year = Heatmap.overview(heatByDay, todayStart)
         )
-    }
-
-    /**
-     * 计算连续专注天数：从今天（或昨天，若今天还没专注）向前逐日回溯。
-     *
-     * @param activeDays 全部活跃日的 0 点时间戳（倒序）
-     * @return 连续天数
-     */
-    private fun calcStreak(activeDays: List<Long>): Int {
-        if (activeDays.isEmpty()) {
-            return 0
-        }
-        val todayStart = DateUtils.startOfDay(System.currentTimeMillis())
-        val daySet = activeDays.toSet()
-        // 今天没打卡则从昨天开始算
-        var cursor = if (daySet.contains(todayStart)) {
-            todayStart
-        } else {
-            todayStart - DateUtils.DAY_MILLIS
-        }
-        var streak = 0
-        while (daySet.contains(cursor)) {
-            streak++
-            cursor -= DateUtils.DAY_MILLIS
-        }
-        return streak
     }
 }

@@ -136,3 +136,9 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# 渲染临时产物（宣传片逐帧序列等）
+.tmp_docs/
+
+# Gradle 本地缓存
+.gradle/

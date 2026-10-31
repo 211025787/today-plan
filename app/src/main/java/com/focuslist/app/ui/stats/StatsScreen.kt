@@ -29,6 +29,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
+import com.focuslist.app.data.repo.StatsSummary
 import com.focuslist.app.ui.common.GlassCard
 
 /**
@@ -82,6 +83,48 @@ fun StatsScreen(container: AppContainer) {
                     WeekBarChart(daily = summary.weekDaily)
                 }
             }
+
+            // 年度总览
+            YearOverviewCard(summary = summary)
+
+            // 年度专注热力图
+            YearHeatmapCard(summary = summary)
+        }
+    }
+}
+
+/**
+ * 年度总览卡片：展示过去一年的累计、活跃天数、最佳单日与最长连续。
+ *
+ * @param summary 统计汇总
+ */
+@Composable
+private fun YearOverviewCard(summary: StatsSummary) {
+    val year = summary.year
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("年度总览", style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatCard(
+                    title = "年度专注",
+                    value = "${year.totalMinutes / 60}时${year.totalMinutes % 60}分",
+                    unit = "",
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(title = "活跃天数", value = "${year.activeDays}", unit = "天", modifier = Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatCard(title = "最佳单日", value = "${year.bestDayMinutes}", unit = "分钟", modifier = Modifier.weight(1f))
+                StatCard(title = "最长连续", value = "${year.longestStreak}", unit = "天", modifier = Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "活跃日日均 ${year.avgMinutesPerActiveDay} 分钟",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

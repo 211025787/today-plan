@@ -53,15 +53,33 @@ interface FocusRecordDao {
     suspend fun countCompletedPomos(start: Long, end: Long): Int?
 
     /**
-     * 查询出现过完整番茄的日期列表（当天 0 点时间戳），用于连续天数计算。
+     * 查询出现过完整番茄的日期（**本地时区** `yyyy-MM-dd`），用于连续天数计算。
      *
-     * @return 各活跃日的 0 点时间戳，倒序排列
+     * 注意：不能写成 `(startAt / 86400000) * 86400000`，那是按 UTC 分桶，
+     * 在东八区会得到前一天，与 [com.focuslist.app.util.DateUtils.startOfDay] 对不上。
+     *
+     * @return 各活跃日的本地日期串，倒序排列
      */
     @Query(
-        "SELECT DISTINCT (startAt / 86400000) * 86400000 AS dayStart FROM focus_records " +
-            "WHERE phase = 'WORK' AND completed = 1 ORDER BY dayStart DESC"
+        "SELECT DISTINCT date(startAt / 1000, 'unixepoch', 'localtime') AS day " +
+            "FROM focus_records WHERE phase = 'WORK' AND completed = 1 ORDER BY day DESC"
     )
-    suspend fun getActiveDays(): List<Long>
+    suspend fun getActiveDayKeys(): List<String>
+
+    /**
+     * 按本地自然日聚合专注秒数，用于年度热力图。
+     *
+     * @param start 段起点时间戳（含）
+     * @param end 段终点时间戳（不含）
+     * @return 每天的 [日期串, 秒数]，仅包含有记录的日期，按日期升序
+     */
+    @Query(
+        "SELECT date(startAt / 1000, 'unixepoch', 'localtime') AS day, SUM(durationSec) AS seconds " +
+            "FROM focus_records " +
+            "WHERE startAt >= :start AND startAt < :end AND phase = 'WORK' AND completed = 1 " +
+            "GROUP BY day ORDER BY day ASC"
+    )
+    suspend fun sumByDay(start: Long, end: Long): List<DayTotal>
 
     // ---- 备份 / 恢复：全量读写 ----
 
