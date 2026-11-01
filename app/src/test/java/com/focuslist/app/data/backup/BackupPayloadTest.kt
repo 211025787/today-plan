@@ -84,4 +84,28 @@ class BackupPayloadTest {
         assertEquals("SYSTEM", settings.themeMode)
         assertEquals(-1, settings.capsuleX)
     }
+
+    @Test
+    fun totalCount_includesAchievements() {
+        val payload = BackupPayload(
+            plans = List(2) { BackupPlan(id = it.toLong()) },
+            achievements = List(3) { BackupAchievement(id = "a$it", unlockedAt = 1L) }
+        )
+        assertEquals(5, payload.totalCount())
+    }
+
+    @Test
+    fun describe_mentionsAchievements() {
+        val payload = BackupPayload(
+            achievements = List(2) { BackupAchievement(id = "a$it", unlockedAt = 1L) }
+        )
+        assertTrue(payload.describe().contains("成就 2"))
+        assertTrue(payload.hasAchievements())
+    }
+
+    @Test
+    fun emptyPayload_hasNoAchievements() {
+        assertFalse(BackupPayload().hasAchievements())
+        assertFalse(BackupPayload().describe().contains("成就"))
+    }
 }

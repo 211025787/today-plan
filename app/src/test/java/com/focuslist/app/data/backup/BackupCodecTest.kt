@@ -43,6 +43,10 @@ class BackupCodecTest {
         settings = BackupSettings(focusMinutes = 40, themeColor = "#E94B3C", dailyGoalMinutes = 60, strictMode = true),
         templates = listOf(
             BackupTemplate(id = "学习英语#30#21#📚", title = "学习英语", icon = "📚", dailyMinutes = 30, durationDays = 21, useCount = 4)
+        ),
+        achievements = listOf(
+            BackupAchievement(id = "first_focus", unlockedAt = 1_762_000_500_000L),
+            BackupAchievement(id = "hours_10", unlockedAt = 1_762_900_000_000L)
         )
     )
 
@@ -66,6 +70,7 @@ class BackupCodecTest {
         assertEquals(original.tags, restored.tags)
         assertEquals(original.settings, restored.settings)
         assertEquals(original.templates, restored.templates)
+        assertEquals(original.achievements, restored.achievements)
     }
 
     @Test
@@ -138,7 +143,28 @@ class BackupCodecTest {
         )
         assertEquals(null, payload.settings)
         assertTrue(payload.templates.isEmpty())
+        assertTrue(payload.achievements.isEmpty())
+        assertFalse(payload.hasAchievements())
         assertFalse(payload.hasSettings())
         assertEquals(1, payload.totalCount())
+    }
+
+    @Test
+    fun decode_schema2Backup_hasNoAchievements() {
+        val payload = BackupCodec.decode(
+            "{\"schemaVersion\": 2, \"settings\": {\"focusMinutes\": 30}, \"templates\": []}"
+        )
+        assertEquals(2, payload.schemaVersion)
+        assertTrue(payload.achievements.isEmpty())
+        assertEquals(30, payload.settings?.focusMinutes)
+    }
+
+    @Test
+    fun encodeThenDecode_keepsAchievements() {
+        val restored = BackupCodec.decode(BackupCodec.encode(sample()))
+        assertEquals(2, restored.achievements.size)
+        assertEquals("first_focus", restored.achievements[0].id)
+        assertEquals(1_762_000_500_000L, restored.achievements[0].unlockedAt)
+        assertTrue(BackupCodec.encode(sample()).contains("\"achievements\""))
     }
 }

@@ -189,6 +189,15 @@ private fun OverviewCard(states: List<AchievementState>, freshIds: List<String>)
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            // 只在这种「已经有徽章」的场景提示一次，空态下不多占一行
+            if (recent.isNotEmpty()) {
+                Text(
+                    text = "解锁记录随备份一起保存，换机后解锁日期不丢",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                )
+            }
+
             if (freshIds.isNotEmpty()) {
                 val names = freshIds.mapNotNull { id ->
                     states.firstOrNull { it.def.id == id }?.def?.title

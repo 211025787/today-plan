@@ -1,7 +1,7 @@
 package com.focuslist.app.data.backup
 
 /** 备份文件结构版本；结构变更时递增，导入时据此判断是否兼容 */
-const val BACKUP_SCHEMA_VERSION: Int = 2
+const val BACKUP_SCHEMA_VERSION: Int = 3
 
 /** 任务 */
 data class BackupTask(
@@ -176,6 +176,20 @@ data class BackupTemplate(
 )
 
 /**
+ * 成就解锁记录快照（schema 3 起纳入备份）。
+ *
+ * 只保存「哪枚徽章、什么时候点亮」，解锁条件本身仍由历史专注数据重新结算，
+ * 因此换机恢复后徽章与解锁日期都能原样保留。
+ *
+ * @property id 成就 id（见 `Achievements.ALL`）
+ * @property unlockedAt 解锁时刻（毫秒）
+ */
+data class BackupAchievement(
+    val id: String = "",
+    val unlockedAt: Long = 0
+)
+
+/**
  * 备份文件整体结构：一份 JSON 就是一个 [BackupPayload]。
  *
  * @property schemaVersion 结构版本，导入时校验
@@ -183,6 +197,7 @@ data class BackupTemplate(
  * @property exportedAt 导出时间戳（毫秒）
  * @property settings 偏好设置快照；schema 1 的旧备份没有这一项，导入时跳过
  * @property templates 计划模板快照；schema 1 的旧备份没有这一项，导入时跳过
+ * @property achievements 成就解锁记录快照；schema 2 及更早的备份没有这一项，导入时保留本机记录
  */
 data class BackupPayload(
     val schemaVersion: Int = BACKUP_SCHEMA_VERSION,
@@ -200,16 +215,20 @@ data class BackupPayload(
     val notes: List<BackupNote> = emptyList(),
     val noteAttachments: List<BackupAttachment> = emptyList(),
     val settings: BackupSettings? = null,
-    val templates: List<BackupTemplate> = emptyList()
+    val templates: List<BackupTemplate> = emptyList(),
+    val achievements: List<BackupAchievement> = emptyList()
 ) {
 
     /** 备份中包含的记录总条数（用于导出结果提示）。 */
     fun totalCount(): Int = tasks.size + subTasks.size + focusRecords.size + habits.size +
         habitChecks.size + categories.size + tags.size + plans.size + planLogs.size +
-        notes.size + noteAttachments.size + templates.size
+        notes.size + noteAttachments.size + templates.size + achievements.size
 
     /** 备份中是否带偏好设置快照 */
     fun hasSettings(): Boolean = settings != null
+
+    /** 备份中是否带成就解锁记录 */
+    fun hasAchievements(): Boolean = achievements.isNotEmpty()
 
     /**
      * 生成人类可读的摘要，只列出非空的分类。
@@ -230,6 +249,7 @@ data class BackupPayload(
             if (categories.isNotEmpty()) add("清单 ${categories.size}")
             if (tags.isNotEmpty()) add("标签 ${tags.size}")
             if (templates.isNotEmpty()) add("模板 ${templates.size}")
+            if (achievements.isNotEmpty()) add("成就 ${achievements.size}")
             if (settings != null) add("设置")
         }
         return parts.joinToString(" · ").ifEmpty { "空备份" }

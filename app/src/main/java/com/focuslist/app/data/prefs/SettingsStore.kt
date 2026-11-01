@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.focuslist.app.data.backup.BackupAchievements
 import com.focuslist.app.data.backup.BackupSettings
 import com.focuslist.app.data.backup.toTimerSettings
 import com.focuslist.app.util.Achievements
@@ -475,6 +476,26 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { prefs ->
             val current = Achievements.decode(prefs[Keys.ACHIEVEMENTS] ?: "")
             prefs[Keys.ACHIEVEMENTS] = Achievements.encode(Achievements.merge(current, ids, at))
+        }
+    }
+
+    /**
+     * 把备份里的成就解锁记录写回本机。
+     *
+     * 覆盖式导入用备份记录整体替换；合并式导入只补本机没有的 id，已有解锁日期保持不变。
+     * 备份里没有成就字段（schema 2 及更早）时**不动本机记录**，避免旧备份把徽章清空。
+     *
+     * @param incoming 备份中的解锁记录（`成就 id -> 解锁时刻`）
+     * @param overwrite true 为覆盖式导入
+     */
+    suspend fun applyBackupAchievements(incoming: Map<String, Long>, overwrite: Boolean) {
+        if (incoming.isEmpty()) {
+            return
+        }
+        context.dataStore.edit { prefs ->
+            val local = Achievements.decode(prefs[Keys.ACHIEVEMENTS] ?: "")
+            val merged = BackupAchievements.restore(local, incoming, overwrite)
+            prefs[Keys.ACHIEVEMENTS] = Achievements.encode(merged)
         }
     }
 

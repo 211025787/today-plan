@@ -457,13 +457,13 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ActionRow(
                         title = "成就殿堂",
-                        subtitle = "把长期坚持收集成 12 枚徽章",
+                        subtitle = "12 枚徽章，解锁记录随备份一起保存",
                         onClick = onOpenAchievements
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ActionRow(
                         title = "导出备份",
-                        subtitle = "把数据、偏好设置与计划模板保存成一个 JSON 文件",
+                        subtitle = "把数据、偏好设置、计划模板与成就保存成一个 JSON 文件",
                         enabled = !backupBusy,
                         onClick = { exportLauncher.launch(BackupNames.suggestFileName(System.currentTimeMillis())) }
                     )
@@ -516,8 +516,8 @@ fun SettingsScreen(
                     text = "备份导出于 $exportedText" +
                         (if (payload.appVersion.isNotBlank()) "（v${payload.appVersion}）" else "") +
                         "\n共 ${payload.totalCount()} 条：${payload.describe()}\n\n" +
-                        "覆盖导入：先清空本机数据，结果等同于这份备份，并一并还原偏好设置与模板。\n" +
-                        "合并导入：保留本机数据与设置，仅覆盖 ID 相同的记录，并补充本机没有的模板。",
+                        "覆盖导入：先清空本机数据，结果等同于这份备份，并一并还原偏好设置、计划模板与成就解锁记录。\n" +
+                        "合并导入：保留本机数据与设置，仅覆盖 ID 相同的记录，并补充本机没有的模板与尚未解锁的成就。",
                     style = MaterialTheme.typography.bodySmall
                 )
             },
@@ -527,9 +527,14 @@ fun SettingsScreen(
                     backupBusy = true
                     scope.launch {
                         backupMessage = runCatching {
-                            container.backupManager.restore(payload, overwrite = true)
+                            val result = container.backupManager.restore(payload, overwrite = true)
                             WidgetRefresher.refreshAll(context)
-                            "已覆盖导入 ${payload.totalCount()} 条数据"
+                            "已覆盖导入 ${result.recordCount} 条数据" +
+                                if (result.achievementsTotal > 0) {
+                                    "，徽章 ${result.achievementsTotal} 枚按备份还原"
+                                } else {
+                                    "，本机徽章保留不变"
+                                }
                         }.getOrElse { "导入失败：${it.message ?: "未知错误"}" }
                         backupBusy = false
                     }
@@ -542,9 +547,14 @@ fun SettingsScreen(
                         backupBusy = true
                         scope.launch {
                             backupMessage = runCatching {
-                                container.backupManager.restore(payload, overwrite = false)
+                                val result = container.backupManager.restore(payload, overwrite = false)
                                 WidgetRefresher.refreshAll(context)
-                                "已合并导入 ${payload.totalCount()} 条数据"
+                                "已合并导入 ${result.recordCount} 条数据" +
+                                    if (result.achievementsAdded > 0) {
+                                        "，补充 ${result.achievementsAdded} 枚徽章"
+                                    } else {
+                                        ""
+                                    }
                             }.getOrElse { "导入失败：${it.message ?: "未知错误"}" }
                             backupBusy = false
                         }
