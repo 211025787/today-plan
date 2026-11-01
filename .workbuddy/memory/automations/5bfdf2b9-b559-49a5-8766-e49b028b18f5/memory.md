@@ -106,6 +106,15 @@
 - 测试 270 → 294 全绿；包 1.0.64；commit 70c9320。
 - 坑：`git add -A` 会连带 `.gradle/`、`developgradle.gradle/`、`video/` 导致提交 128 失败 → 只加 `README.md version.properties app/src`。
 
+### 2026-11-01（第 13 次）：计划投入统计（连续达标 + 14 天趋势） → v1.0.65
+
+- `util/PlanInsight.kt`（纯 Kotlin）：单点派生（minutes/achieved/ratio/barRatio/overshoot）+ 画像（streak/bestStreak/total/activeDays/achievedDays/average）+ 文案（headline/todayText/totalText/averageText/rateText）。
+- 三条口径：窗口右端锚 `min(今天, 计划结束日)`（结束的计划仍看最后 14 天）；只统计计划有效期内的日子；连续达标今天没达标才回落昨天，**计划结束后不回落**；最长连续回溯 90 天。
+- 数据：`PlanDao.getLogsOfPlanBetween` + `PlanRepository.logsOfPlan`，弹层只查一次库。
+- UI：`ui/plan/PlanInsightSheet.kt`（今日进度条 + 三数字 + 14 天柱状图 + 点柱看详情）；入口：点计划卡（原先无响应）+ 长按菜单「查看投入统计」。
+- 测试 294 → 326 全绿（PlanInsightTest 32）；包 1.0.65（74→75，二次打包后文件为 76）。
+- 坑：`verticalScroll` 里 `fillMaxHeight` 无有界高度；「几号」单独用 `SimpleDateFormat("d")`；今日秒数要覆盖不要相加；测试先确认窗口边界。
+
 ## 下次可选题
 
 - 成就解锁时发通知（复用 Notifier 渠道）
@@ -115,4 +124,7 @@
 - 周回顾卡点击展开上周逐日对比（哪几天掉队）
 - 备份「导入前体检」：与本机逐类对比，先告诉用户会多 / 少多少条
 - 目标达成提醒：当日达标时发一条通知
+- 计划投入弹层里点某天 → 跳到当日卡片页
+- 计划卡角落显示连续达标小徽标（≥2 天才出现，避免噪音）
+- 在投入弹层里直接调每日目标（±5 分钟），实时预览达标变化
 
