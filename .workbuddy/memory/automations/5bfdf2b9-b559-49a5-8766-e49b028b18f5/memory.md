@@ -131,6 +131,14 @@
 - 只复用首页已有数据，无新表无新查询；首帧用 `shownMonth > 0` 挡掉空态闪烁。
 - 测试 355 → 376 全绿；包 1.0.67（code 80）。
 
+### 2026-11-01（第 16 次）：日卡片周条与跨月导航 → v1.0.68
+
+- 新增 `util/WeekStrip.kt`：周一起点的 7 天、四档完成度、本周小结（分母=已过天数，未来周另说）、翻周。
+- `HomeViewModel.weekLogs` 按周单独查（月历 monthLogs 只覆盖当月网格）；`selectDayAnywhere` 同步月份；新增 `HomeUiState.monthOffset`。
+- UI：`ui/home/WeekStripBar.kt` 插在日卡片顶部，点日期切天、箭头翻周。
+- 顺手修：翻月后 `HorizontalPager` 未跟随 monthOffset（搜索跳转串月）→ 加反向同步副作用。
+- 测试 376 → 398 全绿；包 1.0.68（code 81）。
+
 ## 下次可选题
 
 - 成就解锁时发通知（复用 Notifier 渠道，详情弹层给开关）
