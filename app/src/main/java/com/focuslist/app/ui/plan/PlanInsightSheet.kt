@@ -42,9 +42,12 @@ import com.focuslist.app.data.repo.PlanRepository
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.PaceStatus
 import com.focuslist.app.util.PlanDayPoint
 import com.focuslist.app.util.PlanInsight
 import com.focuslist.app.util.PlanInsights
+import com.focuslist.app.util.PlanPace
+import com.focuslist.app.util.PlanPaces
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -87,23 +90,34 @@ fun PlanInsightSheet(
     var selectedDate by remember(plan.id) { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(plan.id) {
-        // 一次取回最长连续所需的回溯窗口，避免每次翻看都查库
-        val anchor = minOf(today, plan.endDate)
-        val start = DateUtils.addDays(anchor, -(PlanInsights.LOOKBACK_DAYS - 1))
-        logs = repository.logsOfPlan(plan.id, start, today)
+        // 取整个计划跨度：整体节奏要算总投入，14 天窗口只是其中一段
+        logs = repository.logsOfPlan(plan.id, plan.startDate, today)
     }
 
     // 今天用调用方传入的实时秒数覆盖库中值（运行中的计时还没落库）
-    val insight = remember(logs, plan.id, plan.dailyGoalMinutes, plan.startDate, plan.endDate, todaySeconds, today) {
-        val daily = logs.associate { it.date to it.accumulatedSec }.toMutableMap()
+    val daily = remember(logs, plan.id, plan.startDate, plan.endDate, todaySeconds, today) {
+        val map = logs.associate { it.date to it.accumulatedSec }.toMutableMap()
         if (today in plan.startDate..plan.endDate) {
-            daily[today] = todaySeconds.coerceAtLeast(0L)
+            map[today] = todaySeconds.coerceAtLeast(0L)
         }
+        map
+    }
+    val insight = remember(daily, plan.dailyGoalMinutes, plan.startDate, plan.endDate, today) {
         PlanInsights.of(
             planStart = plan.startDate,
             planEnd = plan.endDate,
             goalMinutes = plan.dailyGoalMinutes,
             dailySeconds = daily,
+            today = today
+        )
+    }
+    // 整体节奏：把「时间过了多少」与「目标完成多少」放在一起比
+    val pace = remember(daily, plan.dailyGoalMinutes, plan.startDate, plan.endDate, today) {
+        PlanPaces.of(
+            planStart = plan.startDate,
+            planEnd = plan.endDate,
+            goalMinutes = plan.dailyGoalMinutes,
+            totalSeconds = daily.values.sum(),
             today = today
         )
     }
@@ -118,6 +132,7 @@ fun PlanInsightSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             PlanHeader(plan = plan, color = planColor)
+            PaceBlock(pace = pace, color = planColor)
             insight.today?.let { point -> TodayProgress(point = point, insight = insight, color = planColor) }
             InsightCard(
                 insight = insight,
@@ -168,6 +183,81 @@ private fun PlanHeader(plan: PlanEntity, color: Color) {
                 modifier = Modifier.padding(top = 2.dp)
             )
         }
+    }
+}
+
+/**
+ * 整体进度：一条投入进度条 + 一个「时间进度」刻度 + 一句结论。
+ *
+ * 只画一条填充条（投入），再用一根竖线标出「按时间该到哪」——
+ * 两条并排的条读起来要来回对照，一根刻度线更直接：柱子在线左边就是落后。
+ *
+ * @param pace 整体节奏
+ * @param color 计划主题色
+ */
+@Composable
+private fun PaceBlock(pace: PlanPace, color: Color) {
+    val scheme = MaterialTheme.colorScheme
+    val accent = when (pace.status) {
+        PaceStatus.AHEAD, PaceStatus.ON_TRACK, PaceStatus.FINISHED_DONE -> scheme.primary
+        PaceStatus.SLIGHTLY_BEHIND -> scheme.secondary
+        PaceStatus.BEHIND -> scheme.tertiary
+        else -> scheme.onSurfaceVariant
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("整体进度", style = MaterialTheme.typography.labelMedium)
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = pace.progressText,
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(RoundedCornerShape(50))
+                .background(scheme.surfaceVariant)
+        ) {
+            // 投入进度
+            if (pace.actualFraction > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(pace.actualFraction.coerceAtLeast(0.02f))
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(50))
+                        .background(color)
+                )
+            }
+            // 时间刻度：按时间该到的位置
+            if (pace.timeFraction in 0.02f..0.98f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(pace.timeFraction)
+                        .fillMaxHeight()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .width(2.dp)
+                            .fillMaxHeight()
+                            .background(scheme.onSurface.copy(alpha = 0.55f))
+                    )
+                }
+            }
+        }
+        Text(
+            text = pace.headline,
+            style = MaterialTheme.typography.titleSmall,
+            color = accent
+        )
+        Text(
+            text = pace.detail,
+            style = MaterialTheme.typography.labelSmall,
+            color = scheme.onSurfaceVariant
+        )
     }
 }
 
