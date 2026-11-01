@@ -36,7 +36,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,12 +59,16 @@ import com.focuslist.app.util.AchievementForecasts
 import com.focuslist.app.util.AchievementState
 import com.focuslist.app.util.AchievementStats
 import com.focuslist.app.util.Achievements
+import com.focuslist.app.util.DateUtils
 import com.focuslist.app.util.Goal
+import com.focuslist.app.util.GraduationPlan
 import com.focuslist.app.util.Heatmap
+import com.focuslist.app.util.PlanGraduations
 import com.focuslist.app.util.MonthKey
 import com.focuslist.app.util.MonthReview
 import com.focuslist.app.util.WeekTrend
 import com.focuslist.app.util.WeeklyReview
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 /**
@@ -90,6 +97,15 @@ fun StatsScreen(
     val recentStats by viewModel.recentStats.collectAsState()
     // 计划时间轴用的计划列表：直接订阅仓库，避免为一张只读卡片扩 ViewModel 构造
     val allPlans by container.planRepository.observeAllPlans().collectAsState(initial = emptyList())
+    // 结业卡需要每个计划的累计投入：一次分组查询，随计划列表变化重算
+    val scope = rememberCoroutineScope()
+    var planTotals by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
+    LaunchedEffect(allPlans) {
+        planTotals = container.planRepository.totalSecondsByPlan(
+            start = 0L,
+            end = DateUtils.startOfDay(System.currentTimeMillis())
+        )
+    }
 
     // 每次进入页面刷新一次，保证刚完成的番茄被统计
     LaunchedEffect(Unit) {
@@ -181,6 +197,44 @@ fun StatsScreen(
                 states = achievementStates,
                 recentStats = recentStats,
                 onClick = onOpenAchievements
+            )
+
+            // 结业的计划：到期后给它一个交代（归档 / 再来一版）
+            GraduationCard(
+                plans = allPlans,
+                totals = planTotals,
+                onArchive = { plan ->
+                    scope.launch {
+                        container.planRepository.save(plan.copy(archived = true))
+                    }
+                },
+                onRenew = { plan ->
+                    scope.launch {
+                        // 旧的一版归档，新的从今天重新起算，避免结业列表里一直挂着它
+                        container.planRepository.save(plan.copy(archived = true))
+                        val renewed = PlanGraduations.renewed(
+                            plan = GraduationPlan(
+                                id = plan.id,
+                                title = plan.title,
+                                icon = plan.icon,
+                                colorHex = plan.colorHex,
+                                start = plan.startDate,
+                                end = plan.endDate,
+                                dailyGoalMinutes = plan.dailyGoalMinutes
+                            ),
+                            today = DateUtils.startOfDay(System.currentTimeMillis())
+                        )
+                        container.planRepository.save(
+                            plan.copy(
+                                id = 0L,
+                                startDate = renewed.start,
+                                endDate = renewed.end,
+                                archived = false,
+                                createdAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
             )
         }
     }
