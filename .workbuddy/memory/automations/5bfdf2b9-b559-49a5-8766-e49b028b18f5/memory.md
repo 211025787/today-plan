@@ -197,6 +197,13 @@
 - UI：新建弹窗可设提醒，卡片上 `⏰ 每天 HH:mm` 可改可清；删除习惯先撤闹钟。
 - 测试 540 → 552 全绿；包 1.0.77（code 91）。
 
+### 2026-11-01（第 26 次）：用户反馈三连修 → v1.0.78
+
+1. 一句话建计划：命令前缀（帮我建/创建一个/做个）与「规划/计划」收尾剥离，剥完不为空；「帮我建3个月的健身规划」→「健身」90 天。
+2. 全应用锁 Locale.CHINA（attachBaseContext）+ 日期格式全部 Locale.CHINA，日期选择器不再出现英文。
+3. AddPlanSheet/QuickPlanSheet 用 rememberModalBottomSheetState(skipPartiallyExpanded = true) 直接完全展开（material3 1.2 的 ModalBottomSheet 没有该参数，要经 sheetState）。
+- 测试 552 → 559 全绿；包 1.0.78（code 94）。注意：version.properties 曾被写坏成 1.0.1，改完务必核对 output-metadata.json。
+
 ## 下次可选题
 
 - 成就解锁时发通知（复用 Notifier 渠道，详情弹层给开关）
