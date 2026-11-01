@@ -374,6 +374,22 @@ class HomeViewModel(
     }
 
     /**
+     * 暂停所有正在计时的计划（收工用）。
+     *
+     * 并行计时没有「全部暂停」的入口时，忘记停表会把第二天的时间一起算进去，
+     * 收工小结里给一个一键收尾的动作，避免数据被算虚。
+     */
+    fun pauseAllTimers() {
+        val running = PlanTimerHolder.timers.value.values.filter { it.running }
+        if (running.isEmpty()) {
+            return
+        }
+        running.forEach { PlanTimerHolder.pause(it.planId) }
+        PlanTimerHolder.persist(appContext)
+        PlanTimerService.requestUpdate(appContext)
+    }
+
+    /**
      * 计算某天生效的计划列表。
      *
      * @param state 当前 UI 状态

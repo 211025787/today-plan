@@ -100,12 +100,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.DayWraps
 import com.focuslist.app.util.NowAdvice
 import com.focuslist.app.util.NowKind
 import com.focuslist.app.util.NowPlan
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanTemplates
 import com.focuslist.app.util.WeekStrip
+import com.focuslist.app.util.WrapPlan
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -221,6 +223,8 @@ fun CalendarHomeScreen(
     // 添加计划/备注弹层
     var showAddPlan by remember { mutableStateOf(false) }
     var showQuickPlan by remember { mutableStateOf(false) }
+    // 收工小结弹层
+    var showWrap by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // 多选管理模式（纯 UI 状态）：选中日卡片页点击"管理"进入
@@ -447,6 +451,26 @@ fun CalendarHomeScreen(
 
                 // 选中日后：渐变方形计划卡片
                 state.selectedDay?.let { day ->
+                    // 收工入口只在「今天」出现：有计时在跑，或到了晚上
+                    val wrap = remember(day, state.plans, state.monthLogs, state.timers, nowMinute, todayStart) {
+                        if (day != todayStart) {
+                            null
+                        } else {
+                            DayWraps.of(
+                                plans = viewModel.plansOfDay(state, day).map { plan ->
+                                    WrapPlan(
+                                        id = plan.id,
+                                        title = plan.title,
+                                        icon = plan.icon,
+                                        minutes = (viewModel.daySecondsOf(state, plan.id, day) / 60L).toInt(),
+                                        goalMinutes = plan.dailyGoalMinutes,
+                                        running = state.timers[plan.id]?.running == true
+                                    )
+                                },
+                                nowMinutes = nowMinute
+                            )
+                        }
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
@@ -462,6 +486,33 @@ fun CalendarHomeScreen(
                                 }
                                 viewModel.clearSelection()
                             }
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        // 白天不打扰：只有还有计时在跑、或到了晚上才给「收工」
+                        if (wrap?.suggest == true) {
+                            Text(
+                                text = "收工",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .clickable { showWrap = true }
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    if (showWrap && wrap != null) {
+                        DayWrapSheet(
+                            wrap = wrap,
+                            dateLabel = dayTitleFormat.format(Date(day)),
+                            // 暂停后弹层不关：让用户看到「计时中」消失、达标数更新
+                            onPauseAll = { viewModel.pauseAllTimers() },
+                            onWriteNote = {
+                                showWrap = false
+                                onOpenNote(-1L, todayStart)
+                            },
+                            onDismiss = { showWrap = false }
                         )
                     }
                     // 周条：整周 7 天一眼看全，点一下直接切到那天（跨月自动翻月）
