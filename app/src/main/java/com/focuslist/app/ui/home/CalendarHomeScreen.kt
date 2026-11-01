@@ -1,5 +1,7 @@
 package com.focuslist.app.ui.home
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Insights
@@ -102,6 +105,8 @@ import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
 import com.focuslist.app.util.DayWrapScript
 import com.focuslist.app.util.DayWraps
+import com.focuslist.app.util.Ics
+import com.focuslist.app.util.IcsPlan
 import com.focuslist.app.util.NowAdvice
 import com.focuslist.app.util.NowKind
 import com.focuslist.app.util.NowPlan
@@ -227,6 +232,43 @@ fun CalendarHomeScreen(
     // 收工小结弹层
     var showWrap by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // 通用提示弹窗（存为模板、导出到日历等）
+    var hintDialog by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    // 导出到日历：先记下要导出的计划，再走系统文件选择器
+    var icsPlan by remember { mutableStateOf<PlanEntity?>(null) }
+    val icsOf: (PlanEntity) -> IcsPlan = { plan ->
+        IcsPlan(
+            id = plan.id,
+            title = plan.title,
+            note = plan.note,
+            start = plan.startDate,
+            end = plan.endDate,
+            dailyGoalMinutes = plan.dailyGoalMinutes
+        )
+    }
+    val icsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/calendar")
+    ) { uri ->
+        val plan = icsPlan
+        icsPlan = null
+        if (uri != null && plan != null) {
+            val payload = icsOf(plan)
+            scope.launch {
+                val ok = runCatching {
+                    appContext.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(Ics.forPlan(payload).toByteArray())
+                    } ?: error("无法写入")
+                }.isSuccess
+                hintDialog = "导出到日历" to if (ok) {
+                    "已导出「${Ics.fileNameOf(payload)}」。用系统日历或 Google 日历打开它，" +
+                        "这个计划的每一天都会以整天事件出现。"
+                } else {
+                    "导出失败，请换一个保存位置再试。"
+                }
+            }
+        }
+    }
 
     // 多选管理模式（纯 UI 状态）：选中日卡片页点击"管理"进入
     var manageMode by remember { mutableStateOf(false) }
@@ -244,8 +286,6 @@ fun CalendarHomeScreen(
     var showRangeDelete by remember { mutableStateOf(false) }
     // 计划模板：添加计划与一句话建计划共用，点一下即可复用
     val templates by container.settingsStore.planTemplates.collectAsState(initial = emptyList())
-    // 「已存为模板」提示
-    var templateHint by remember { mutableStateOf<String?>(null) }
     /** 记住一条模板 */
     val rememberTemplate: (PlanTemplate) -> Unit = { template ->
         scope.launch { container.settingsStore.rememberPlanTemplate(template) }
@@ -752,10 +792,11 @@ fun CalendarHomeScreen(
                                 )
                                 menuPlan = null
                                 if (template == null) {
-                                    templateHint = "该计划没有名称，无法存为模板"
+                                    hintDialog = "计划模板" to "该计划没有名称，无法存为模板"
                                 } else {
                                     rememberTemplate(template)
-                                    templateHint = "已把「${template.title}」存为模板，下次添加时点一下就能复用"
+                                    hintDialog = "计划模板" to
+                                        "已把「${template.title}」存为模板，下次添加时点一下就能复用"
                                 }
                             }
                             .padding(vertical = 12.dp),
@@ -764,6 +805,21 @@ fun CalendarHomeScreen(
                     ) {
                         Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text("存为模板（一键复用）", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                icsPlan = plan
+                                menuPlan = null
+                                icsLauncher.launch(Ics.fileNameOf(icsOf(plan)))
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text("导出到日历（.ics）", style = MaterialTheme.typography.bodyLarge)
                     }
                     Row(
                         modifier = Modifier
@@ -870,13 +926,13 @@ fun CalendarHomeScreen(
         )
     }
 
-    // 存为模板后的提示
-    templateHint?.let { hint ->
+    // 通用提示弹窗
+    hintDialog?.let { (title, message) ->
         AlertDialog(
-            onDismissRequest = { templateHint = null },
-            title = { Text("计划模板") },
-            text = { Text(hint, style = MaterialTheme.typography.bodySmall) },
-            confirmButton = { TextButton(onClick = { templateHint = null }) { Text("好") } },
+            onDismissRequest = { hintDialog = null },
+            title = { Text(title) },
+            text = { Text(message, style = MaterialTheme.typography.bodySmall) },
+            confirmButton = { TextButton(onClick = { hintDialog = null }) { Text("好") } },
             dismissButton = null
         )
     }
