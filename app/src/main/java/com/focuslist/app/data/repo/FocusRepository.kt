@@ -2,6 +2,7 @@ package com.focuslist.app.data.repo
 
 import com.focuslist.app.data.local.dao.FocusRecordDao
 import com.focuslist.app.data.local.entity.FocusRecordEntity
+import com.focuslist.app.util.AchievementForecasts
 import com.focuslist.app.util.AchievementStats
 import com.focuslist.app.util.Achievements
 import com.focuslist.app.util.DateUtils
@@ -27,6 +28,14 @@ const val RHYTHM_DAYS = HEATMAP_DAYS
 
 /** 每日目标建议的采样天数（不含今天） */
 const val GOAL_SAMPLE_DAYS = 14
+
+/**
+ * 成就达成预测的采样窗口天数（**不含今天**）。
+ *
+ * 与 [AchievementForecasts.WINDOW_DAYS] 保持一致：预测文案说「近 14 天」，
+ * 数据也必须取同样长度，否则用户算起来对不上。
+ */
+const val ACHIEVEMENT_WINDOW_DAYS = AchievementForecasts.WINDOW_DAYS
 
 /**
  * 统计页汇总数据。
@@ -207,6 +216,33 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
             .toMap()
         return (0 until days).map { offset -> byDay[DateUtils.addDays(start, offset)] ?: 0 }
     }
+
+    /**
+     * 取最近若干天（**不含今天**）的成就指标快照，用于「按最近的节奏还能多久点亮」。
+     *
+     * 三处查询即可拿全 8 个指标：按天聚合一次、按小时聚合一次、番茄数一次；
+     * 活跃天数、最长连续、最佳单日都从按天聚合的结果里推，
+     * 口径与全量统计（[achievementStatsOf]）逐项对应，只是窗口不同。
+     *
+     * 窗口刻意不含今天：今天只过了半天，算进日均会把节奏整体拉低。
+     *
+     * @param days 窗口天数，默认 [ACHIEVEMENT_WINDOW_DAYS]
+     * @return 窗口内的指标快照；参数非法时返回空快照
+     */
+    suspend fun recentAchievementStats(days: Int = ACHIEVEMENT_WINDOW_DAYS): AchievementStats {
+        if (days <= 0) {
+            return AchievementStats()
+        }
+        val todayStart = DateUtils.startOfDay(System.currentTimeMillis())
+        val start = DateUtils.addDays(todayStart, -days)
+        val byDay = recordDao.sumByDay(start, todayStart)
+            .associate { DayKeys.parse(it.day) to (it.seconds / 60L).toInt() }
+        return achievementStatsFrom(
+            byDay = byDay,
+            pomos = recordDao.countCompletedPomos(start, todayStart) ?: 0,
+            byHour = rhythmByHour(start, todayStart)
+        )
+    }
 }
 
 /**
@@ -228,5 +264,34 @@ fun achievementStatsOf(summary: StatsSummary): AchievementStats {
         earlyMinutes = Achievements.earlyMinutes(summary.rhythmByHour),
         nightMinutes = Achievements.nightMinutes(summary.rhythmByHour),
         weekendMinutes = Achievements.weekendMinutes(summary.heatByDay)
+    )
+}
+
+/**
+ * 把窗口内的按天 / 按小时聚合结果换算成成就指标快照。
+ *
+ * 抽成顶层纯函数后，窗口口径（活跃日只认正分钟、周末只算周六周日、
+ * 最长连续按日连续）可以在 JVM 单测里逐条钉住，不必构造 DAO。
+ *
+ * @param byDay 本地 0 点时间戳 -> 当天分钟数
+ * @param pomos 窗口内完成的番茄个数
+ * @param byHour 24 小时分布（索引即小时）
+ * @return 指标快照
+ */
+fun achievementStatsFrom(
+    byDay: Map<Long, Int>,
+    pomos: Int,
+    byHour: List<Int>
+): AchievementStats {
+    val activeDays = byDay.filterValues { it > 0 }.keys
+    return AchievementStats(
+        totalMinutes = byDay.values.sum(),
+        totalPomos = pomos,
+        activeDays = activeDays.size,
+        longestStreak = Heatmap.longestStreak(activeDays),
+        bestDayMinutes = byDay.values.maxOrNull() ?: 0,
+        earlyMinutes = Achievements.earlyMinutes(byHour),
+        nightMinutes = Achievements.nightMinutes(byHour),
+        weekendMinutes = Achievements.weekendMinutes(byDay)
     )
 }

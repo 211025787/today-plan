@@ -6,6 +6,7 @@ import com.focuslist.app.data.prefs.SettingsStore
 import com.focuslist.app.data.repo.FocusRepository
 import com.focuslist.app.data.repo.StatsSummary
 import com.focuslist.app.data.repo.achievementStatsOf
+import com.focuslist.app.util.AchievementStats
 import com.focuslist.app.util.Achievements
 import com.focuslist.app.util.Goal
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,6 +60,10 @@ class StatsViewModel(
     private val mutableFreshIds = MutableStateFlow<List<String>>(emptyList())
     val freshIds: StateFlow<List<String>> = mutableFreshIds.asStateFlow()
 
+    /** 近 14 天（不含今天）的成就指标快照，用于估算「还要多久点亮」；null 表示还没取到 */
+    private val mutableRecentStats = MutableStateFlow<AchievementStats?>(null)
+    val recentStats: StateFlow<AchievementStats?> = mutableRecentStats.asStateFlow()
+
     init {
         refresh()
     }
@@ -73,6 +78,8 @@ class StatsViewModel(
             val recent = focusRepository.recentDailyMinutes()
             mutableRecentMinutes.value = recent
             mutableSuggestedGoal.value = Goal.suggest(recent)
+            // 达成预测用的窗口快照：只多两次聚合查询，跟着统计刷新一起取
+            mutableRecentStats.value = focusRepository.recentAchievementStats()
 
             // 成就结算：已达成就就永久保留（入库），只有新达成的才落库，避免刷新时间被覆盖
             val stored = settingsStore.readAchievements()

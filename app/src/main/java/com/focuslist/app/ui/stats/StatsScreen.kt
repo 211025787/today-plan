@@ -52,7 +52,9 @@ import com.focuslist.app.AppContainer
 import com.focuslist.app.data.repo.StatsSummary
 import com.focuslist.app.data.repo.achievementStatsOf
 import com.focuslist.app.ui.common.GlassCard
+import com.focuslist.app.util.AchievementForecasts
 import com.focuslist.app.util.AchievementState
+import com.focuslist.app.util.AchievementStats
 import com.focuslist.app.util.Achievements
 import com.focuslist.app.util.Goal
 import com.focuslist.app.util.Heatmap
@@ -85,6 +87,7 @@ fun StatsScreen(
     val goal by viewModel.goalMinutes.collectAsState()
     val goalStreak by viewModel.goalStreak.collectAsState()
     val unlocked by viewModel.achievements.collectAsState()
+    val recentStats by viewModel.recentStats.collectAsState()
 
     // 每次进入页面刷新一次，保证刚完成的番茄被统计
     LaunchedEffect(Unit) {
@@ -169,7 +172,11 @@ fun StatsScreen(
             YearHeatmapCard(summary = summary)
 
             // 成就殿堂入口
-            AchievementsEntryCard(states = achievementStates, onClick = onOpenAchievements)
+            AchievementsEntryCard(
+                states = achievementStates,
+                recentStats = recentStats,
+                onClick = onOpenAchievements
+            )
         }
     }
 }
@@ -177,11 +184,19 @@ fun StatsScreen(
 /**
  * 成就殿堂入口卡：展示已解锁徽章与一句激励，点击进入完整徽章墙。
  *
+ * 激励文案带上「按最近节奏还要多久」的估算，让人在统计页就知道下一枚徽章有多近。
+ * 未解锁徽章为空时不重复同一句话，只留一行。
+ *
  * @param states 全部成就状态
+ * @param recentStats 近 14 天指标快照，用于估算点亮时间
  * @param onClick 点击回调
  */
 @Composable
-private fun AchievementsEntryCard(states: List<AchievementState>, onClick: () -> Unit) {
+private fun AchievementsEntryCard(
+    states: List<AchievementState>,
+    recentStats: AchievementStats?,
+    onClick: () -> Unit
+) {
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -201,13 +216,7 @@ private fun AchievementsEntryCard(states: List<AchievementState>, onClick: () ->
                 )
             }
             val unlockedList = states.filter { it.unlocked }
-            if (unlockedList.isEmpty()) {
-                Text(
-                    text = Achievements.motivationText(states),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
+            if (unlockedList.isNotEmpty()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -218,7 +227,14 @@ private fun AchievementsEntryCard(states: List<AchievementState>, onClick: () ->
                 }
             }
             Text(
-                text = Achievements.motivationText(states),
+                text = remember(states, recentStats) {
+                    val next = Achievements.nextUp(states, 1).firstOrNull()
+                    if (next == null) {
+                        Achievements.motivationText(states)
+                    } else {
+                        AchievementForecasts.nextLine(next, AchievementForecasts.of(next, recentStats))
+                    }
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -82,4 +82,60 @@ class AchievementStatsTest {
     fun 空汇总得到全零快照() {
         assertEquals(AchievementStats(), achievementStatsOf(StatsSummary()))
     }
+
+    @Test
+    fun window_aggregatesDaysAndStreak() {
+        // 三天连续 30/60/0/45：0 分钟那天不算活跃日，也不打断连续
+        val byDay = mapOf(
+            day("2026-10-28") to 30,
+            day("2026-10-29") to 60,
+            day("2026-10-30") to 0,
+            day("2026-10-31") to 45
+        )
+        val stats = achievementStatsFrom(byDay = byDay, pomos = 4, byHour = List(Rhythm.HOURS) { 0 })
+
+        assertEquals(135, stats.totalMinutes)
+        assertEquals(4, stats.totalPomos)
+        assertEquals(3, stats.activeDays)
+        assertEquals(60, stats.bestDayMinutes)
+        // 10-30 没有记录，10-29 与 10-31 之间断开 → 最长连续 2 天
+        assertEquals(2, stats.longestStreak)
+    }
+
+    @Test
+    fun window_countsOnlySaturdayAndSunday() {
+        // 2026-10-30 周五、10-31 周六、11-01 周日、11-02 周一
+        val byDay = mapOf(
+            day("2026-10-30") to 25,
+            day("2026-10-31") to 60,
+            day("2026-11-01") to 40,
+            day("2026-11-02") to 90
+        )
+        val stats = achievementStatsFrom(byDay = byDay, pomos = 0, byHour = List(Rhythm.HOURS) { 0 })
+
+        assertEquals(100, stats.weekendMinutes)
+        assertEquals(215, stats.totalMinutes)
+    }
+
+    @Test
+    fun window_splitsEarlyAndNightHours() {
+        val byHour = MutableList(Rhythm.HOURS) { 0 }
+        byHour[4] = 30
+        byHour[5] = 60
+        byHour[20] = 30
+        byHour[21] = 45
+        byHour[23] = 15
+        val stats = achievementStatsFrom(byDay = emptyMap(), pomos = 0, byHour = byHour)
+
+        // 清晨只算 5-9（4 点不算），深夜只算 21-24（20 点不算）
+        assertEquals(60, stats.earlyMinutes)
+        assertEquals(60, stats.nightMinutes)
+    }
+
+    @Test
+    fun window_emptyInputsGiveZeroSnapshot() {
+        val stats = achievementStatsFrom(byDay = emptyMap(), pomos = 0, byHour = List(Rhythm.HOURS) { 0 })
+
+        assertEquals(AchievementStats(), stats)
+    }
 }
