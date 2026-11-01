@@ -146,6 +146,12 @@
 - 统计页直接订阅 planRepository，未改 ViewModel 构造。
 - 测试 398 → 419 全绿；包 1.0.69（code 83）。
 
+### 2026-11-01（第 18 次）：本周挑战（周目标） → v1.0.70
+
+- 新增 `util/WeeklyChallenge.kt`：三条固定类型（专注天数 / 累计时长 / 单日爆发），目标值按周轮换；进度由 `StatsSummary.weekDaily` 推导，周一自然归零，不存进度。
+- UI：`ui/stats/WeeklyChallengeCard.kt` 插在成就页总览下方；完成写进既有成就存储（幂等）。
+- 测试 419 → 443 全绿；包 1.0.70（code 84）。
+
 ## 下次可选题
 
 - 成就解锁时发通知（复用 Notifier 渠道，详情弹层给开关）
