@@ -99,13 +99,20 @@
 - 测试 234 → 270 全绿；包 1.0.63（code 72）；commit 见 git log。
 - 坑：`"$label，"` 中文紧跟插值会被吞进标识符，必须 `${label}`。
 
+### 2026-11-01（第 12 次）：成就入备份（schema 3）+ 导入结果补徽章提示 → v1.0.64
+
+- 新增 `data/backup/BackupAchievements.kt`（纯 Kotlin）：快照排序（解锁时间倒序、同刻 id 升序）、`toRecord`（同 id 取最早时间、未知 id 保留）、`restore`（**空 incoming 一律不动本机**，覆盖式替换 / 合并式只补缺失）、`addedCount`、`countText`。
+- 备份升 schema 3：`BackupPayload.achievements` + `totalCount/describe` 计入成就 + `hasAchievements()`；`BackupManager.restore` 返回 `RestoreResult`；UI 提示「徽章 M 枚按备份还原 / 补充 M 枚徽章」，成就页加「解锁记录随备份保存」。
+- 测试 270 → 294 全绿；包 1.0.64；commit 70c9320。
+- 坑：`git add -A` 会连带 `.gradle/`、`developgradle.gradle/`、`video/` 导致提交 128 失败 → 只加 `README.md version.properties app/src`。
+
 ## 下次可选题
 
-- 成就纳入备份（schema 3，换机保留解锁日期）
 - 成就解锁时发通知（复用 Notifier 渠道）
-- 点击徽章查看达成明细（如最佳单日是哪天、连续 30 天起止）
+- 点击徽章查看达成明细（最佳单日是哪天、连续 30 天起止）
 - 月历页支持左右滑动手势切月
-- 目标达成提醒：当日达标时发一条通知
 - 热力图 / 月历点击某天跳转到当日卡片页
 - 周回顾卡点击展开上周逐日对比（哪几天掉队）
+- 备份「导入前体检」：与本机逐类对比，先告诉用户会多 / 少多少条
+- 目标达成提醒：当日达标时发一条通知
 
