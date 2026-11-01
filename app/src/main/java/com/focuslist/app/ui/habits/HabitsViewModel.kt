@@ -1,10 +1,12 @@
 package com.focuslist.app.ui.habits
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.focuslist.app.data.local.dao.HabitDao
 import com.focuslist.app.data.local.entity.HabitEntity
 import com.focuslist.app.data.repo.HabitRepository
+import com.focuslist.app.notify.HabitReminderScheduler
 import com.focuslist.app.util.DateUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -40,11 +42,16 @@ data class HabitsUiState(val items: List<HabitItemState> = emptyList())
  *
  * @property habitRepository 习惯仓库
  * @property habitDao 习惯 DAO（区间查询直接用）
+ * @property appContext 应用上下文（排提醒闹钟用）
  */
 class HabitsViewModel(
     private val habitRepository: HabitRepository,
-    private val habitDao: HabitDao
+    private val habitDao: HabitDao,
+    appContext: Context
 ) : ViewModel() {
+
+    /** 提醒调度器：保存习惯时同步排闹钟 */
+    private val scheduler = HabitReminderScheduler(appContext)
 
     /** 连续天数缓存 */
     private val streaks = MutableStateFlow<Map<Long, Int>>(emptyMap())
@@ -95,10 +102,32 @@ class HabitsViewModel(
      * @param name 习惯名
      * @param icon 图标（emoji）
      */
-    fun addHabit(name: String, icon: String) {
-        if (name.isNotBlank()) {
-            viewModelScope.launch {
-                habitRepository.save(HabitEntity(name = name.trim(), icon = icon))
+    fun addHabit(name: String, icon: String, reminderAt: Long? = null) {
+        if (name.isBlank()) {
+            return
+        }
+        viewModelScope.launch {
+            val habit = HabitEntity(name = name.trim(), icon = icon, reminderAt = reminderAt)
+            val id = habitRepository.save(habit)
+            if (reminderAt != null && reminderAt > 0L) {
+                scheduler.schedule(id, habit.name, reminderAt)
+            }
+        }
+    }
+
+    /**
+     * 设置或清除某个习惯的每日提醒。
+     *
+     * @param habit 习惯实体
+     * @param reminderAt 提醒时间戳（只取时分）；null 表示关闭提醒
+     */
+    fun setReminder(habit: HabitEntity, reminderAt: Long?) {
+        viewModelScope.launch {
+            habitRepository.save(habit.copy(reminderAt = reminderAt))
+            if (reminderAt != null && reminderAt > 0L) {
+                scheduler.schedule(habit.id, habit.name, reminderAt)
+            } else {
+                scheduler.cancel(habit.id)
             }
         }
     }
@@ -110,6 +139,8 @@ class HabitsViewModel(
      */
     fun deleteHabit(habit: HabitEntity) {
         viewModelScope.launch {
+            // 先撤闹钟再删数据，避免删完后还响一次
+            scheduler.cancel(habit.id)
             habitRepository.delete(habit.id)
         }
     }

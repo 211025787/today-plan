@@ -63,6 +63,11 @@
             android:name=".notify.PlanGoalReceiver"
             android:exported="false" />
 
+        <!-- 习惯每日提醒广播接收器 -->
+        <receiver
+            android:name=".notify.HabitReminderReceiver"
+            android:exported="false" />
+
         <!-- 任务到期提醒广播接收器 -->
         <receiver
             android:name=".notify.ReminderReceiver"

@@ -10,7 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * 开机广播接收器：设备重启后重新注册所有未到期的任务提醒。
+ * 开机广播接收器：设备重启后重新注册任务提醒与习惯每日提醒。
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -26,6 +26,14 @@ class BootReceiver : BroadcastReceiver() {
                     app.container.database.taskDao().getFutureReminders(System.currentTimeMillis()).forEach { task ->
                         task.reminderAt?.let { triggerAt ->
                             scheduler.scheduleTask(task.id, task.title, triggerAt)
+                        }
+                    }
+
+                    // 习惯是每天重复的：重启后按当前时分重排下一天
+                    val habitScheduler = HabitReminderScheduler(context)
+                    app.container.database.habitDao().getActiveSync().forEach { habit ->
+                        habit.reminderAt?.let { reminderAt ->
+                            habitScheduler.schedule(habit.id, habit.name, reminderAt)
                         }
                     }
                 } finally {

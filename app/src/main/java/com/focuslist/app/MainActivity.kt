@@ -89,6 +89,9 @@ enum class Destinations(val route: String, val label: String, val icon: ImageVec
 }
 
 /** 主 Tab 路由集合：仅这些路由显示 Dock 悬浮栏 */
+/** 通知点击直达习惯页 */
+const val ACTION_OPEN_HABITS = "com.focuslist.app.action.OPEN_HABITS"
+
 private val mainRoutes = Destinations.entries.map { it.route }.toSet()
 
 /**
@@ -108,7 +111,9 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
 
         // 小组件点击"番茄钟"快捷入口：跳到专注页
-        val startRoute = if (intent?.action == "com.focuslist.app.action.OPEN_TIMER") {
+        val startRoute = if (intent?.action == ACTION_OPEN_HABITS) {
+            Destinations.HABITS.route
+        } else if (intent?.action == "com.focuslist.app.action.OPEN_TIMER") {
             Destinations.FOCUS.route
         } else {
             Destinations.HOME.route

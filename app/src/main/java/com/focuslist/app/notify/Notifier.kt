@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import com.focuslist.app.ACTION_OPEN_HABITS
 import com.focuslist.app.MainActivity
 import com.focuslist.app.R
 
@@ -92,6 +93,31 @@ class Notifier(private val context: Context) {
             .setContentIntent(intent)
             .build()
         manager.notify(NOTIFY_PLAN_GOAL, notification)
+    }
+
+    /**
+     * 发送习惯打卡提醒。
+     *
+     * 点通知直接进习惯页（MainActivity 按 action 选起始路由）。
+     *
+     * @param habitId 习惯 ID（用作通知 ID，避免互相覆盖）
+     * @param name 习惯名称
+     */
+    fun showHabitReminder(habitId: Long, name: String) {
+        val intent = PendingIntent.getActivity(
+            context, 0,
+            Intent(context, MainActivity::class.java)
+                .setAction(ACTION_OPEN_HABITS),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDER)
+            .setSmallIcon(R.drawable.ic_widget_circle_checked)
+            .setContentTitle("该打卡了")
+            .setContentText(name)
+            .setAutoCancel(true)
+            .setContentIntent(intent)
+            .build()
+        manager.notify((NOTIFY_HABIT_BASE + habitId).toInt(), notification)
     }
 
     /**
@@ -203,5 +229,8 @@ class Notifier(private val context: Context) {
 
         /** 任务提醒通知 ID 基数（叠加任务 ID） */
         const val NOTIFY_TASK_BASE = 2000L
+
+        /** 习惯提醒通知 ID 基数（叠加习惯 ID） */
+        const val NOTIFY_HABIT_BASE = 3000L
     }
 }
