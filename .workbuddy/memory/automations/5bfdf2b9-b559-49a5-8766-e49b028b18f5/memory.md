@@ -191,6 +191,12 @@
 - UI：统计页底部 `GraduationCard`（空则整卡不渲染），「再来一版」= 归档旧 + 插入新，避免重复挂列。
 - 复用 `totalSecondsByPlan` 分组查询；测试 524 → 540 全绿；包 1.0.76（code 90）。
 
+### 2026-11-01（第 25 次）：习惯每日提醒 → v1.0.77
+
+- 补上早就存在但从未接线的 `HabitEntity.reminderAt`：`util/HabitReminder.kt` 时间计算 + `HabitReminderScheduler`（单次精确闹钟）+ `HabitReminderReceiver`（查库后再通知并排明天）+ 开机重排 + 通知直达习惯页。
+- UI：新建弹窗可设提醒，卡片上 `⏰ 每天 HH:mm` 可改可清；删除习惯先撤闹钟。
+- 测试 540 → 552 全绿；包 1.0.77（code 91）。
+
 ## 下次可选题
 
 - 成就解锁时发通知（复用 Notifier 渠道，详情弹层给开关）
