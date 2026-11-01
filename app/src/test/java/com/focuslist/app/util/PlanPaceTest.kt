@@ -238,4 +238,24 @@ class PlanPaceTest {
         assertEquals(0, result.requiredPerDayMinutes)
         assertEquals("整体目标已完成，保持就好", result.detail)
     }
+
+    @Test
+    fun chipText_onlyForBehind() {
+        assertEquals("落后 7 天", PlanPaces.chipText(pace("2026-11-10", 6000)))
+        assertEquals("落后 4 天", PlanPaces.chipText(pace("2026-11-10", 11700)))
+        assertEquals(null, PlanPaces.chipText(pace("2026-11-10", 18000)))
+    }
+
+    @Test
+    fun chipText_isSilentWhenAheadOrNotStarted() {
+        assertEquals(null, PlanPaces.chipText(pace("2026-11-10", 19800)))
+        assertEquals(null, PlanPaces.chipText(pace("2026-10-30", 0)))
+        assertEquals(null, PlanPaces.chipText(pace("2026-11-02", 0)))
+    }
+
+    @Test
+    fun chipText_isSilentAfterPlanEnds() {
+        assertEquals(null, PlanPaces.chipText(pace("2026-12-05", 40000)))
+        assertEquals(null, PlanPaces.chipText(pace("2026-12-05", 54000)))
+    }
 }

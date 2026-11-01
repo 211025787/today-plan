@@ -95,6 +95,22 @@ interface PlanDao {
     fun observeLogsBetween(start: Long, end: Long): Flow<List<PlanLogEntity>>
 
     /**
+     * 按计划汇总区间内的累计投入秒数。
+     *
+     * 日卡片的「落后 N 天」角标只需要每个计划的一条总数，
+     * 用一次分组查询代替「逐计划查一次」，计划再多也只有一次查询。
+     *
+     * @param start 区间起点 0 点（含）
+     * @param end 区间终点 0 点（含）
+     * @return 每个计划的累计秒数；没有记录的计划不出现在结果里
+     */
+    @Query(
+        "SELECT planId AS planId, SUM(accumulatedSec) AS seconds FROM plan_logs " +
+            "WHERE date >= :start AND date <= :end GROUP BY planId"
+    )
+    suspend fun sumSecondsByPlan(start: Long, end: Long): List<PlanTotal>
+
+    /**
      * 查询某计划当天的累计记录。
      *
      * @param planId 计划 ID

@@ -52,6 +52,17 @@ class PlanRepository(private val planDao: PlanDao) {
     }
 
     /**
+     * 按计划汇总区间内的累计投入秒数。
+     *
+     * @param start 区间起点 0 点（含）
+     * @param end 区间终点 0 点（含）
+     * @return `planId -> 累计秒数`；没有记录的计划不在结果里
+     */
+    suspend fun totalSecondsByPlan(start: Long, end: Long): Map<Long, Long> {
+        return planDao.sumSecondsByPlan(start, end).associate { it.planId to it.seconds }
+    }
+
+    /**
      * 新增或更新计划。
      *
      * @param plan 计划实体；id 为 0 时插入

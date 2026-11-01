@@ -111,6 +111,7 @@ import com.focuslist.app.util.NowAdvice
 import com.focuslist.app.util.NowKind
 import com.focuslist.app.util.NowPlan
 import com.focuslist.app.util.PlanTemplate
+import com.focuslist.app.util.PlanPaces
 import com.focuslist.app.util.PlanTemplates
 import com.focuslist.app.util.WeekStrip
 import com.focuslist.app.util.WrapPlan
@@ -175,6 +176,7 @@ fun CalendarHomeScreen(
     }
     val state by viewModel.uiState.collectAsState()
     val weekLogs by viewModel.weekLogs.collectAsState()
+    val planTotals by viewModel.planTotals.collectAsState()
     // 搜索态：顶栏变搜索框，内容区换成结果列表
     var searchActive by remember { mutableStateOf(false) }
     val query by viewModel.queryText.collectAsState()
@@ -605,6 +607,10 @@ fun CalendarHomeScreen(
                     )
 
                     val dayPlans = viewModel.plansOfDay(state, day)
+                    // 累计投入随落库变化：每次进入日卡片或当月记录更新时重算一次
+                    LaunchedEffect(day, state.monthLogs) {
+                        viewModel.refreshPlanTotals()
+                    }
                     // 备注默认最多展示 3 条，更多可展开（随日期重置）
                     var notesExpanded by remember(day) { mutableStateOf(false) }
 
@@ -635,12 +641,29 @@ fun CalendarHomeScreen(
                                 // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
                                 val totalSec = viewModel.daySecondsOf(state, plan.id, day)
                                 val isSelected = plan.id in selectedIds
+                                // 整体节奏角标：只在今天、且确实落后时出现
+                                val paceText = if (day == todayStart) {
+                                    val allSec = (planTotals[plan.id] ?: 0L) +
+                                        (state.timers[plan.id]?.sessionSec ?: 0L)
+                                    PlanPaces.chipText(
+                                        PlanPaces.of(
+                                            planStart = plan.startDate,
+                                            planEnd = plan.endDate,
+                                            goalMinutes = plan.dailyGoalMinutes,
+                                            totalSeconds = allSec,
+                                            today = todayStart
+                                        )
+                                    )
+                                } else {
+                                    null
+                                }
                                 GradientPlanCard(
                                     plan = plan,
                                     todaySec = totalSec,
                                     running = state.timers[plan.id]?.running == true,
                                     manageMode = manageMode,
                                     selected = isSelected,
+                                    paceText = paceText,
                                     onToggleTimer = { viewModel.toggleTimer(plan.id) },
                                     onClick = {
                                         if (manageMode) {
@@ -1125,6 +1148,7 @@ private fun GradientPlanCard(
     running: Boolean,
     manageMode: Boolean,
     selected: Boolean,
+    paceText: String?,
     onToggleTimer: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit
@@ -1195,6 +1219,23 @@ private fun GradientPlanCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            // 落后角标：平时不出现，出现就说明这个计划欠账了
+            if (paceText != null) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.22f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = paceText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White
+                    )
+                }
+            }
             Spacer(modifier = Modifier.weight(1f))
             // 完成率大数字
             Text(

@@ -213,6 +213,22 @@ object PlanPaces {
     }
 
     /**
+     * 日卡片角标文案：**只有落后才给**，其余情况返回 null。
+     *
+     * 卡片本来就小，按节奏推进是常态，不需要每张卡都挂一句话；
+     * 角标一旦出现就说明「这个计划欠账了」，反而更有信息量。
+     *
+     * @param pace 节奏快照
+     * @return 角标文案，如「落后 2 天」；不需要提示时为 null
+     */
+    fun chipText(pace: PlanPace): String? {
+        return when (pace.status) {
+            PaceStatus.BEHIND, PaceStatus.SLIGHTLY_BEHIND -> "落后 ${pace.behindDays} 天"
+            else -> null
+        }
+    }
+
+    /**
      * 两个 0 点时间戳之间的天数差，恒非负。
      *
      * @param from 起始 0 点

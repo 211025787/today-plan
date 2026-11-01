@@ -373,6 +373,23 @@ class HomeViewModel(
         PlanTimerHolder.persist(appContext)
     }
 
+    /** 每个计划从开始到今天的累计投入秒数（不含未落库的运行段） */
+    private val mutablePlanTotals = MutableStateFlow<Map<Long, Long>>(emptyMap())
+    val planTotals: StateFlow<Map<Long, Long>> = mutablePlanTotals.asStateFlow()
+
+    /**
+     * 重新汇总各计划的累计投入，用于日卡片上的「落后 N 天」角标。
+     *
+     * 一次分组查询即可，计划再多也只有一次读库；
+     * 今天的运行中秒数由界面用 [PlanTimerHolder] 的实时会话补上，这里只负责已落库部分。
+     */
+    fun refreshPlanTotals() {
+        viewModelScope.launch {
+            val today = DateUtils.startOfDay(System.currentTimeMillis())
+            mutablePlanTotals.value = planRepository.totalSecondsByPlan(0L, today)
+        }
+    }
+
     /**
      * 暂停所有正在计时的计划（收工用）。
      *
