@@ -19,6 +19,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,7 +41,9 @@ private const val MAX_ROWS = 5
  *
  * @param wrap 今日小结
  * @param dateLabel 日期文案，如「11 月 1 日」
+ * @param noteSaved 今天是否已经存过收工备注
  * @param onPauseAll 暂停全部计时回调
+ * @param onSaveNote 把小结存成今日备注回调
  * @param onWriteNote 去写今日备注回调
  * @param onDismiss 关闭回调
  */
@@ -46,7 +52,9 @@ private const val MAX_ROWS = 5
 fun DayWrapSheet(
     wrap: DayWrap,
     dateLabel: String,
+    noteSaved: Boolean,
     onPauseAll: () -> Unit,
+    onSaveNote: () -> Unit,
     onWriteNote: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -123,18 +131,33 @@ fun DayWrapSheet(
                 color = scheme.onSurfaceVariant
             )
 
+            // 本地先置位，避免连点两次写进两条一样的备注
+            var justSaved by remember { mutableStateOf(false) }
+            val saved = noteSaved || justSaved
+            if (wrap.runningCount > 0) {
+                SheetAction(
+                    text = "暂停全部 ${wrap.runningCount} 个计时",
+                    filled = true,
+                    onClick = onPauseAll,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (wrap.runningCount > 0) {
-                    SheetAction(
-                        text = "暂停全部 ${wrap.runningCount} 个计时",
-                        filled = true,
-                        onClick = onPauseAll
-                    )
-                }
+                SheetAction(
+                    text = if (saved) "已存进备注 ✓" else "存进备注",
+                    filled = false,
+                    enabled = !saved,
+                    onClick = {
+                        justSaved = true
+                        onSaveNote()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
                 SheetAction(
                     text = "写一句今天",
                     filled = false,
-                    onClick = onWriteNote
+                    onClick = onWriteNote,
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -149,20 +172,32 @@ fun DayWrapSheet(
  * @param onClick 点击回调
  */
 @Composable
-private fun SheetAction(text: String, filled: Boolean, onClick: () -> Unit) {
+private fun SheetAction(
+    text: String,
+    filled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
     val scheme = MaterialTheme.colorScheme
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(50))
             .background(if (filled) scheme.primary else scheme.surfaceVariant)
-            .clickable(onClick = onClick)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium,
-            color = if (filled) scheme.onPrimary else scheme.onSurface,
+            color = if (!enabled) {
+                scheme.onSurfaceVariant
+            } else if (filled) {
+                scheme.onPrimary
+            } else {
+                scheme.onSurface
+            },
             fontWeight = FontWeight.Medium
         )
     }

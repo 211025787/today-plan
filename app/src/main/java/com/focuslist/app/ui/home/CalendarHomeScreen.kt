@@ -100,6 +100,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.DayWrapScript
 import com.focuslist.app.util.DayWraps
 import com.focuslist.app.util.NowAdvice
 import com.focuslist.app.util.NowKind
@@ -502,12 +503,26 @@ fun CalendarHomeScreen(
                         }
                     }
 
+                    // 当日备注：按关联日期查询（收工小结要判断今天是否已存过）
+                    val dayNotes by container.noteRepository.observeByDate(day).collectAsState(initial = emptyList())
+                    val wrapNote = dayNotes.firstOrNull { it.title == DayWrapScript.NOTE_TITLE }
+
                     if (showWrap && wrap != null) {
                         DayWrapSheet(
                             wrap = wrap,
                             dateLabel = dayTitleFormat.format(Date(day)),
+                            noteSaved = wrapNote != null,
                             // 暂停后弹层不关：让用户看到「计时中」消失、达标数更新
                             onPauseAll = { viewModel.pauseAllTimers() },
+                            onSaveNote = {
+                                scope.launch {
+                                    container.noteRepository.add(
+                                        title = DayWrapScript.NOTE_TITLE,
+                                        content = DayWrapScript.content(wrap, dayTitleFormat.format(Date(day))),
+                                        date = day
+                                    )
+                                }
+                            },
                             onWriteNote = {
                                 showWrap = false
                                 onOpenNote(-1L, todayStart)
@@ -550,8 +565,6 @@ fun CalendarHomeScreen(
                     )
 
                     val dayPlans = viewModel.plansOfDay(state, day)
-                    // 当日备注：按关联日期查询
-                    val dayNotes by container.noteRepository.observeByDate(day).collectAsState(initial = emptyList())
                     // 备注默认最多展示 3 条，更多可展开（随日期重置）
                     var notesExpanded by remember(day) { mutableStateOf(false) }
 
