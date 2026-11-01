@@ -115,10 +115,20 @@
 - 测试 294 → 326 全绿（PlanInsightTest 32）；包 1.0.65（74→75，二次打包后文件为 76）。
 - 坑：`verticalScroll` 里 `fillMaxHeight` 无有界高度；「几号」单独用 `SimpleDateFormat("d")`；今日秒数要覆盖不要相加；测试先确认窗口边界。
 
+### 2026-11-01（第 14 次）：成就详情与达成预测 → v1.0.66
+
+- 新增 `util/AchievementForecast.kt`：7 种预测类型（已解锁 / 待结算 / 按节奏 / 停滞 / 峰值 / 连续 / 无数据）；累积型按**近 14 天（不含今天）日均增量**外推，峰值型与连续型只给实话不给天数；`nextLine` 供总览与统计页复用。
+- 数据：`FocusRepository.recentAchievementStats(days)`（3 次聚合查询）+ 纯函数 `achievementStatsFrom(byDay, pomos, byHour)`；`StatsViewModel.recentStats`。
+- UI：`ui/stats/AchievementDetailSheet.kt`（点徽章看条件 / 进度 / 预测 / 同类徽章）；徽章卡整卡可点；总览与统计页激励文案带上「约 N 天」。
+- 顺手修：统计页成就入口卡空态重复渲染同一句文案。
+- 测试 326 → 355 全绿；包 1.0.66（code 78）；commit ead0c2f。
+- 坑：整数外推不能先算日均（浮点误差 +1 天）；`OverviewCard` 参数与局部变量同名会被遮蔽。
+
 ## 下次可选题
 
-- 成就解锁时发通知（复用 Notifier 渠道）
-- 点击徽章查看达成明细（最佳单日是哪天、连续 30 天起止）
+- 成就解锁时发通知（复用 Notifier 渠道，详情弹层给开关）
+- 成就卡导出成图片分享
+- 成就页按「已点亮 / 进行中」筛选
 - 月历页支持左右滑动手势切月
 - 热力图 / 月历点击某天跳转到当日卡片页
 - 周回顾卡点击展开上周逐日对比（哪几天掉队）

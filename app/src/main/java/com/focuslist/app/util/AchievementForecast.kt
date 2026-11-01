@@ -178,7 +178,7 @@ object AchievementForecasts {
      */
     fun metricHint(metric: AchievementMetric): String {
         return when (metric) {
-            AchievementMetric.TOTAL_MINUTES -> "累计完整番茄与秒表的专注时长"
+            AchievementMetric.TOTAL_MINUTES -> "累计完成番茄的专注时长"
             AchievementMetric.TOTAL_POMOS -> "每完成一个番茄记 1 个"
             AchievementMetric.ACTIVE_DAYS -> "当天有专注记录就算一天"
             AchievementMetric.LONGEST_STREAK -> "连续的自然日，中断一天重新计数"
