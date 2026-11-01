@@ -34,6 +34,21 @@ object DateUtils {
     }
 
     /**
+     * 计算指定时间戳是从当天 0 点起的第几分钟。
+     *
+     * 供「现在」建议判断早晚（如 22:30 之后建议收工）使用，
+     * 只取时与分，秒与毫秒直接丢弃。
+     *
+     * @param timeMillis 任意时间戳（毫秒）
+     * @return 0..1439 的分钟数
+     */
+    fun minuteOfDay(timeMillis: Long): Int {
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = timeMillis
+        return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+    }
+
+    /**
      * 计算本周周一 0 点时间戳。
      *
      * @param timeMillis 任意时间戳（毫秒）

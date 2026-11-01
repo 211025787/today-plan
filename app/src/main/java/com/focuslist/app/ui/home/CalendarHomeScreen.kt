@@ -96,9 +96,13 @@ import com.focuslist.app.ui.note.DayNotePreviewCard
 import com.focuslist.app.ui.plan.AddPlanSheet
 import com.focuslist.app.ui.plan.PlanInsightSheet
 import com.focuslist.app.ui.plan.QuickPlanSheet
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.NowAdvice
+import com.focuslist.app.util.NowKind
+import com.focuslist.app.util.NowPlan
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanTemplates
 import java.text.SimpleDateFormat
@@ -167,6 +171,31 @@ fun CalendarHomeScreen(
     val results by viewModel.searchResults.collectAsState()
     // 是否有计划正在计时：用于防烧屏（页面持续微动 + 隐藏 Dock）
     val anyPlanRunning = state.timers.values.any { it.running }
+
+    // 「现在」建议：每分钟刷新一次时钟，让「夜深了」这类建议能自然切换
+    var nowMinute by remember { mutableStateOf(DateUtils.minuteOfDay(System.currentTimeMillis())) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            nowMinute = DateUtils.minuteOfDay(System.currentTimeMillis())
+        }
+    }
+    val todayStart = remember { DateUtils.startOfDay(System.currentTimeMillis()) }
+    val nowTip = remember(state.plans, state.monthLogs, state.timers, nowMinute) {
+        NowAdvice.of(
+            plans = viewModel.plansOfDay(state, todayStart).map { plan ->
+                NowPlan(
+                    id = plan.id,
+                    title = plan.title,
+                    icon = plan.icon,
+                    todayMinutes = (viewModel.daySecondsOf(state, plan.id, todayStart) / 60L).toInt(),
+                    goalMinutes = plan.dailyGoalMinutes,
+                    running = state.timers[plan.id]?.running == true
+                )
+            },
+            nowMinutes = nowMinute
+        )
+    }
 
     // 同步「当日卡片页」展开状态：主界面据此判断是否隐藏 Dock（月视图不隐藏）
     LaunchedEffect(state.selectedDay) {
@@ -356,6 +385,25 @@ fun CalendarHomeScreen(
                             // 计划计时中缓慢漂移，防止长期停留烧屏
                             .antiBurnInDrift(anyPlanRunning)
                     ) {
+                        // 「现在」建议条：一句话提示此刻最值得做的事，点一下就能开始。
+                        // shownMonth 为 0 表示首帧还没取到数据，此时先不渲染，避免闪一下「今天还没有计划」
+                        if (state.shownMonth > 0L) {
+                            NowStrip(
+                                tip = nowTip,
+                                onClick = {
+                                    when {
+                                        nowTip.kind == NowKind.NO_PLAN -> showQuickPlan = true
+                                        nowTip.planId != null && nowTip.actionText.isNotEmpty() ->
+                                            nowTip.planId?.let { viewModel.toggleTimer(it) }
+                                        else -> viewModel.selectDay(todayStart)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 8.dp)
+                            )
+                        }
+
                         // 星期表头（固定不动，月份网格在其下方滑动）
                         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                             weekHeaders.forEach { label ->
