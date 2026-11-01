@@ -185,6 +185,12 @@
 - UI：渐变卡标题下加半透明白胶囊，只有 BEHIND/SLIGHTLY_BEHIND 才出现（`PlanPaces.chipText`），仅今天显示。
 - 测试 521 → 524 全绿；包 1.0.75（code 89）。
 
+### 2026-11-01（第 24 次）：结业的计划（成绩单 + 再来一版） → v1.0.76
+
+- 新增 `util/PlanGraduation.kt`：最近 30 天结束筛选、成绩单（完成度 + 评语五档）、`renewed` 重建规则。
+- UI：统计页底部 `GraduationCard`（空则整卡不渲染），「再来一版」= 归档旧 + 插入新，避免重复挂列。
+- 复用 `totalSecondsByPlan` 分组查询；测试 524 → 540 全绿；包 1.0.76（code 90）。
+
 ## 下次可选题
 
 - 成就解锁时发通知（复用 Notifier 渠道，详情弹层给开关）
