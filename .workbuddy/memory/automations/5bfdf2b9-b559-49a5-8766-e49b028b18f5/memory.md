@@ -204,6 +204,12 @@
 3. AddPlanSheet/QuickPlanSheet 用 rememberModalBottomSheetState(skipPartiallyExpanded = true) 直接完全展开（material3 1.2 的 ModalBottomSheet 没有该参数，要经 sheetState）。
 - 测试 552 → 559 全绿；包 1.0.78（code 94）。注意：version.properties 曾被写坏成 1.0.1，改完务必核对 output-metadata.json。
 
+### 2026-11-01（第 27 次）：日历格子文字对比度自适应 → v1.0.79
+
+- 新增 `util/TextContrast.kt`：合成底色 + 按亮度 0.5 阈值选黑/白字 + 按填充覆盖区域切换。
+- `DayCellHome`：标题（≥0.5）与完成率数字（≥0.7）被填充盖住后自动换浅色字；浅色计划仍保持深字。
+- 测试 559 → 568 全绿；包 1.0.79（code 96）。
+
 ## 下次可选题
 
 - 成就解锁时发通知（复用 Notifier 渠道，详情弹层给开关）
