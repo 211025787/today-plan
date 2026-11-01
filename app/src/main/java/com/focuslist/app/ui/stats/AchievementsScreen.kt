@@ -32,6 +32,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,7 +52,10 @@ import com.focuslist.app.util.AchievementState
 import com.focuslist.app.util.AchievementStats
 import com.focuslist.app.util.AchievementTier
 import com.focuslist.app.util.Achievements
+import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.WeeklyChallenges
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** 「新解锁」提示横幅的展示时长 */
 private const val FRESH_BANNER_MILLIS = 6000L
@@ -95,6 +99,14 @@ fun AchievementsScreen(container: AppContainer, onBack: () -> Unit = {}) {
         Achievements.snapshot(achievementStatsOf(summary), unlocked)
     }
 
+    // 本周挑战：进度完全由本周 7 天数据推导，周一自然归零
+    val scope = rememberCoroutineScope()
+    val today = remember { DateUtils.startOfDay(System.currentTimeMillis()) }
+    val weekStart = remember(today) { WeeklyChallenges.weekStart(today) }
+    val challenges = remember(summary.weekDaily, weekStart) {
+        WeeklyChallenges.progress(weekStart, summary.weekDaily)
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -123,6 +135,13 @@ fun AchievementsScreen(container: AppContainer, onBack: () -> Unit = {}) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OverviewCard(states = states, freshIds = freshIds, recentStats = recent)
+
+            WeeklyChallengeCard(
+                progress = challenges,
+                daysLeft = WeeklyChallenges.daysLeft(today, weekStart),
+                summary = WeeklyChallenges.summary(challenges),
+                onCompleted = { ids -> scope.launch { container.settingsStore.unlockAchievements(ids) } }
+            )
 
             // 两列徽章墙：不引入 Lazy 网格，12 项规模下普通行列最省心
             states.chunked(2).forEach { pair ->
