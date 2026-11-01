@@ -152,6 +152,18 @@ class PlanRepository(private val planDao: PlanDao) {
     }
 
     /**
+     * 查询计划在日期区间内的逐日累计记录（计划详情 / 连续达标用）。
+     *
+     * @param planId 计划 ID
+     * @param start 区间起点 0 点（含）
+     * @param end 区间终点 0 点（含）
+     * @return 按日期升序的记录
+     */
+    suspend fun logsOfPlan(planId: Long, start: Long, end: Long): List<PlanLogEntity> {
+        return planDao.getLogsOfPlanBetween(planId, start, end)
+    }
+
+    /**
      * 查询计划当天已落库的累计秒数（不含未落库的运行段）。
      *
      * @param planId 计划 ID

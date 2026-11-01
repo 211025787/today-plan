@@ -105,6 +105,17 @@ interface PlanDao {
     suspend fun getLog(planId: Long, date: Long): PlanLogEntity?
 
     /**
+     * 查询某计划在日期区间内的逐日累计记录（计划详情用，一次取回整段窗口）。
+     *
+     * @param planId 计划 ID
+     * @param start 区间起点 0 点（含）
+     * @param end 区间终点 0 点（含）
+     * @return 按日期升序的记录列表
+     */
+    @Query("SELECT * FROM plan_logs WHERE planId = :planId AND date >= :start AND date <= :end ORDER BY date ASC")
+    suspend fun getLogsOfPlanBetween(planId: Long, start: Long, end: Long): List<PlanLogEntity>
+
+    /**
      * 按 ID 查询计划实体。
      *
      * @param id 计划 ID

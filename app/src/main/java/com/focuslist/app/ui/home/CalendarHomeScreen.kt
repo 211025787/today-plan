@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -93,6 +94,7 @@ import com.focuslist.app.ui.common.FabMenuItem
 import com.focuslist.app.ui.common.antiBurnInDrift
 import com.focuslist.app.ui.note.DayNotePreviewCard
 import com.focuslist.app.ui.plan.AddPlanSheet
+import com.focuslist.app.ui.plan.PlanInsightSheet
 import com.focuslist.app.ui.plan.QuickPlanSheet
 import kotlinx.coroutines.launch
 import com.focuslist.app.ui.theme.parseThemeColor
@@ -193,8 +195,10 @@ fun CalendarHomeScreen(
     // 多选管理模式（纯 UI 状态）：选中日卡片页点击"管理"进入
     var manageMode by remember { mutableStateOf(false) }
     val selectedIds by viewModel.selectMode.collectAsState()
-    // 长按单卡片弹出的操作菜单：编辑时长 / 删除
+    // 长按单卡片弹出的操作菜单：查看统计 / 编辑时长 / 删除
     var menuPlan by remember { mutableStateOf<PlanEntity?>(null) }
+    // 计划投入统计弹层：点卡片打开
+    var insightPlan by remember { mutableStateOf<PlanEntity?>(null) }
     // 编辑今日时长对话框的目标计划
     var editPlan by remember { mutableStateOf<PlanEntity?>(null) }
     // 删除确认对话框：单删时为该计划，批量删时为 null（用 selectedIds 判断）
@@ -445,6 +449,8 @@ fun CalendarHomeScreen(
                                     onClick = {
                                         if (manageMode) {
                                             viewModel.toggleSelectPlan(plan.id)
+                                        } else {
+                                            insightPlan = plan
                                         }
                                     },
                                     onLongClick = {
@@ -552,6 +558,20 @@ fun CalendarHomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
+                                insightPlan = plan
+                                menuPlan = null
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.Insights, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text("查看投入统计", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
                                 editPlan = plan
                                 menuPlan = null
                             }
@@ -607,6 +627,20 @@ fun CalendarHomeScreen(
             },
             confirmButton = {},
             dismissButton = { TextButton(onClick = { menuPlan = null }) { Text("取消") } }
+        )
+    }
+
+    // 计划投入统计弹层：点卡片或长按菜单打开
+    insightPlan?.let { plan ->
+        PlanInsightSheet(
+            plan = plan,
+            todaySeconds = viewModel.daySecondsOf(
+                state = state,
+                planId = plan.id,
+                dayStart = DateUtils.startOfDay(System.currentTimeMillis())
+            ),
+            repository = container.planRepository,
+            onDismiss = { insightPlan = null }
         )
     }
 
