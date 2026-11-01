@@ -42,6 +42,7 @@ const val GOAL_SAMPLE_DAYS = 14
  * @property bestDayMinutes 历史最佳单日的专注分钟数
  * @property streakDays 连续专注天数（今天或昨天有番茄即连续）
  * @property weekDaily 本周 7 天每日分钟数（从周一开始）
+ * @property lastWeekDaily 上周 7 天每日分钟数（从周一开始），用于周回顾同期对比
  * @property heatRangeStart 热力图区间首日（本地 0 点）
  * @property heatRangeEnd 热力图区间末日（本地 0 点，即今天）
  * @property heatByDay 热力图数据：本地 0 点时间戳 -> 当天专注分钟数（仅含有效日）
@@ -60,6 +61,7 @@ data class StatsSummary(
     val bestDayMinutes: Int = 0,
     val streakDays: Int = 0,
     val weekDaily: List<Int> = List(7) { 0 },
+    val lastWeekDaily: List<Int> = List(7) { 0 },
     val heatRangeStart: Long = 0L,
     val heatRangeEnd: Long = 0L,
     val heatByDay: Map<Long, Int> = emptyMap(),
@@ -115,11 +117,16 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
         val allActiveDays = recordDao.getActiveDayKeys().map { DayKeys.parse(it) }.toSet()
         val totalPomos = recordDao.countCompletedPomos(0L, tomorrowStart) ?: 0
 
-        // 逐天聚合本周 7 天数据
+        // 逐天聚合本周与上周共 14 天：一次分组查询代替 14 次 sumWorkSeconds
+        val weekRangeStart = DateUtils.addDays(weekStart, -7)
+        val weekByDay = recordDao.sumByDay(weekRangeStart, tomorrowStart)
+            .map { DayKeys.parse(it.day) to (it.seconds / 60L).toInt() }
+            .toMap()
+        val lastWeekDaily = (0 until 7).map { offset ->
+            weekByDay[DateUtils.addDays(weekRangeStart, offset)] ?: 0
+        }
         val weekDaily = (0 until 7).map { offset ->
-            val dayStart = DateUtils.addDays(weekStart, offset)
-            val dayEnd = DateUtils.addDays(dayStart, 1)
-            ((recordDao.sumWorkSeconds(dayStart, dayEnd) ?: 0L) / 60L).toInt()
+            weekByDay[DateUtils.addDays(weekStart, offset)] ?: 0
         }
 
         // 年度热力图：滚动一年（含今天），一次按天聚合查询，避免逐日循环查库
@@ -142,6 +149,7 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
             // 连续天数基于全量活跃日，不受热力图一年窗口截断
             streakDays = Heatmap.currentStreak(allActiveDays, todayStart),
             weekDaily = weekDaily,
+            lastWeekDaily = lastWeekDaily,
             heatRangeStart = heatStart,
             heatRangeEnd = todayStart,
             heatByDay = heatByDay,

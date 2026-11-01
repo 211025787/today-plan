@@ -3,6 +3,7 @@ package com.focuslist.app.ui.stats
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -36,11 +39,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
@@ -50,6 +55,9 @@ import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.util.AchievementState
 import com.focuslist.app.util.Achievements
 import com.focuslist.app.util.Goal
+import com.focuslist.app.util.Heatmap
+import com.focuslist.app.util.WeekTrend
+import com.focuslist.app.util.WeeklyReview
 
 /**
  * 统计页：今日数据、周/月/累计汇总、连续天数与本周柱状图。
@@ -139,6 +147,9 @@ fun StatsScreen(
                     WeekBarChart(daily = summary.weekDaily, goal = goal)
                 }
             }
+
+            // 本周回顾：与上周同期对比 + 按当前节奏推算
+            WeekReviewCard(summary = summary, goal = goal)
 
             // 专注节律（一天里什么时候最专注）
             RhythmCard(summary = summary)
@@ -395,5 +406,148 @@ private fun WeekBarChart(daily: List<Int>, goal: Int) {
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
+    }
+}
+
+/**
+ * 本周回顾卡片：本周同期时长、与上周同期的对比条、达标 / 最佳 / 日均指标与整周推算。
+ *
+ * "同期"只统计已经过去的天数，避免周一早上拿 1 天去比上周整周。
+ *
+ * @param summary 统计汇总
+ * @param goal 每日目标分钟数
+ */
+@Composable
+private fun WeekReviewCard(summary: StatsSummary, goal: Int) {
+    // 今天是本周第几天（周一 = 0）：复用热力图区间末日，避免再算一次日期
+    val todayIndex = remember(summary.heatRangeEnd) { Heatmap.rowOf(summary.heatRangeEnd) }
+    val review = remember(summary.weekDaily, summary.lastWeekDaily, todayIndex, goal) {
+        WeeklyReview.of(summary.weekDaily, summary.lastWeekDaily, todayIndex, goal)
+    }
+    val maxMinutes = maxOf(review.thisMinutes, review.lastMinutes, 1)
+
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("本周回顾", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.weight(1f))
+                TrendBadge(text = WeeklyReview.badgeText(review), trend = review.trend)
+            }
+            if (review.isEmpty) {
+                Text(
+                    text = "本周还没有专注记录，完成第一个番茄后这里会出现与上周同期的对比",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "${review.thisMinutes}",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = " 分钟",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 3.dp)
+                    )
+                }
+                Text(
+                    text = "${WeeklyReview.spanText(review)} · ${WeeklyReview.deltaText(review)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                CompareBar(label = "上周同期", minutes = review.lastMinutes, max = maxMinutes, dim = true)
+                CompareBar(label = "本周", minutes = review.thisMinutes, max = maxMinutes, dim = false)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = WeeklyReview.metricText(review),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = WeeklyReview.projectionText(review),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 趋势徽标：上涨用主题色，下降与持平均用次要文字色，避免把「少专注」渲染成告警。
+ *
+ * @param text 徽标文案
+ * @param trend 趋势方向
+ */
+@Composable
+private fun TrendBadge(text: String, trend: WeekTrend) {
+    val color = if (trend == WeekTrend.UP) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 10.dp, vertical = 3.dp)
+    ) {
+        Text(text = text, style = MaterialTheme.typography.labelMedium, color = color)
+    }
+}
+
+/**
+ * 单行对比条：左侧标签、中间按最大值归一化的条形、右侧分钟数。
+ *
+ * @param label 左侧标签
+ * @param minutes 该行分钟数
+ * @param max 两行共用的最大值，保证条形长度可比
+ * @param dim 是否为对照行（上周同期）
+ */
+@Composable
+private fun CompareBar(label: String, minutes: Int, max: Int, dim: Boolean) {
+    val barColor = if (dim) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    val fraction = if (max <= 0) 0f else (minutes.toFloat() / max.toFloat()).coerceIn(0f, 1f)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(56.dp)
+        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(trackColor)
+        ) {
+            if (fraction > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(barColor)
+                )
+            }
+        }
+        Text(
+            text = "$minutes",
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(38.dp)
+        )
     }
 }

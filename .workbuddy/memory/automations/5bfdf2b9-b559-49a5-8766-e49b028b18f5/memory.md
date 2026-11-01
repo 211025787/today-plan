@@ -84,12 +84,20 @@
 - 坑：扩展图标 `Icons.Default.EmojiEvents` **必须单独 import** `androidx.compose.material.icons.filled.EmojiEvents`；确认图标存在用 `unzip -l classes.jar | grep` 最快。
 - 未做（有意留到下次）：成就未进备份 JSON。
 
+### 2026-11-01（第 10 次）：本周回顾（上周同期对比 + 趋势徽标 + 整周推算） → v1.0.62
+
+- 新增 `util/WeeklyReview.kt`（纯 Kotlin）：`WeekReview` + `of(thisWeek, lastWeek, todayIndex, goal)`；核心口径是**只比已过去的天**（`elapsed` 夹到 1~7），避免周一拿 1 天比上周整周。文案（badge/delta/span/metric/projection）全在工具内，`goal<=0` 时把「达标 x/y」换成「活跃 x/y」。
+- 数据层：`StatsSummary` 增 `lastWeekDaily`；`summary()` 把本周 7 次 `sumWorkSeconds` 合并成**一次** `sumByDay`（覆盖两周）再按日期串拆分。
+- UI：`StatsScreen` 在「本周每日分布」下方加 `WeekReviewCard`（大数字 + 趋势徽标 + 双条对比 + 指标行 + 推算），两周皆空时收成一行提示；`TrendBadge` 只在上涨用主题色。
+- 测试 210 → **234 全绿**（WeeklyReviewTest 24 条）；包 1.0.62（code 70→71）。
+
 ## 下次可选题
 
 - 成就纳入备份（schema 3，换机保留解锁日期）
 - 成就解锁时发通知（复用 Notifier 渠道）
 - 点击徽章查看达成明细（如最佳单日是哪天、连续 30 天起止）
-- 每周 / 每月回顾卡（自动汇总一周专注与新解锁成就）
+- 月回顾：复用周回顾的「同期口径」，做本月至今 vs 上月同期
 - 目标达成提醒：当日达标时发一条通知
 - 热力图点击某天跳转到当日卡片页
 - 热力图按「是否达标」着色
+
