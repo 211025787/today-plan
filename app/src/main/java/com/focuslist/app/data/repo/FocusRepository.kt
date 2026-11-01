@@ -2,6 +2,8 @@ package com.focuslist.app.data.repo
 
 import com.focuslist.app.data.local.dao.FocusRecordDao
 import com.focuslist.app.data.local.entity.FocusRecordEntity
+import com.focuslist.app.util.AchievementStats
+import com.focuslist.app.util.Achievements
 import com.focuslist.app.util.DateUtils
 import com.focuslist.app.util.DayKeys
 import com.focuslist.app.util.Heatmap
@@ -34,6 +36,10 @@ const val GOAL_SAMPLE_DAYS = 14
  * @property weekMinutes 本周专注分钟数
  * @property monthMinutes 本月专注分钟数
  * @property totalMinutes 累计专注分钟数
+ * @property totalPomos 全部时间累计完成的番茄个数
+ * @property allTimeActiveDays 全部时间里出现过完整番茄的自然日天数
+ * @property allTimeLongestStreak 全部时间的最长连续专注天数
+ * @property bestDayMinutes 历史最佳单日的专注分钟数
  * @property streakDays 连续专注天数（今天或昨天有番茄即连续）
  * @property weekDaily 本周 7 天每日分钟数（从周一开始）
  * @property heatRangeStart 热力图区间首日（本地 0 点）
@@ -48,6 +54,10 @@ data class StatsSummary(
     val weekMinutes: Int = 0,
     val monthMinutes: Int = 0,
     val totalMinutes: Int = 0,
+    val totalPomos: Int = 0,
+    val allTimeActiveDays: Int = 0,
+    val allTimeLongestStreak: Int = 0,
+    val bestDayMinutes: Int = 0,
     val streakDays: Int = 0,
     val weekDaily: List<Int> = List(7) { 0 },
     val heatRangeStart: Long = 0L,
@@ -101,6 +111,9 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
         val weekSec = recordDao.sumWorkSeconds(weekStart, tomorrowStart) ?: 0L
         val monthSec = recordDao.sumWorkSeconds(monthStart, tomorrowStart) ?: 0L
         val totalSec = recordDao.sumWorkSeconds(0L, tomorrowStart) ?: 0L
+        // 全量活跃日：连续天数、活跃天数、最长连续都按全部记录算，不受一年窗口截断
+        val allActiveDays = recordDao.getActiveDayKeys().map { DayKeys.parse(it) }.toSet()
+        val totalPomos = recordDao.countCompletedPomos(0L, tomorrowStart) ?: 0
 
         // 逐天聚合本周 7 天数据
         val weekDaily = (0 until 7).map { offset ->
@@ -122,11 +135,12 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
             weekMinutes = (weekSec / 60L).toInt(),
             monthMinutes = (monthSec / 60L).toInt(),
             totalMinutes = (totalSec / 60L).toInt(),
+            totalPomos = totalPomos,
+            allTimeActiveDays = recordDao.countActiveDays() ?: 0,
+            allTimeLongestStreak = Heatmap.longestStreak(allActiveDays),
+            bestDayMinutes = ((recordDao.bestDay().firstOrNull()?.seconds ?: 0L) / 60L).toInt(),
             // 连续天数基于全量活跃日，不受热力图一年窗口截断
-            streakDays = Heatmap.currentStreak(
-                recordDao.getActiveDayKeys().map { DayKeys.parse(it) }.toSet(),
-                todayStart
-            ),
+            streakDays = Heatmap.currentStreak(allActiveDays, todayStart),
             weekDaily = weekDaily,
             heatRangeStart = heatStart,
             heatRangeEnd = todayStart,
@@ -170,4 +184,26 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
             .toMap()
         return (0 until days).map { offset -> byDay[DateUtils.addDays(start, offset)] ?: 0 }
     }
+}
+
+/**
+ * 把统计汇总换算成成就体系所需的指标快照。
+ *
+ * 清晨 / 深夜直接复用节律的 24 小时分布，周末复用热力图的按天数据，不额外查库。
+ * 做成顶层函数（而非仓库方法）是为了能在 JVM 单测里直接调用，不必构造 DAO。
+ *
+ * @param summary 统计汇总
+ * @return 成就指标快照
+ */
+fun achievementStatsOf(summary: StatsSummary): AchievementStats {
+    return AchievementStats(
+        totalMinutes = summary.totalMinutes,
+        totalPomos = summary.totalPomos,
+        activeDays = summary.allTimeActiveDays,
+        longestStreak = summary.allTimeLongestStreak,
+        bestDayMinutes = summary.bestDayMinutes,
+        earlyMinutes = Achievements.earlyMinutes(summary.rhythmByHour),
+        nightMinutes = Achievements.nightMinutes(summary.rhythmByHour),
+        weekendMinutes = Achievements.weekendMinutes(summary.heatByDay)
+    )
 }

@@ -57,6 +57,7 @@ import com.focuslist.app.ui.note.NotesScreen
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.ui.settings.CapsuleSettingsScreen
 import com.focuslist.app.ui.settings.SettingsScreen
+import com.focuslist.app.ui.stats.AchievementsScreen
 import com.focuslist.app.ui.stats.StatsScreen
 import com.focuslist.app.ui.theme.FocusListTheme
 import kotlinx.coroutines.CoroutineScope
@@ -246,12 +247,21 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                     SettingsScreen(
                         container = container,
                         onOpenStats = { navController.navigate("stats") },
-                        onOpenCapsule = { navController.navigate("capsule_settings") }
+                        onOpenCapsule = { navController.navigate("capsule_settings") },
+                        onOpenAchievements = { navController.navigate("achievements") }
                     )
                 }
                 // 专注统计页：今日/周/月/累计 + 年度总览与年度热力图
                 composable("stats") {
-                    StatsScreen(container = container, onBack = { navController.popBackStack() })
+                    StatsScreen(
+                        container = container,
+                        onBack = { navController.popBackStack() },
+                        onOpenAchievements = { navController.navigate("achievements") }
+                    )
+                }
+                // 成就殿堂：长期专注沉淀的徽章墙
+                composable("achievements") {
+                    AchievementsScreen(container = container, onBack = { navController.popBackStack() })
                 }
                 // 悬浮胶囊设置页（外观 / 权限 / 预览）
                 composable("capsule_settings") {

@@ -3,6 +3,7 @@ package com.focuslist.app.ui.stats
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 
 import androidx.compose.foundation.layout.Box
@@ -27,10 +28,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -42,7 +45,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
 import com.focuslist.app.data.repo.StatsSummary
+import com.focuslist.app.data.repo.achievementStatsOf
 import com.focuslist.app.ui.common.GlassCard
+import com.focuslist.app.util.AchievementState
+import com.focuslist.app.util.Achievements
 import com.focuslist.app.util.Goal
 
 /**
@@ -50,20 +56,31 @@ import com.focuslist.app.util.Goal
  *
  * @param container 依赖容器
  * @param onBack 返回上一页回调（从"我的"进入时由导航栈处理）
+ * @param onOpenAchievements 打开成就殿堂回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatsScreen(container: AppContainer, onBack: () -> Unit = {}) {
+fun StatsScreen(
+    container: AppContainer,
+    onBack: () -> Unit = {},
+    onOpenAchievements: () -> Unit = {}
+) {
     val viewModel: StatsViewModel = viewModel {
         StatsViewModel(container.focusRepository, container.settingsStore)
     }
     val summary by viewModel.summary.collectAsState()
     val goal by viewModel.goalMinutes.collectAsState()
     val goalStreak by viewModel.goalStreak.collectAsState()
+    val unlocked by viewModel.achievements.collectAsState()
 
     // 每次进入页面刷新一次，保证刚完成的番茄被统计
     LaunchedEffect(Unit) {
         viewModel.refresh()
+    }
+
+    // 成就快照：只在汇总或解锁记录变化时重算
+    val achievementStates = remember(summary, unlocked) {
+        Achievements.snapshot(achievementStatsOf(summary), unlocked)
     }
 
     Scaffold(
@@ -76,6 +93,15 @@ fun StatsScreen(container: AppContainer, onBack: () -> Unit = {}) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "返回",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenAchievements) {
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = "成就殿堂",
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -122,6 +148,61 @@ fun StatsScreen(container: AppContainer, onBack: () -> Unit = {}) {
 
             // 年度专注热力图
             YearHeatmapCard(summary = summary)
+
+            // 成就殿堂入口
+            AchievementsEntryCard(states = achievementStates, onClick = onOpenAchievements)
+        }
+    }
+}
+
+/**
+ * 成就殿堂入口卡：展示已解锁徽章与一句激励，点击进入完整徽章墙。
+ *
+ * @param states 全部成就状态
+ * @param onClick 点击回调
+ */
+@Composable
+private fun AchievementsEntryCard(states: List<AchievementState>, onClick: () -> Unit) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("成就殿堂", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "${Achievements.countText(states)} ›",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            val unlockedList = states.filter { it.unlocked }
+            if (unlockedList.isEmpty()) {
+                Text(
+                    text = Achievements.motivationText(states),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    unlockedList.take(8).forEach { state ->
+                        Text(text = state.def.emoji, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+            Text(
+                text = Achievements.motivationText(states),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

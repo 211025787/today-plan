@@ -9,10 +9,12 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.focuslist.app.data.backup.BackupSettings
 import com.focuslist.app.data.backup.toTimerSettings
+import com.focuslist.app.util.Achievements
 import com.focuslist.app.util.Goal
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanTemplates
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "focus_settings")
@@ -182,6 +184,14 @@ class SettingsStore(private val context: Context) {
 
         /** 上次成功导出备份的时间戳（毫秒），0 表示从未备份 */
         val LAST_BACKUP_AT = longPreferencesKey("last_backup_at")
+
+        /** 成就解锁记录（JSON：`成就 id -> 解锁时刻`） */
+        val ACHIEVEMENTS = stringPreferencesKey("achievements")
+    }
+
+    /** 成就解锁记录：`成就 id -> 解锁时刻` */
+    val achievements: Flow<Map<String, Long>> = context.dataStore.data.map { prefs ->
+        Achievements.decode(prefs[Keys.ACHIEVEMENTS] ?: "")
     }
 
     /** 上次成功导出备份的时间戳；从未备份时为 0 */
@@ -438,6 +448,33 @@ class SettingsStore(private val context: Context) {
     suspend fun markBackupExported(at: Long = System.currentTimeMillis()) {
         context.dataStore.edit { prefs ->
             prefs[Keys.LAST_BACKUP_AT] = at
+        }
+    }
+
+    /**
+     * 读一次当前的成就解锁记录。
+     *
+     * 供「刷新统计 → 评估成就」这类一次性判断使用，避免为了取值去订阅流。
+     *
+     * @return 解锁记录
+     */
+    suspend fun readAchievements(): Map<String, Long> {
+        return Achievements.decode(context.dataStore.data.first()[Keys.ACHIEVEMENTS] ?: "")
+    }
+
+    /**
+     * 写入新解锁的成就：只补缺失的 id，已有解锁时间保持不变。
+     *
+     * @param ids 新解锁的成就 id
+     * @param at 解锁时刻（毫秒），默认取当前时间
+     */
+    suspend fun unlockAchievements(ids: List<String>, at: Long = System.currentTimeMillis()) {
+        if (ids.isEmpty()) {
+            return
+        }
+        context.dataStore.edit { prefs ->
+            val current = Achievements.decode(prefs[Keys.ACHIEVEMENTS] ?: "")
+            prefs[Keys.ACHIEVEMENTS] = Achievements.encode(Achievements.merge(current, ids, at))
         }
     }
 

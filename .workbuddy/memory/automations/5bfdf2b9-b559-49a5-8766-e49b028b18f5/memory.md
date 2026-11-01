@@ -64,9 +64,16 @@
 - 测试 126 → 152 全绿（新增 RhythmTest 26 条）；包 1.0.59（code 66）。
 - 坑：const val 不允许前向引用（`RHYTHM_DAYS` 必须写在 `HEATMAP_DAYS` 之后）；`strftime('%H')` 要 CAST 成 INTEGER。
 
-## 下次可选题
+### 2026-11-01（第 8 次）：备份完整性 v2 —— 设置与模板入备份 + 备份体检 → v1.0.60
 
-- 把计划模板并入备份 JSON（当前备份恢复后模板会丢）
+- `util/BackupHealth.kt`（纯 Kotlin）：距上次备份自然日天数、四档分级（NEVER / FRESH<14 / SOON 14–29 / OVERDUE≥30）、状态与建议文案、提醒判断、进度与倒计时文案。
+- 备份升到 **schema 2**：`BackupPayload` 增 `settings: BackupSettings?` 与 `templates: List<BackupTemplate>`；旧 v1 备份仍可导入（缺失项自动跳过）。`BackupSettings` 独立定义在 backup 包，避免把 DataStore 依赖带进纯 JVM 单测。
+- `BackupManager` 增可选 `settingsStore`：覆盖导入整体还原设置与模板，合并导入只补本机没有的模板（设置不动）。`SettingsStore` 增 `lastBackupAt` / `markBackupExported` / `applyBackupSettings` / `replacePlanTemplates` / `mergePlanTemplates`。
+- UI：我的 → 数据卡片顶部「备份状态」块（状态 + 分级 + x/30 天进度条 + 建议文案）；导出成功后记录备份时间。
+- 测试 152 → 181 全绿（BackupHealthTest 23 + codec 3 + payload 3）；包 1.0.60（code 67→68）；commit cc8fd08。
+- 坑：`withContext` 非 inline，不能用 `return` 提前返回；同包扩展函数不要 import；模板类型转换点只保留在 BackupManager 一处；进度条用两个 Box 自绘以避开 material3 1.2 的 API 不确定性。
+
+## 下次可选题
 
 - 热力图支持点击某天跳转到当日计划页
 - 目标达成提醒：当日达标时发一条通知（复用 Notifier 渠道）

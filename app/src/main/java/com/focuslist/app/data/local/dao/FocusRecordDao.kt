@@ -100,6 +100,33 @@ interface FocusRecordDao {
     )
     suspend fun sumByHour(start: Long, end: Long): List<HourTotal>
 
+    /**
+     * 统计全部时间里出现过完整番茄的自然日天数。
+     *
+     * 与 [getActiveDayKeys] 一样走 `localtime` 修饰，保证与本地 0 点口径一致。
+     *
+     * @return 活跃天数；无记录时为 null
+     */
+    @Query(
+        "SELECT COUNT(DISTINCT date(startAt / 1000, 'unixepoch', 'localtime')) " +
+            "FROM focus_records WHERE phase = 'WORK' AND completed = 1"
+    )
+    suspend fun countActiveDays(): Int?
+
+    /**
+     * 查历史最佳单日：按本地自然日聚合后取秒数最高的一天。
+     *
+     * 返回列表而非标量，是因为 Room 对「GROUP BY + LIMIT」这类查询按列表投影最稳。
+     *
+     * @return 至多一条 `[日期串, 秒数]`；无记录时为空列表
+     */
+    @Query(
+        "SELECT date(startAt / 1000, 'unixepoch', 'localtime') AS day, SUM(durationSec) AS seconds " +
+            "FROM focus_records WHERE phase = 'WORK' AND completed = 1 " +
+            "GROUP BY day ORDER BY seconds DESC LIMIT 1"
+    )
+    suspend fun bestDay(): List<DayTotal>
+
     // ---- 备份 / 恢复：全量读写 ----
 
     /** 同步读取全部专注记录，用于导出备份。 */
