@@ -88,6 +88,8 @@ fun StatsScreen(
     val goalStreak by viewModel.goalStreak.collectAsState()
     val unlocked by viewModel.achievements.collectAsState()
     val recentStats by viewModel.recentStats.collectAsState()
+    // 计划时间轴用的计划列表：直接订阅仓库，避免为一张只读卡片扩 ViewModel 构造
+    val allPlans by container.planRepository.observeAllPlans().collectAsState(initial = emptyList())
 
     // 每次进入页面刷新一次，保证刚完成的番茄被统计
     LaunchedEffect(Unit) {
@@ -161,6 +163,9 @@ fun StatsScreen(
 
             // 月度回顾入口：整月逐日日历 + 与上月同期对比
             MonthReviewEntryCard(summary = summary, goal = goal, onClick = onOpenMonths)
+
+            // 计划时间轴：未来 6 周的计划安排，看有没有堆在一起
+            PlanTimelineCard(plans = allPlans)
 
             // 专注节律（一天里什么时候最专注）
             RhythmCard(summary = summary)
