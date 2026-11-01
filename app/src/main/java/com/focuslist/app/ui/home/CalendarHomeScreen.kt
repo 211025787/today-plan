@@ -105,6 +105,7 @@ import com.focuslist.app.util.NowKind
 import com.focuslist.app.util.NowPlan
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanTemplates
+import com.focuslist.app.util.WeekStrip
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -165,6 +166,7 @@ fun CalendarHomeScreen(
         HomeViewModel(container.planRepository, container.noteRepository, appContext)
     }
     val state by viewModel.uiState.collectAsState()
+    val weekLogs by viewModel.weekLogs.collectAsState()
     // 搜索态：顶栏变搜索框，内容区换成结果列表
     var searchActive by remember { mutableStateOf(false) }
     val query by viewModel.queryText.collectAsState()
@@ -254,6 +256,14 @@ fun CalendarHomeScreen(
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
             viewModel.setMonthOffset(page - PAGER_INITIAL_PAGE)
+        }
+    }
+
+    // 反向同步：搜索跳转或周条跨月翻周改了月份时，把翻页器一并挪到对应页
+    LaunchedEffect(state.monthOffset) {
+        val target = PAGER_INITIAL_PAGE + state.monthOffset
+        if (pagerState.currentPage != target) {
+            pagerState.scrollToPage(target)
         }
     }
 
@@ -454,6 +464,40 @@ fun CalendarHomeScreen(
                             }
                         )
                     }
+                    // 周条：整周 7 天一眼看全，点一下直接切到那天（跨月自动翻月）
+                    val weekDays = remember(day, weekLogs, state.plans, state.timers, todayStart) {
+                        WeekStrip.of(
+                            anchor = day,
+                            today = todayStart,
+                            minutesOf = { target ->
+                                viewModel.plansOfDay(state, target).sumOf { plan ->
+                                    val saved = weekLogs
+                                        .firstOrNull { it.planId == plan.id && it.date == target }
+                                        ?.accumulatedSec ?: 0L
+                                    val live = if (target == todayStart) {
+                                        state.timers[plan.id]?.sessionSec ?: 0L
+                                    } else {
+                                        0L
+                                    }
+                                    ((saved + live) / 60L).toInt()
+                                }
+                            },
+                            goalOf = { target ->
+                                viewModel.plansOfDay(state, target).sumOf { it.dailyGoalMinutes }
+                            }
+                        )
+                    }
+                    WeekStripBar(
+                        days = weekDays,
+                        selected = day,
+                        summary = WeekStrip.summary(weekDays),
+                        onSelect = { target -> viewModel.selectDayAnywhere(target) },
+                        onShiftWeek = { weeks -> viewModel.selectDayAnywhere(WeekStrip.shift(day, weeks)) },
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 6.dp)
+                    )
+
                     val dayPlans = viewModel.plansOfDay(state, day)
                     // 当日备注：按关联日期查询
                     val dayNotes by container.noteRepository.observeByDate(day).collectAsState(initial = emptyList())

@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -31,6 +32,7 @@ import java.util.Locale
  * 首页（日历主页）UI 状态。
  *
  * @property shownMonth 当前展示月份 1 号 0 点时间戳
+ * @property monthOffset 当前月份相对本月的偏移（0 为当月），供翻页器反向同步
  * @property plans 全部未归档计划（前端按天过滤生效范围）
  * @property monthLogs 当前网格区间内的累计记录
  * @property selectedDay 选中日期（0 点）；null 表示日历展开状态
@@ -38,6 +40,7 @@ import java.util.Locale
  */
 data class HomeUiState(
     val shownMonth: Long = 0L,
+    val monthOffset: Int = 0,
     val plans: List<PlanEntity> = emptyList(),
     val monthLogs: List<PlanLogEntity> = emptyList(),
     val selectedDay: Long? = null,
@@ -223,6 +226,7 @@ class HomeViewModel(
     }.combine(monthOffset) { (logs, plans, timers), offset ->
         HomeUiState(
             shownMonth = monthStartOf(offset),
+            monthOffset = offset,
             plans = plans,
             monthLogs = logs,
             timers = timers
@@ -230,6 +234,21 @@ class HomeViewModel(
     }.combine(selectedDay) { state, day ->
         state.copy(selectedDay = day)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
+
+    /**
+     * 选中日所在周的累计记录。
+     *
+     * 日卡片顶部的周条要显示整周 7 天，而 [uiState] 里的 monthLogs 只覆盖当前月份网格，
+     * 跨月的那一周会拿到 0；这里单独按周观察一次，保证数字与月历一致。
+     */
+    val weekLogs: StateFlow<List<PlanLogEntity>> = selectedDay.flatMapLatest { day ->
+        if (day == null) {
+            flowOf(emptyList())
+        } else {
+            val start = DateUtils.startOfWeek(day)
+            planRepository.observeLogsBetween(start, DateUtils.addDays(start, 6))
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
      * 切换月份。
@@ -313,6 +332,20 @@ class HomeViewModel(
      */
     fun selectDay(dayStart: Long) {
         selectedDay.value = if (selectedDay.value == dayStart) null else dayStart
+    }
+
+    /**
+     * 选中任意一天并同步月份：日卡片顶部周条左右翻周时用，跨月也不会错位。
+     *
+     * @param dayStart 目标日期（任意时刻，内部会归一到 0 点）
+     */
+    fun selectDayAnywhere(dayStart: Long) {
+        val target = DateUtils.startOfDay(dayStart)
+        val delta = monthDeltaOf(target)
+        if (monthOffset.value != delta) {
+            monthOffset.value = delta
+        }
+        selectedDay.value = target
     }
 
     /**
