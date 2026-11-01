@@ -179,6 +179,12 @@
 - 零权限、纯离线：只产文件，不碰日历权限。
 - 测试 502 → 521 全绿；包 1.0.74（code 88）。
 
+### 2026-11-01（第 23 次）：计划卡「落后 N 天」角标 → v1.0.75
+
+- 数据：`PlanDao.sumSecondsByPlan` 一次 GROUP BY + `PlanRepository.totalSecondsByPlan` + `HomeViewModel.planTotals`；未落库的运行段用 timers 现补。
+- UI：渐变卡标题下加半透明白胶囊，只有 BEHIND/SLIGHTLY_BEHIND 才出现（`PlanPaces.chipText`），仅今天显示。
+- 测试 521 → 524 全绿；包 1.0.75（code 89）。
+
 ## 下次可选题
 
 - 成就解锁时发通知（复用 Notifier 渠道，详情弹层给开关）
