@@ -37,7 +37,7 @@ import java.util.Date
 import java.util.Locale
 
 /** 备注时间格式 */
-private val noteTimeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+private val noteTimeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.CHINA)
 
 /**
  * 备注页：快速备注的列表与管理（点击查看/编辑，删除）。

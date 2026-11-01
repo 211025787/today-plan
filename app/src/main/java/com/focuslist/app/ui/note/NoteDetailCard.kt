@@ -34,7 +34,7 @@ import java.util.Date
 import java.util.Locale
 
 /** 备注卡片时间格式 */
-private val noteTimeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+private val noteTimeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.CHINA)
 
 /**
  * 当日备注预览卡：标题 + 两行内容摘要 + 时间，点击查看详情。

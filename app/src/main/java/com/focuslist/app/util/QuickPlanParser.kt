@@ -405,7 +405,19 @@ object QuickPlanParser {
         }
     }
 
-    /** 清理残留：去掉冗余前缀、压缩空白、裁掉首尾标点，最后限长 */
+    /** 口语命令前缀：客气话 + 动词 + 量词，三者都可选，但单字动词必须带量词才剥 */
+    private val LEADING_COMMAND = Regex(
+        "^(?:请帮我|请帮忙|帮我|帮忙|麻烦|请)?" +
+            "(?:创建|新建|建立|制定|添加|安排)?" +
+            // 单字动词后面必须跟量词 / "的" / 数字（"建3个月""建个""建的"才算命令，"做菜"不算）
+            "(?:(?:建|加|来|做|订)(?=(?:一个|一条|一份|个|条|份|\\d|的)))?" +
+            "(?:一个|一条|一份|个|条|份)?"
+    )
+
+    /** 计划常见的收尾词：留着会让标题冗余（"健身规划" → "健身"） */
+    private val TRAILING_PLAN_WORD = Regex("(?:规划|计划|安排)$")
+
+    /** 清理残留：去掉命令前缀、"的"与"规划/计划"等收尾词，压缩空白，裁掉首尾标点，最后限长 */
     private fun cleanTitle(text: String): String {
         val trimmed = text
             .replace(Regex("""^\s*(?:每天|每日|天天)\s*"""), "")
@@ -415,6 +427,15 @@ object QuickPlanParser {
             .replace(Regex("""(?<=[\u4e00-\u9fa5]) (?=[\u4e00-\u9fa5])"""), "")
             .trim()
             .trim(' ', '，', ',', '。', '、', '；', ';', '：', ':', '~', '～', '-', '—', '到', '至', '起', '从', '始')
-        return if (trimmed.length > MAX_TITLE_LENGTH) trimmed.substring(0, MAX_TITLE_LENGTH) else trimmed
+        // 口语里的「帮我建三个月的健身规划」不该成为计划名：
+        // 摘掉命令前缀与收尾词，只留真正的主题
+        val stripped = trimmed
+            .replace(LEADING_COMMAND, "")
+            .replace(Regex("^的+"), "")
+            .replace(TRAILING_PLAN_WORD, "")
+            .trim()
+        val candidate = stripped.ifBlank { trimmed }
+        val final = candidate.trim('，', '。', '、', '；', ';', '：', ':', '~', '～')
+        return if (final.length > MAX_TITLE_LENGTH) final.substring(0, MAX_TITLE_LENGTH) else final
     }
 }

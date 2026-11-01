@@ -65,10 +65,10 @@ import java.util.Date
 import java.util.Locale
 
 /** 备注查看页元信息格式 */
-private val noteMetaFormat = SimpleDateFormat("yyyy-MM-dd EEE HH:mm", Locale.getDefault())
+private val noteMetaFormat = SimpleDateFormat("yyyy-MM-dd EEE HH:mm", Locale.CHINA)
 
 /** 关联日期格式 */
-private val noteDateOnlyFormat = SimpleDateFormat("yyyy-MM-dd EEE", Locale.getDefault())
+private val noteDateOnlyFormat = SimpleDateFormat("yyyy-MM-dd EEE", Locale.CHINA)
 
 /**
  * 全屏备注页：新建、查看、编辑共用。

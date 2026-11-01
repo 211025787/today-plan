@@ -276,7 +276,7 @@ class HomeViewModel(
 
     /** 「2026/11/1 - 2026/11/30」形式的计划生效区间文案 */
     private fun dateRangeText(plan: PlanEntity): String {
-        val fmt = SimpleDateFormat("yyyy/M/d", Locale.getDefault())
+        val fmt = SimpleDateFormat("yyyy/M/d", Locale.CHINA)
         return "${fmt.format(Date(plan.startDate))} - ${fmt.format(Date(plan.endDate))}"
     }
 

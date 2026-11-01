@@ -46,7 +46,7 @@ import java.util.Date
 import java.util.Locale
 
 /** 备注关联日期显示格式 */
-private val noteDateFormat = SimpleDateFormat("yyyy-MM-dd EEE", Locale.getDefault())
+private val noteDateFormat = SimpleDateFormat("yyyy-MM-dd EEE", Locale.CHINA)
 
 /**
  * 快速备注底部弹层：标题、关联日期（默认当前查看日）、Markdown 正文与图片/视频附件。

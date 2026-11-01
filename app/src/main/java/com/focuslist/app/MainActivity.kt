@@ -99,6 +99,16 @@ private val mainRoutes = Destinations.entries.map { it.route }.toSet()
  */
 class MainActivity : ComponentActivity() {
 
+    /**
+     * 强制应用内使用简体中文：界面文案本就是中文写死的，
+     * 不锁语言的话，系统语言为英文时日期选择器、月份标题会变成英文。
+     */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val config = android.content.res.Configuration(newBase.resources.configuration)
+        config.setLocale(java.util.Locale.CHINA)
+        super.attachBaseContext(newBase.createConfigurationContext(config))
+    }
+
     /** 通知权限申请回调 */
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()

@@ -48,7 +48,7 @@ import java.util.Date
 import java.util.Locale
 
 /** 搜索结果里备注日期的展示格式 */
-private val searchDateFmt = SimpleDateFormat("M月d日", Locale.getDefault())
+private val searchDateFmt = SimpleDateFormat("M月d日", Locale.CHINA)
 
 /**
  * 顶栏内联搜索框：无边框、透明底，专注输入本身。

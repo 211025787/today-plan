@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -97,7 +98,11 @@ fun QuickPlanSheet(
         )?.let(onRemember)
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+        val sheetState = rememberModalBottomSheetState(
+        // 表单较高，直接完全展开，不要停在半屏还要再滑一下
+        skipPartiallyExpanded = true
+    )
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

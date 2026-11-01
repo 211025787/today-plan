@@ -121,10 +121,10 @@ import java.util.Date
 import java.util.Locale
 
 /** 月份标题格式 */
-private val monthTitleFormat = SimpleDateFormat("yyyy 年 M 月", Locale.getDefault())
+private val monthTitleFormat = SimpleDateFormat("yyyy 年 M 月", Locale.CHINA)
 
 /** 选中日期标题格式 */
-private val dayTitleFormat = SimpleDateFormat("M 月 d 日", Locale.getDefault())
+private val dayTitleFormat = SimpleDateFormat("M 月 d 日", Locale.CHINA)
 
 /** 周一到周日表头 */
 private val weekHeaders = listOf("一", "二", "三", "四", "五", "六", "日")
@@ -1253,7 +1253,7 @@ private fun GradientPlanCard(
     }
 }
 /** 范围删除日期显示格式 */
-private val rangeDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+private val rangeDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA)
 
 /**
  * 按日期范围删除计划对话框：选起止日期，列出范围内生效的计划，勾选删除计划实体及其全部计时记录。

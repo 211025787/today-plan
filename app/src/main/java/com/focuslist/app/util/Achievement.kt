@@ -372,7 +372,7 @@ object Achievements {
         if (at <= 0L) {
             return ""
         }
-        return SimpleDateFormat("yyyy.MM.dd", Locale.getDefault()).format(Date(at))
+        return SimpleDateFormat("yyyy.MM.dd", Locale.CHINA).format(Date(at))
     }
 
     /**

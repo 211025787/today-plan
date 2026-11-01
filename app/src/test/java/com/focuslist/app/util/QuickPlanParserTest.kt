@@ -205,4 +205,63 @@ class QuickPlanParserTest {
         }
         assertEquals(0, QuickPlanParser.colorIndex("任意", 0))
     }
+
+    // ---------- 口语建计划：命令前缀与「规划/计划」收尾 ----------
+
+    @Test
+    fun spokenInput_extractsTopicNotTheWholeSentence() {
+        val d = draft("帮我建3个月的健身规划")
+
+        assertEquals("健身", d.title)
+        assertEquals(90, d.days)
+        assertEquals("2026-11-01", day(d.startDate))
+        // 90 天跨度：11/1 起含首尾共 90 天
+        assertEquals("2027-01-29", day(d.endDate))
+    }
+
+    @Test
+    fun spokenInput_chineseNumberMonths() {
+        val d = draft("帮我建三个月的健身规划")
+
+        assertEquals("健身", d.title)
+        assertEquals(90, d.days)
+    }
+
+    @Test
+    fun spokenInput_stripsCreatePhrase() {
+        val d = draft("创建一个读书计划")
+
+        assertEquals("读书", d.title)
+    }
+
+    @Test
+    fun spokenInput_stripsVerbWithMeasureWord() {
+        val d = draft("做个早餐计划 15分钟")
+
+        assertEquals("早餐", d.title)
+        assertEquals(15, d.dailyGoalMinutes)
+    }
+
+    @Test
+    fun plainTitle_withoutCommandKeepsAsIs() {
+        val d = draft("健身")
+
+        assertEquals("健身", d.title)
+    }
+
+    @Test
+    fun trailingPlanWord_strippedButNeverBlanks() {
+        assertEquals("学习", draft("学习计划").title)
+        // 只剩「计划」两个字时不再剥，避免空标题
+        assertEquals("计划", draft("计划").title)
+    }
+
+    @Test
+    fun spokenInput_englishLocaleStillParses() {
+        // 混入空格与「的」也要能剥干净
+        val d = draft("帮我建一个三个月 的 读书规划")
+
+        assertEquals("读书", d.title)
+        assertEquals(90, d.days)
+    }
 }

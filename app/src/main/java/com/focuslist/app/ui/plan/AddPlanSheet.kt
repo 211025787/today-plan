@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -45,7 +46,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /** 月日格式 */
-private val dayFormat = SimpleDateFormat("M月d日", Locale.getDefault())
+private val dayFormat = SimpleDateFormat("M月d日", Locale.CHINA)
 
 /**
  * 添加计划底部弹层：名称、图标、颜色、每日目标时长、生效日期范围。
@@ -80,7 +81,11 @@ fun AddPlanSheet(
     var pickingStart by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+        val sheetState = rememberModalBottomSheetState(
+        // 表单较高，直接完全展开，不要停在半屏还要再滑一下
+        skipPartiallyExpanded = true
+    )
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
