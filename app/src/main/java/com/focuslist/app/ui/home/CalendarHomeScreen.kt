@@ -112,6 +112,7 @@ import com.focuslist.app.util.NowKind
 import com.focuslist.app.util.NowPlan
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanPaces
+import com.focuslist.app.util.TextContrast
 import com.focuslist.app.util.PlanTemplates
 import com.focuslist.app.util.WeekStrip
 import com.focuslist.app.util.WrapPlan
@@ -1075,6 +1076,27 @@ private fun DayCellHome(
                 }
                 val fraction = progress.coerceIn(0, 100) / 100f
                 val baseColor = parseThemeColor(plan.colorHex)
+                // 填充会盖到文字：先算出「淡底」与「深底」两种合成色，
+                // 文字区域被填充盖过半就换浅色字，避免深色计划色把文字吃掉
+                val cellBg = MaterialTheme.colorScheme.background
+                val tintedBg = TextContrast.composite(cellBg, baseColor.copy(alpha = 0.18f))
+                val filledBg = TextContrast.composite(tintedBg, baseColor.copy(alpha = 0.4f))
+                val titleColor = TextContrast.colorFor(
+                    fraction = fraction,
+                    textStartFraction = 0.5f,
+                    tintedBackground = tintedBg,
+                    filledBackground = filledBg,
+                    darkText = MaterialTheme.colorScheme.onSurface,
+                    lightText = Color.White
+                )
+                val numberColor = TextContrast.colorFor(
+                    fraction = fraction,
+                    textStartFraction = 0.7f,
+                    tintedBackground = tintedBg,
+                    filledBackground = filledBg,
+                    darkText = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lightText = Color.White
+                )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -1104,13 +1126,13 @@ private fun DayCellHome(
                         fontSize = 8.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = titleColor,
                         modifier = Modifier.weight(1f).padding(start = 2.dp)
                     )
                     Text(
                         text = progress.toString(),
                         fontSize = 7.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = numberColor
                     )
                 }
             }
