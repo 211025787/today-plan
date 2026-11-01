@@ -73,12 +73,23 @@
 - 测试 152 → 181 全绿（BackupHealthTest 23 + codec 3 + payload 3）；包 1.0.60（code 67→68）；commit cc8fd08。
 - 坑：`withContext` 非 inline，不能用 `return` 提前返回；同包扩展函数不要 import；模板类型转换点只保留在 BackupManager 一处；进度条用两个 Box 自绘以避开 material3 1.2 的 API 不确定性。
 
+### 2026-11-01（第 9 次）：成就殿堂（12 枚徽章 + 徽章墙） → v1.0.61
+
+- `util/Achievement.kt`（纯 Kotlin + Gson）：`AchievementDef/Stats/State` + 12 枚徽章（铜 5 / 银 5 / 金 2）；规则核心是**解锁不可逆**（解锁只认持久化记录，进度回落不掉徽章）。
+- `snapshot` 排序：已解锁（解锁时间倒序）→ 未解锁按完成度倒序 → 定义顺序；`nextUp` 排除「已满 100% 但未落库」的项，`motivationText` 因此多一条「继续保持，新的徽章即将点亮」。
+- 数据层：`FocusRecordDao` 增 `countActiveDays()` 与 `bestDay()`（返回 `List<DayTotal>`）；`StatsSummary` 增 `totalPomos / allTimeActiveDays / allTimeLongestStreak / bestDayMinutes`（**全量口径**）；适配器做成顶层函数 `data/repo/achievementStatsOf(summary)`，便于 JVM 单测直接调用。
+- `SettingsStore` 增 `achievements` Flow + `readAchievements()` + `unlockAchievements()`；`StatsViewModel.refresh()` 顺带结算，新解锁写入并发 `freshIds`。
+- UI：`ui/stats/AchievementsScreen.kt`（总览卡 + 两列徽章墙 + 🎉 新解锁横幅）；入口：统计页右上角奖杯、统计页底部入口卡、我的页 ActionRow；路由 `achievements`。
+- 测试 181 → **210 全绿**（AchievementTest 25 + AchievementStatsTest 4）；包 1.0.61（code 68→69）；commit 02ad6e4。
+- 坑：扩展图标 `Icons.Default.EmojiEvents` **必须单独 import** `androidx.compose.material.icons.filled.EmojiEvents`；确认图标存在用 `unzip -l classes.jar | grep` 最快。
+- 未做（有意留到下次）：成就未进备份 JSON。
+
 ## 下次可选题
 
-- 热力图支持点击某天跳转到当日计划页
-- 目标达成提醒：当日达标时发一条通知（复用 Notifier 渠道）
-- 热力图按「是否达标」着色（而不只是按最大值分档）
-- 日历周视图切换
-- 备份定时提醒（如 30 天未备份提示）
-- 一句话解析扩展到备注/任务（复用同一套 token 规则）
-- 首页顶部搜索框：按标题搜计划与备注
+- 成就纳入备份（schema 3，换机保留解锁日期）
+- 成就解锁时发通知（复用 Notifier 渠道）
+- 点击徽章查看达成明细（如最佳单日是哪天、连续 30 天起止）
+- 每周 / 每月回顾卡（自动汇总一周专注与新解锁成就）
+- 目标达成提醒：当日达标时发一条通知
+- 热力图点击某天跳转到当日卡片页
+- 热力图按「是否达标」着色
