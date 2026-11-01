@@ -70,6 +70,7 @@ import java.util.Locale
  * @param onOpenStats 打开专注统计页回调
  * @param onOpenCapsule 打开悬浮胶囊设置页回调
  * @param onOpenAchievements 打开成就殿堂回调
+ * @param onOpenMonths 打开月度回顾回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,7 +78,8 @@ fun SettingsScreen(
     container: AppContainer,
     onOpenStats: () -> Unit = {},
     onOpenCapsule: () -> Unit = {},
-    onOpenAchievements: () -> Unit = {}
+    onOpenAchievements: () -> Unit = {},
+    onOpenMonths: () -> Unit = {}
 ) {
     val viewModel: SettingsViewModel = viewModel {
         SettingsViewModel(container.settingsStore, container.focusRepository)
@@ -445,6 +447,12 @@ fun SettingsScreen(
                         title = "专注统计",
                         subtitle = "累计时长、连续天数与年度热力图",
                         onClick = onOpenStats
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ActionRow(
+                        title = "月度回顾",
+                        subtitle = "整月逐日日历，和上月同期比一比",
+                        onClick = onOpenMonths
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ActionRow(

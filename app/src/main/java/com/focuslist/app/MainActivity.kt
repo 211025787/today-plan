@@ -58,6 +58,7 @@ import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.ui.settings.CapsuleSettingsScreen
 import com.focuslist.app.ui.settings.SettingsScreen
 import com.focuslist.app.ui.stats.AchievementsScreen
+import com.focuslist.app.ui.stats.MonthReviewScreen
 import com.focuslist.app.ui.stats.StatsScreen
 import com.focuslist.app.ui.theme.FocusListTheme
 import kotlinx.coroutines.CoroutineScope
@@ -248,7 +249,8 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                         container = container,
                         onOpenStats = { navController.navigate("stats") },
                         onOpenCapsule = { navController.navigate("capsule_settings") },
-                        onOpenAchievements = { navController.navigate("achievements") }
+                        onOpenAchievements = { navController.navigate("achievements") },
+                        onOpenMonths = { navController.navigate("month_review") }
                     )
                 }
                 // 专注统计页：今日/周/月/累计 + 年度总览与年度热力图
@@ -256,8 +258,13 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                     StatsScreen(
                         container = container,
                         onBack = { navController.popBackStack() },
-                        onOpenAchievements = { navController.navigate("achievements") }
+                        onOpenAchievements = { navController.navigate("achievements") },
+                        onOpenMonths = { navController.navigate("month_review") }
                     )
+                }
+                // 月度回顾：整月逐日日历 + 上月同期对比
+                composable("month_review") {
+                    MonthReviewScreen(container = container, onBack = { navController.popBackStack() })
                 }
                 // 成就殿堂：长期专注沉淀的徽章墙
                 composable("achievements") {

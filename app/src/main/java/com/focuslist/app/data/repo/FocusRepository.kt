@@ -179,6 +179,21 @@ class FocusRepository(private val recordDao: FocusRecordDao) {
     }
 
     /**
+     * 统计时间段内每一天的专注分钟数，按**本地日期串**索引。
+     *
+     * 月度回顾要浏览多个月、逐日渲染日历，一次分组查询把整段数据取回来即可，
+     * 既省查询次数，也保证「本月」与「上月同期」用的是同一套口径。
+     *
+     * @param start 段起点时间戳（含）
+     * @param end 段终点时间戳（不含）
+     * @return `yyyy-MM-dd` -> 分钟数，仅含有记录的日子
+     */
+    suspend fun dailyMinutes(start: Long, end: Long): Map<String, Int> {
+        return recordDao.sumByDay(start, end)
+            .associate { it.day to (it.seconds / 60L).toInt() }
+    }
+
+    /**
      * 取最近若干天（不含今天）的每日专注分钟数，用于推算建议的每日目标。
      *
      * @param days 采样天数，默认 [GOAL_SAMPLE_DAYS]

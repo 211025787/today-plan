@@ -56,8 +56,11 @@ import com.focuslist.app.util.AchievementState
 import com.focuslist.app.util.Achievements
 import com.focuslist.app.util.Goal
 import com.focuslist.app.util.Heatmap
+import com.focuslist.app.util.MonthKey
+import com.focuslist.app.util.MonthReview
 import com.focuslist.app.util.WeekTrend
 import com.focuslist.app.util.WeeklyReview
+import java.time.LocalDate
 
 /**
  * 统计页：今日数据、周/月/累计汇总、连续天数与本周柱状图。
@@ -65,13 +68,15 @@ import com.focuslist.app.util.WeeklyReview
  * @param container 依赖容器
  * @param onBack 返回上一页回调（从"我的"进入时由导航栈处理）
  * @param onOpenAchievements 打开成就殿堂回调
+ * @param onOpenMonths 打开月度回顾回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
     container: AppContainer,
     onBack: () -> Unit = {},
-    onOpenAchievements: () -> Unit = {}
+    onOpenAchievements: () -> Unit = {},
+    onOpenMonths: () -> Unit = {}
 ) {
     val viewModel: StatsViewModel = viewModel {
         StatsViewModel(container.focusRepository, container.settingsStore)
@@ -150,6 +155,9 @@ fun StatsScreen(
 
             // 本周回顾：与上周同期对比 + 按当前节奏推算
             WeekReviewCard(summary = summary, goal = goal)
+
+            // 月度回顾入口：整月逐日日历 + 与上月同期对比
+            MonthReviewEntryCard(summary = summary, goal = goal, onClick = onOpenMonths)
 
             // 专注节律（一天里什么时候最专注）
             RhythmCard(summary = summary)
@@ -475,6 +483,62 @@ private fun WeekReviewCard(summary: StatsSummary, goal: Int) {
                     color = MaterialTheme.colorScheme.primary
                 )
             }
+        }
+    }
+}
+
+/**
+ * 月度回顾入口卡：本月累计、日均与环比一眼可见，点进去看整月逐日日历。
+ *
+ * 数据直接复用热力图的按天映射（滚动一年，够覆盖本月与上月），不额外查库。
+ *
+ * @param summary 统计汇总
+ * @param goal 每日目标分钟数
+ * @param onClick 点击回调
+ */
+@Composable
+private fun MonthReviewEntryCard(summary: StatsSummary, goal: Int, onClick: () -> Unit) {
+    val today = remember { LocalDate.now() }
+    val month = remember(today) { MonthKey.of(today) }
+    val byDay = remember(summary.heatByDay) { MonthReview.keyedByDay(summary.heatByDay) }
+    val report = remember(month, byDay, goal) { MonthReview.build(month, byDay, goal, today) }
+
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("月度回顾", style = MaterialTheme.typography.titleSmall)
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "${report.month.label} ›",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = MonthReview.durationText(report.totalMinutes),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "  ·  ${MonthReview.averageText(report)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 3.dp)
+                )
+            }
+            Text(
+                text = "${MonthReview.spanText(report)} · ${MonthReview.deltaText(report)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

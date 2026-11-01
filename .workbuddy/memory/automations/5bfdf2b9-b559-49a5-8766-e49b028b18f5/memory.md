@@ -91,13 +91,21 @@
 - UI：`StatsScreen` 在「本周每日分布」下方加 `WeekReviewCard`（大数字 + 趋势徽标 + 双条对比 + 指标行 + 推算），两周皆空时收成一行提示；`TrendBadge` 只在上涨用主题色。
 - 测试 210 → **234 全绿**（WeeklyReviewTest 24 条）；包 1.0.62（code 70→71）。
 
+### 2026-11-01（第 11 次）：月度回顾（整月日历 + 上月同期对比） → v1.0.63
+
+- 新增 `util/MonthReview.kt`（纯 Kotlin + java.time）：MonthKey / MonthDay / MonthReport / MonthReview；同期口径「只比上月同一区间」，着色五档（有目标按占比、无目标按绝对分钟），6 段文案全部收在工具里。
+- 数据层新增 `FocusRepository.dailyMinutes(start,end)`；`MonthReviewViewModel` 一次取 12 个月逐日数据，翻月不查库。
+- 新增 `ui/stats/MonthReviewScreen.kt`（月份切换条 + 汇总卡 + 7 列日历可点选 + 图例）；统计页「本周回顾」下方加入口卡、我的页加入口、路由 `month_review`。
+- 测试 234 → 270 全绿；包 1.0.63（code 72）；commit 见 git log。
+- 坑：`"$label，"` 中文紧跟插值会被吞进标识符，必须 `${label}`。
+
 ## 下次可选题
 
 - 成就纳入备份（schema 3，换机保留解锁日期）
 - 成就解锁时发通知（复用 Notifier 渠道）
 - 点击徽章查看达成明细（如最佳单日是哪天、连续 30 天起止）
-- 月回顾：复用周回顾的「同期口径」，做本月至今 vs 上月同期
+- 月历页支持左右滑动手势切月
 - 目标达成提醒：当日达标时发一条通知
-- 热力图点击某天跳转到当日卡片页
-- 热力图按「是否达标」着色
+- 热力图 / 月历点击某天跳转到当日卡片页
+- 周回顾卡点击展开上周逐日对比（哪几天掉队）
 
