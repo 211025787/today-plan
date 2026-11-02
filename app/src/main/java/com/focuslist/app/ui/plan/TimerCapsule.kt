@@ -3,9 +3,10 @@ package com.focuslist.app.ui.plan
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -18,7 +19,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.TextView
 import com.focuslist.app.MainActivity
 import kotlin.math.abs
@@ -376,19 +376,9 @@ class TimerCapsule(private val context: Context) {
         row.addView(title)
         row.addView(time)
 
-        val bar = ProgressBar(
-            context,
-            null,
-            android.R.attr.progressBarStyleHorizontal
-        ).apply {
-            max = 100
-            progress = 0
-            progressTintList = ColorStateList.valueOf(
-                withAlpha(progressColor, config.progressAlphaPercent)
-            )
-            progressBackgroundTintList = ColorStateList.valueOf(
-                withAlpha(progressColor, config.progressAlphaPercent * 30 / 100)
-            )
+        val bar = MiniBarView(context).apply {
+            trackColor = withAlpha(progressColor, config.progressAlphaPercent * 30 / 100)
+            fillColor = withAlpha(progressColor, config.progressAlphaPercent)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(2)
@@ -523,7 +513,7 @@ class TimerCapsule(private val context: Context) {
         private val dotView: View,
         private val titleView: TextView,
         private val timeView: TextView,
-        private val barView: ProgressBar
+        private val barView: MiniBarView
     ) {
         /**
          * 就地更新该行样式（文字颜色、圆点、进度条、行高）。
@@ -542,12 +532,8 @@ class TimerCapsule(private val context: Context) {
                 shape = GradientDrawable.OVAL
                 setColor(withAlpha(progressColor, config.progressAlphaPercent))
             }
-            barView.progressTintList = ColorStateList.valueOf(
-                withAlpha(progressColor, config.progressAlphaPercent)
-            )
-            barView.progressBackgroundTintList = ColorStateList.valueOf(
-                withAlpha(progressColor, config.progressAlphaPercent * 30 / 100)
-            )
+            barView.fillColor = withAlpha(progressColor, config.progressAlphaPercent)
+            barView.trackColor = withAlpha(progressColor, config.progressAlphaPercent * 30 / 100)
             rowView.minimumHeight = if (config.rowHeightDp > 0) dp(config.rowHeightDp) else 0
         }
 
@@ -559,10 +545,10 @@ class TimerCapsule(private val context: Context) {
         fun update(entry: Entry) {
             titleView.text = entry.title
             timeView.text = formatRemaining(entry)
-            barView.progress = if (entry.goalSec > 0) {
-                (entry.sessionSec * 100L / entry.goalSec).coerceIn(0L, 100L).toInt()
+            barView.fraction = if (entry.goalSec > 0) {
+                (entry.sessionSec.toFloat() / entry.goalSec.toFloat()).coerceIn(0f, 1f)
             } else {
-                0
+                0f
             }
         }
 
@@ -638,5 +624,53 @@ class TimerCapsule(private val context: Context) {
             value.toFloat(),
             context.resources.displayMetrics
         ).toInt()
+    }
+}
+
+/**
+ * 胶囊行内的迷你进度条：自绘两条圆角矩形（轨道 + 按比例的填充）。
+ *
+ * 不用系统 [android.widget.ProgressBar] 的原因：横条样式在部分 ROM 上
+ * 会引入主题默认色（某些机型上进度走满后显示成红色），且圆角不可控；
+ * 自绘只有几十行，颜色完全由胶囊配色决定。
+ */
+private class MiniBarView(context: Context) : View(context) {
+
+    /** 轨道颜色（淡） */
+    var trackColor: Int = Color.TRANSPARENT
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    /** 填充颜色（计划主题色） */
+    var fillColor: Int = Color.TRANSPARENT
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    /** 填充比例 0-1，超过目标后按 1 封顶 */
+    var fraction: Float = 0f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            invalidate()
+        }
+
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    override fun onDraw(canvas: Canvas) {
+        if (width <= 0 || height <= 0) {
+            return
+        }
+        val radius = height / 2f
+        paint.color = trackColor
+        canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), radius, radius, paint)
+        if (fraction > 0f) {
+            paint.color = fillColor
+            // 至少画出一个圆头的宽度，避免 1% 时看不见
+            val fillWidth = (width * fraction).coerceAtLeast(height.toFloat()).coerceAtMost(width.toFloat())
+            canvas.drawRoundRect(0f, 0f, fillWidth, height.toFloat(), radius, radius, paint)
+        }
     }
 }
