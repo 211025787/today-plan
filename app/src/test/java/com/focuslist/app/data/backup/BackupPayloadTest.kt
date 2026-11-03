@@ -108,4 +108,28 @@ class BackupPayloadTest {
         assertFalse(BackupPayload().hasAchievements())
         assertFalse(BackupPayload().describe().contains("成就"))
     }
+
+    @Test
+    fun totalCount_includesTrips() {
+        val payload = BackupPayload(
+            plans = List(1) { BackupPlan(id = it.toLong()) },
+            trips = List(2) { BackupTrip(id = it.toLong()) },
+            tripStops = List(6) { BackupTripStop(id = it.toLong(), tripId = 1) },
+            tripLegs = List(5) { BackupTripLeg(id = it.toLong(), tripId = 1) }
+        )
+        assertEquals(1 + 2 + 6 + 5, payload.totalCount())
+    }
+
+    @Test
+    fun describe_mentionsTrips() {
+        val payload = BackupPayload(
+            trips = List(2) { BackupTrip(id = it.toLong(), title = "行程$it") },
+            tripStops = List(7) { BackupTripStop(id = it.toLong()) },
+            tripLegs = List(5) { BackupTripLeg(id = it.toLong()) }
+        )
+        val text = payload.describe()
+        assertTrue(text.contains("行程 2"))
+        assertTrue(text.contains("行程地点 7"))
+        assertTrue(text.contains("行程交通 5"))
+    }
 }

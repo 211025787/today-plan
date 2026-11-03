@@ -23,8 +23,8 @@ data class RestoreResult(
 /**
  * 备份管理器：把本机全部数据导出成一份 JSON，或从 JSON 恢复回来。
  *
- * 导出内容包含 Room 业务数据，以及 DataStore 里的偏好设置、计划模板（schema 2 起）
- * 与成就解锁记录（schema 3 起）。
+ * 导出内容包含 Room 业务数据，以及 DataStore 里的偏好设置、计划模板（schema 2 起）、
+ * 成就解锁记录（schema 3 起）与旅游行程（schema 4 起）。
  *
  * 数据库读写都在单个事务内完成，保证导出的是一致快照、
  * 导入过程要么整体成功要么整体回滚（不会留下半份数据）。
@@ -53,6 +53,7 @@ class BackupManager(
             val habitDao = database.habitDao()
             val planDao = database.planDao()
             val noteDao = database.noteDao()
+            val tripDao = database.tripDao()
             BackupPayload(
                 schemaVersion = BACKUP_SCHEMA_VERSION,
                 appVersion = appVersion,
@@ -110,7 +111,28 @@ class BackupManager(
                 },
                 settings = settings,
                 templates = templates,
-                achievements = achievements
+                achievements = achievements,
+                trips = tripDao.getAllTrips().map {
+                    BackupTrip(
+                        id = it.id, title = it.title, emoji = it.emoji, colorHex = it.colorHex,
+                        note = it.note, createdAt = it.createdAt, updatedAt = it.updatedAt
+                    )
+                },
+                tripStops = tripDao.getAllTripStops().map {
+                    BackupTripStop(
+                        id = it.id, tripId = it.tripId, sortIndex = it.sortIndex, name = it.name,
+                        region = it.region, lat = it.lat, lon = it.lon,
+                        stayMinutes = it.stayMinutes, note = it.note
+                    )
+                },
+                tripLegs = tripDao.getAllTripLegs().map {
+                    BackupTripLeg(
+                        id = it.id, tripId = it.tripId, sortIndex = it.sortIndex, mode = it.mode,
+                        durationMinutes = it.durationMinutes, fromStation = it.fromStation,
+                        toStation = it.toStation, serviceNo = it.serviceNo, lines = it.lines,
+                        distanceMeters = it.distanceMeters, polyline = it.polyline
+                    )
+                }
             )
         }
     }
@@ -149,6 +171,11 @@ class BackupManager(
                 database.noteDao().apply {
                     insertNotes(payload.notes.map { it.toEntity() })
                     insertAttachments(payload.noteAttachments.map { it.toEntity() })
+                }
+                database.tripDao().apply {
+                    insertTrips(payload.trips.map { it.toEntity() })
+                    insertTripStops(payload.tripStops.map { it.toEntity() })
+                    insertTripLegs(payload.tripLegs.map { it.toEntity() })
                 }
             }
             val store = settingsStore
@@ -193,6 +220,11 @@ class BackupManager(
         database.noteDao().apply {
             clearAttachments()
             clearNotes()
+        }
+        database.tripDao().apply {
+            clearTripLegs()
+            clearTripStops()
+            clearTrips()
         }
     }
 }

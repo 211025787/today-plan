@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>今日规划 · 宣传片</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #0C0D18; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #fff; }
+  .stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+
+  /* 背景 */
+  .bg { position: absolute; inset: 0; background: radial-gradient(circle at 30% 20%, #1B2350 0%, #0C0D18 55%); }
+  .blob { position: absolute; border-radius: 50%; filter: blur(120px); opacity: .55; }
+  .b1 { width: 900px; height: 900px; left: -180px; top: -260px; background: #4772FA; }
+  .b2 { width: 760px; height: 760px; right: -160px; bottom: -220px; background: #7A4BE8; }
+  .b3 { width: 520px; height: 520px; left: 55%; top: 8%; background: #4C6FFF; opacity: .35; }
+  .grid { position: absolute; inset: 0; opacity: .05;
+    background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px);
+    background-size: 96px 96px; }
+
+  section { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .hidden { opacity: 0; }
+
+  /* 标题 */
+  h1 { font-size: 132px; font-weight: 700; letter-spacing: 8px; }
+  .sub { font-size: 34px; color: #B9BEE0; letter-spacing: 6px; margin-top: 26px; }
+  .tag { display: inline-block; font-size: 24px; color: #C9CDF5; letter-spacing: 3px;
+    border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 10px 26px; margin-top: 34px; }
+
+  /* 左侧文案 */
+  .copy { position: absolute; left: 132px; top: 50%; transform: translateY(-50%); width: 700px; }
+  .kicker { font-size: 22px; letter-spacing: 6px; color: #8E9BE8; margin-bottom: 18px; }
+  .h2 { font-size: 74px; font-weight: 700; line-height: 1.22; }
+  .h2 em { font-style: normal; color: #8FB0FF; }
+  .list { margin-top: 40px; }
+  .item { display: flex; align-items: center; gap: 18px; margin-bottom: 24px; font-size: 30px; color: #D6D9F2; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #7E9BFF; box-shadow: 0 0 18px #7E9BFF; }
+
+  /* 手机 */
+  .phone { position: absolute; width: 430px; height: 900px; border-radius: 62px;
+    background: #14162A; border: 12px solid #23263F;
+    box-shadow: 0 40px 120px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06) inset; overflow: hidden; }
+  .phone img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .phone::after { content: ""; position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+    width: 120px; height: 26px; border-radius: 13px; background: #0C0D18; }
+
+  /* 胶囊场景：用 left/top 定位，避免动画 transform 覆盖居中 */
+  .capsuleWrap { position: absolute; left: 320px; top: 300px; width: 1280px; }
+  .capsuleWrap img { width: 100%; display: block; border-radius: 28px; box-shadow: 0 40px 120px rgba(0,0,0,.5); }
+  .shine { position: absolute; inset: 0; border-radius: 28px; overflow: hidden; }
+  .shine span { position: absolute; top: -40%; left: -30%; width: 22%; height: 180%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.34), transparent);
+    transform: rotate(12deg); filter: blur(6px); }
+
+  /* 结尾 */
+  .logo { width: 190px; height: 190px; border-radius: 48px; background: #4C6FFF;
+    box-shadow: 0 30px 80px rgba(76,111,255,.45); position: relative; }
+  .logo svg { position: absolute; inset: 0; }
+  .endName { font-size: 108px; font-weight: 700; letter-spacing: 10px; }
+  .endLine { font-size: 30px; color: #AEB4DC; letter-spacing: 4px; margin-top: 22px; }
+  .ver { font-size: 22px; color: #6E76A8; letter-spacing: 2px; margin-top: 40px; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="bg"></div>
+  <div class="blob b1" id="b1"></div>
+  <div class="blob b2" id="b2"></div>
+  <div class="blob b3" id="b3"></div>
+  <div class="grid"></div>
+
+  <!-- 开场 -->
+  <section id="intro">
+    <div style="text-align:center">
+      <div class="logo" id="introLogo" style="margin:0 auto 46px">
+        <svg viewBox="0 0 108 108" width="190" height="190">
+          <defs>
+            <linearGradient id="lg" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#4C6FFF"/><stop offset="1" stop-color="#7A4BE8"/>
+            </linearGradient>
+          </defs>
+          <rect width="108" height="108" rx="26" fill="url(#lg)"/>
+          <path fill="#FFFFFF" d="M35,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+          <path fill="#FFFFFF" d="M67,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+          <path fill="#FFFFFF" d="M35,30h38a11,11 0 0 1 11,11v32a11,11 0 0 1 -11,11h-38a11,11 0 0 1 -11,-11v-32a11,11 0 0 1 11,-11z"/>
+          <path fill="#4C6FFF" d="M37,45.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+          <path fill="#4C6FFF" d="M37,57.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+          <path fill="#4C6FFF" d="M37,69.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+          <path fill="#AFBBEE" d="M45,46h22a2,2 0 0 1 0,4h-22a2,2 0 0 1 0,-4z"/>
+          <path fill="#AFBBEE" d="M45,58h15a2,2 0 0 1 0,4h-15a2,2 0 0 1 0,-4z"/>
+          <path fill="#AFBBEE" d="M45,70h19a2,2 0 0 1 0,4h-19a2,2 0 0 1 0,-4z"/>
+          <path fill="#FFFFFF" d="M76,63a13,13 0 1 1 0,26a13,13 0 1 1 0,-26z"/>
+          <path fill="#FFB84D" d="M76,65.5a10.5,10.5 0 1 1 0,21a10.5,10.5 0 1 1 0,-21z"/>
+          <path stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M71.2,76.3l3.4,3.4l6.3,-7"/>
+        </svg>
+      </div>
+      <h1 id="introTitle">今日规划</h1>
+      <div class="sub" id="introSub">把今天，安排明白</div>
+      <div class="tag" id="introTag">纯离线 · 日历 × 秒表 × 番茄 × 备注</div>
+    </div>
+  </section>
+
+  <!-- 日历 -->
+  <section id="sCal">
+    <div class="copy">
+      <div class="kicker" id="calKicker">01 / CALENDAR</div>
+      <div class="h2" id="calH2">日历就是<br><em>工作台</em></div>
+      <div class="list">
+        <div class="item" id="calI1"><span class="dot"></span>格子内直接看到今天进度</div>
+        <div class="item" id="calI2"><span class="dot"></span>左右滑动翻月，跟手跟心</div>
+        <div class="item" id="calI3"><span class="dot"></span>点开某天，立刻开始计时</div>
+      </div>
+    </div>
+    <div class="phone" id="calPhone" style="right:170px; top:90px">
+      <img src="../docs/images/screen-calendar.svg" alt="日历">
+    </div>
+  </section>
+
+  <!-- 专注 -->
+  <section id="sFocus">
+    <div class="phone" id="focusPhone" style="left:170px; top:90px">
+      <img src="../docs/images/screen-focus.svg" alt="专注">
+    </div>
+    <div class="copy" style="left:auto; right:132px; width:720px">
+      <div class="kicker" id="focusKicker">02 / FOCUS</div>
+      <div class="h2" id="focusH2">专注也可以<br><em>很有仪式感</em></div>
+      <div class="list">
+        <div class="item" id="focusI1"><span class="dot"></span>唱片式光环缓慢自转、呼吸</div>
+        <div class="item" id="focusI2"><span class="dot"></span>三种白噪音，各有各的画面</div>
+        <div class="item" id="focusI3"><span class="dot"></span>五种提示音，点一下就试听</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 胶囊 -->
+  <section id="sCapsule">
+    <div style="position:absolute; left:132px; top:120px; width:900px">
+      <div class="kicker" id="capKicker">03 / BACKGROUND</div>
+      <div class="h2" id="capH2">退到后台，<em>也看得见</em></div>
+    </div>
+    <div class="capsuleWrap" id="capWrap">
+      <img src="../docs/images/screen-capsule.svg" alt="悬浮计时胶囊">
+      <div class="shine"><span id="capShine"></span></div>
+    </div>
+    <div style="position:absolute; left:132px; bottom:110px; font-size:28px; color:#C3C8EA; letter-spacing:1px" id="capNote">
+      悬浮胶囊 · 多计划逐行 · 拖动记住位置 · 颜色与透明度都能改
+    </div>
+  </section>
+
+  <!-- 备注 -->
+  <section id="sNote">
+    <div class="phone" id="notePhoneA" style="left:300px; top:110px; width:390px; height:820px">
+      <img src="../docs/images/screen-day.svg" alt="当日计划">
+    </div>
+    <div class="phone" id="notePhoneB" style="left:680px; top:150px; width:390px; height:760px">
+      <img src="../docs/images/screen-note.svg" alt="备注">
+    </div>
+    <div class="copy" style="left:auto; right:110px; width:600px">
+      <div class="kicker" id="noteKicker">04 / NOTES</div>
+      <div class="h2" id="noteH2">计划之外，<br><em>还有记录</em></div>
+      <div class="list">
+        <div class="item" id="noteI1"><span class="dot"></span>全屏备注，随时改随时存</div>
+        <div class="item" id="noteI2"><span class="dot"></span>Markdown 与图片、视频附件</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 结尾 -->
+  <section id="outro">
+    <div style="text-align:center">
+      <div class="logo" id="outroLogo" style="margin:0 auto 42px">
+        <svg viewBox="0 0 108 108" width="190" height="190">
+          <rect width="108" height="108" rx="26" fill="url(#lg)"/>
+          <path fill="#FFFFFF" d="M35,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+          <path fill="#FFFFFF" d="M67,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z"/>
+          <path fill="#FFFFFF" d="M35,30h38a11,11 0 0 1 11,11v32a11,11 0 0 1 -11,11h-38a11,11 0 0 1 -11,-11v-32a11,11 0 0 1 11,-11z"/>
+          <path fill="#4C6FFF" d="M37,45.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+          <path fill="#4C6FFF" d="M37,57.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+          <path fill="#4C6FFF" d="M37,69.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z"/>
+          <path fill="#AFBBEE" d="M45,46h22a2,2 0 0 1 0,4h-22a2,2 0 0 1 0,-4z"/>
+          <path fill="#AFBBEE" d="M45,58h15a2,2 0 0 1 0,4h-15a2,2 0 0 1 0,-4z"/>
+          <path fill="#AFBBEE" d="M45,70h19a2,2 0 0 1 0,4h-19a2,2 0 0 1 0,-4z"/>
+          <path fill="#FFFFFF" d="M76,63a13,13 0 1 1 0,26a13,13 0 1 1 0,-26z"/>
+          <path fill="#FFB84D" d="M76,65.5a10.5,10.5 0 1 1 0,21a10.5,10.5 0 1 1 0,-21z"/>
+          <path stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M71.2,76.3l3.4,3.4l6.3,-7"/>
+        </svg>
+      </div>
+      <div class="endName" id="endName">今日规划</div>
+      <div class="endLine" id="endLine">纯离线 · 不联网 · 数据只在本机</div>
+      <div class="ver" id="endVer">v1.0.51 · Kotlin + Jetpack Compose</div>
+    </div>
+  </section>
+</div>
+
+<script>
+if (!document.getElementById('lg2')) {
+  // 第二处 logo 引用的渐变在同一文档内已定义（#lg），无需重复
+}
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const seg = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const mix = (a, b, t) => a + (b - a) * t;
+
+function place(el, { opacity = 1, x = 0, y = 0, scale = 1, blur = 0 }) {
+  el.style.opacity = opacity;
+  el.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+  if (blur) el.style.filter = `blur(${blur}px)`;
+}
+
+/** 主时间线：由渲染脚本逐帧调用 */
+window.seek = function (t) {
+  // 背景光斑持续漂移
+  const b1 = $('b1'), b2 = $('b2'), b3 = $('b3');
+  b1.style.transform = `translate(${Math.sin(t * 0.18) * 60}px, ${Math.cos(t * 0.15) * 50}px) scale(${1 + Math.sin(t * 0.2) * 0.06})`;
+  b2.style.transform = `translate(${Math.cos(t * 0.13) * 70}px, ${Math.sin(t * 0.17) * 40}px) scale(${1 + Math.cos(t * 0.16) * 0.07})`;
+  b3.style.transform = `translate(${Math.sin(t * 0.11 + 2) * 90}px, ${Math.cos(t * 0.19) * 60}px)`;
+
+  // ---------- 开场 0-5.2 ----------
+  const introFade = 1 - seg(t, 4.4, 5.2);
+  $('intro').style.display = t < 5.3 ? 'flex' : 'none';
+  if (t < 5.3) {
+    const look = easeOut(seg(t, 0.15, 1.3));
+    $('introLogo').style.opacity = seg(t, 0.1, 0.8) * introFade;
+    $('introLogo').style.transform = `scale(${mix(0.78, 1, look)})`;
+    const titleIn = seg(t, 0.7, 1.7);
+    $('introTitle').style.opacity = titleIn * introFade;
+    $('introTitle').style.transform = `translateY(${28 * (1 - easeOut(titleIn))}px)`;
+    $('introTitle').style.letterSpacing = `${mix(30, 8, easeOut(titleIn))}px`;
+    const subIn = seg(t, 1.3, 2.3);
+    $('introSub').style.opacity = subIn * introFade;
+    $('introSub').style.transform = `translateY(${20 * (1 - easeOut(subIn))}px)`;
+    const tagIn = seg(t, 2.0, 2.9);
+    $('introTag').style.opacity = tagIn * introFade;
+    $('introTag').style.transform = `translateY(${16 * (1 - easeOut(tagIn))}px)`;
+  }
+
+  // ---------- 日历 5.0-12.4 ----------
+  $('sCal').style.display = t >= 5.0 && t < 12.5 ? 'flex' : 'none';
+  if (t >= 5.0 && t < 12.5) {
+    const enter = easeOut(seg(t, 5.2, 6.8));
+    const exit = seg(t, 11.5, 12.4);
+    place($('calPhone'), {
+      opacity: seg(t, 5.2, 6.2) * (1 - exit),
+      x: mix(220, 0, enter) + exit * 80,
+      y: exit * -30,
+      scale: mix(0.96, 1, enter)
+    });
+    [[ 'calKicker', 5.6 ], [ 'calH2', 5.8 ], [ 'calI1', 6.5 ], [ 'calI2', 6.9 ], [ 'calI3', 7.3 ]]
+      .forEach(([id, at], i) => {
+        const p = seg(t, at, at + 0.9);
+        $(id).style.opacity = p * (1 - exit);
+        $(id).style.transform = `translateX(${mix(-40, 0, easeOut(p)) + exit * -30}px)`;
+      });
+  }
+
+  // ---------- 专注 12.0-19.4 ----------
+  $('sFocus').style.display = t >= 12.0 && t < 19.5 ? 'flex' : 'none';
+  if (t >= 12.0 && t < 19.5) {
+    const enter = easeOut(seg(t, 12.2, 13.8));
+    const exit = seg(t, 18.5, 19.4);
+    place($('focusPhone'), {
+      opacity: seg(t, 12.2, 13.2) * (1 - exit),
+      x: mix(-220, 0, enter) - exit * 80,
+      y: exit * 30,
+      scale: mix(0.96, 1, enter),
+      blur: mix(6, 0, enter)
+    });
+    [[ 'focusKicker', 12.6 ], [ 'focusH2', 12.8 ], [ 'focusI1', 13.5 ], [ 'focusI2', 13.9 ], [ 'focusI3', 14.3 ]]
+      .forEach(([id, at]) => {
+        const p = seg(t, at, at + 0.9);
+        $(id).style.opacity = p * (1 - exit);
+        $(id).style.transform = `translateX(${mix(40, 0, easeOut(p)) + exit * 30}px)`;
+      });
+  }
+
+  // ---------- 胶囊 19.0-26.4 ----------
+  $('sCapsule').style.display = t >= 19.0 && t < 26.5 ? 'flex' : 'none';
+  if (t >= 19.0 && t < 26.5) {
+    const enter = easeOut(seg(t, 19.2, 20.6));
+    const exit = seg(t, 25.5, 26.4);
+    place($('capWrap'), {
+      opacity: seg(t, 19.2, 20.2) * (1 - exit),
+      y: mix(60, 0, enter) + exit * 40,
+      scale: mix(0.94, 1, enter)
+    });
+    const k = seg(t, 19.6, 20.5);
+    $('capKicker').style.opacity = k * (1 - exit);
+    $('capH2').style.opacity = seg(t, 19.8, 20.8) * (1 - exit);
+    $('capH2').style.transform = `translateY(${20 * (1 - easeOut(seg(t, 19.8, 20.8)))}px)`;
+    $('capNote').style.opacity = seg(t, 21.0, 21.9) * (1 - exit);
+    // 扫光：每 4 秒扫过一次
+    const sweep = ((t - 19.0) % 4) / 1.5;
+    $('capShine').style.left = `${mix(-30, 120, clamp(sweep, 0, 1))}%`;
+    $('capShine').style.opacity = sweep < 1 ? 1 : 0;
+  }
+
+  // ---------- 备注 26.0-32.4 ----------
+  $('sNote').style.display = t >= 26.0 && t < 32.5 ? 'flex' : 'none';
+  if (t >= 26.0 && t < 32.5) {
+    const exit = seg(t, 31.5, 32.4);
+    const a = easeOut(seg(t, 26.2, 27.6));
+    place($('notePhoneA'), { opacity: seg(t, 26.2, 27.0) * (1 - exit), y: mix(120, 0, a), scale: mix(0.94, 1, a) });
+    const b = easeOut(seg(t, 26.8, 28.2));
+    place($('notePhoneB'), { opacity: seg(t, 26.8, 27.6) * (1 - exit), y: mix(150, 0, b), scale: mix(0.94, 1, b) });
+    [[ 'noteKicker', 27.0 ], [ 'noteH2', 27.2 ], [ 'noteI1', 27.9 ], [ 'noteI2', 28.3 ]].forEach(([id, at]) => {
+      const p = seg(t, at, at + 0.9);
+      $(id).style.opacity = p * (1 - exit);
+      $(id).style.transform = `translateX(${mix(40, 0, easeOut(p)) + exit * 30}px)`;
+    });
+  }
+
+  // ---------- 结尾 32.0-36 ----------
+  $('outro').style.display = t >= 32.0 ? 'flex' : 'none';
+  if (t >= 32.0) {
+    const a = easeOut(seg(t, 32.2, 33.4));
+    $('outroLogo').style.opacity = seg(t, 32.2, 33.0);
+    $('outroLogo').style.transform = `scale(${mix(0.82, 1, a)})`;
+    const b = seg(t, 32.9, 34.0);
+    $('endName').style.opacity = b;
+    $('endName').style.transform = `translateY(${20 * (1 - easeOut(b))}px)`;
+    $('endLine').style.opacity = seg(t, 33.6, 34.6);
+    $('endVer').style.opacity = seg(t, 34.2, 35.2);
+  }
+};
+
+window.seek(0);
+
+// 图片加载完成后置位，供渲染脚本轮询
+Promise.all(Array.from(document.images).map((img) =>
+  img.complete ? Promise.resolve() : new Promise((res) => { img.onload = res; img.onerror = res; })
+)).then(() => { window.__ready = true; window.seek(0); });
+</script>
+</body>
+</html>

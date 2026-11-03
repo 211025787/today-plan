@@ -99,11 +99,17 @@ fun Modifier.glass(cornerRadius: Dp = 20.dp, fillAlpha: Float? = null): Modifier
  *
  * @param modifier 布局修饰符
  * @param cornerRadius 圆角，默认 20dp
+ * @param fillAlpha 覆盖默认玻璃填充透明度；浮在复杂地图上时可调高保证可读性
  * @param content 卡片内容
  */
 @Composable
-fun GlassCard(modifier: Modifier = Modifier, cornerRadius: Dp = 20.dp, content: @Composable BoxScope.() -> Unit) {
-    Box(modifier = modifier.glass(cornerRadius)) {
+fun GlassCard(
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 20.dp,
+    fillAlpha: Float? = null,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(modifier = modifier.glass(cornerRadius, fillAlpha)) {
         content()
     }
 }

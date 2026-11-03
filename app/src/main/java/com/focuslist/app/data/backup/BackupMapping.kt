@@ -11,6 +11,9 @@ import com.focuslist.app.data.local.entity.QuickNoteEntity
 import com.focuslist.app.data.local.entity.SubTaskEntity
 import com.focuslist.app.data.local.entity.TagEntity
 import com.focuslist.app.data.local.entity.TaskEntity
+import com.focuslist.app.data.local.entity.TripEntity
+import com.focuslist.app.data.local.entity.TripLegEntity
+import com.focuslist.app.data.local.entity.TripStopEntity
 import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.util.PlanTemplate
 
@@ -60,6 +63,22 @@ fun BackupNote.toEntity(): QuickNoteEntity =
 
 fun BackupAttachment.toEntity(): NoteAttachmentEntity =
     NoteAttachmentEntity(id = id, noteId = noteId, type = type, uri = uri, createdAt = createdAt)
+
+fun BackupTrip.toEntity(): TripEntity = TripEntity(
+    id = id, title = title, emoji = emoji, colorHex = colorHex, note = note,
+    createdAt = createdAt, updatedAt = updatedAt
+)
+
+fun BackupTripStop.toEntity(): TripStopEntity = TripStopEntity(
+    id = id, tripId = tripId, sortIndex = sortIndex, name = name, region = region,
+    lat = lat, lon = lon, stayMinutes = stayMinutes, note = note
+)
+
+fun BackupTripLeg.toEntity(): TripLegEntity = TripLegEntity(
+    id = id, tripId = tripId, sortIndex = sortIndex, mode = mode,
+    durationMinutes = durationMinutes, fromStation = fromStation, toStation = toStation,
+    serviceNo = serviceNo, lines = lines, distanceMeters = distanceMeters, polyline = polyline
+)
 
 /** 备份的偏好设置 → 应用内设置对象 */
 fun BackupSettings.toTimerSettings(): TimerSettings = TimerSettings(

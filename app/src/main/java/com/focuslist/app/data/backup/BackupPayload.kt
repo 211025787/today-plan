@@ -1,7 +1,7 @@
 package com.focuslist.app.data.backup
 
 /** 备份文件结构版本；结构变更时递增，导入时据此判断是否兼容 */
-const val BACKUP_SCHEMA_VERSION: Int = 3
+const val BACKUP_SCHEMA_VERSION: Int = 4
 
 /** 任务 */
 data class BackupTask(
@@ -190,6 +190,81 @@ data class BackupAchievement(
 )
 
 /**
+ * 行程快照（schema 4 起纳入备份）。
+ *
+ * @property id 行程 ID
+ * @property title 名称
+ * @property emoji 封面
+ * @property colorHex 主题色
+ * @property note 备注
+ * @property createdAt 创建时间
+ * @property updatedAt 更新时间
+ */
+data class BackupTrip(
+    val id: Long = 0,
+    val title: String = "",
+    val emoji: String = "🗺",
+    val colorHex: String = "#4772FA",
+    val note: String = "",
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0
+)
+
+/**
+ * 行程站点快照。
+ *
+ * @property id 站点 ID
+ * @property tripId 所属行程
+ * @property sortIndex 顺序
+ * @property name 名称
+ * @property region 地区
+ * @property lat 纬度
+ * @property lon 经度
+ * @property stayMinutes 停留分钟
+ * @property note 备注
+ */
+data class BackupTripStop(
+    val id: Long = 0,
+    val tripId: Long = 0,
+    val sortIndex: Int = 0,
+    val name: String = "",
+    val region: String = "",
+    val lat: Double = 0.0,
+    val lon: Double = 0.0,
+    val stayMinutes: Int = 0,
+    val note: String = ""
+)
+
+/**
+ * 站间交通快照（含真实道路折线）。
+ *
+ * @property id 记录 ID
+ * @property tripId 所属行程
+ * @property sortIndex 起点站顺序
+ * @property mode 交通方式 key
+ * @property durationMinutes 时长
+ * @property fromStation 出发站
+ * @property toStation 到达站
+ * @property serviceNo 班次 / 线路
+ * @property lines 地铁线路（`|` 分隔）
+ * @property distanceMeters 里程
+ * @property polyline 真实折线
+ */
+data class BackupTripLeg(
+    val id: Long = 0,
+    val tripId: Long = 0,
+    val sortIndex: Int = 0,
+    val mode: String = "hsr",
+    val durationMinutes: Int = 0,
+    val fromStation: String = "",
+    val toStation: String = "",
+    val serviceNo: String = "",
+    val lines: String = "",
+    val distanceMeters: Long = 0,
+    val polyline: String = ""
+)
+
+/**
  * 备份文件整体结构：一份 JSON 就是一个 [BackupPayload]。
  *
  * @property schemaVersion 结构版本，导入时校验
@@ -198,6 +273,9 @@ data class BackupAchievement(
  * @property settings 偏好设置快照；schema 1 的旧备份没有这一项，导入时跳过
  * @property templates 计划模板快照；schema 1 的旧备份没有这一项，导入时跳过
  * @property achievements 成就解锁记录快照；schema 2 及更早的备份没有这一项，导入时保留本机记录
+ * @property trips 行程快照；schema 3 及更早的备份没有这一项，导入时为空
+ * @property tripStops 行程站点快照
+ * @property tripLegs 站间交通快照
  */
 data class BackupPayload(
     val schemaVersion: Int = BACKUP_SCHEMA_VERSION,
@@ -216,13 +294,17 @@ data class BackupPayload(
     val noteAttachments: List<BackupAttachment> = emptyList(),
     val settings: BackupSettings? = null,
     val templates: List<BackupTemplate> = emptyList(),
-    val achievements: List<BackupAchievement> = emptyList()
+    val achievements: List<BackupAchievement> = emptyList(),
+    val trips: List<BackupTrip> = emptyList(),
+    val tripStops: List<BackupTripStop> = emptyList(),
+    val tripLegs: List<BackupTripLeg> = emptyList()
 ) {
 
     /** 备份中包含的记录总条数（用于导出结果提示）。 */
     fun totalCount(): Int = tasks.size + subTasks.size + focusRecords.size + habits.size +
         habitChecks.size + categories.size + tags.size + plans.size + planLogs.size +
-        notes.size + noteAttachments.size + templates.size + achievements.size
+        notes.size + noteAttachments.size + templates.size + achievements.size +
+        trips.size + tripStops.size + tripLegs.size
 
     /** 备份中是否带偏好设置快照 */
     fun hasSettings(): Boolean = settings != null
@@ -250,6 +332,9 @@ data class BackupPayload(
             if (tags.isNotEmpty()) add("标签 ${tags.size}")
             if (templates.isNotEmpty()) add("模板 ${templates.size}")
             if (achievements.isNotEmpty()) add("成就 ${achievements.size}")
+            if (trips.isNotEmpty()) add("行程 ${trips.size}")
+            if (tripStops.isNotEmpty()) add("行程地点 ${tripStops.size}")
+            if (tripLegs.isNotEmpty()) add("行程交通 ${tripLegs.size}")
             if (settings != null) add("设置")
         }
         return parts.joinToString(" · ").ifEmpty { "空备份" }

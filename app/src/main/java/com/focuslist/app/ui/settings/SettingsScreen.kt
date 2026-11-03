@@ -490,7 +490,7 @@ fun SettingsScreen(
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "纯离线应用：所有计划、番茄记录与备注都只保存在本机，不经过网络。",
+                        text = "数据本地优先：计划、番茄记录、备注与行程都只保存在本机，不上传；只有旅游规划的地图底图与真实路线按需联网。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -14,6 +14,7 @@ import com.focuslist.app.data.repo.NoteRepository
 import com.focuslist.app.data.repo.PlanRepository
 import com.focuslist.app.data.repo.TagRepository
 import com.focuslist.app.data.repo.TaskRepository
+import com.focuslist.app.data.repo.TripRepository
 import com.focuslist.app.notify.Notifier
 import com.focuslist.app.ui.common.ChimePlayer
 import com.focuslist.app.util.AppForeground
@@ -52,6 +53,9 @@ class AppContainer(private val appContext: Context) {
 
     /** 快速备注仓库单例 */
     val noteRepository: NoteRepository by lazy { NoteRepository(database.noteDao()) }
+
+    /** 行程仓库单例 */
+    val tripRepository: TripRepository by lazy { TripRepository(database) }
 
     /** 设置存储单例 */
     val settingsStore: SettingsStore by lazy { SettingsStore(appContext) }

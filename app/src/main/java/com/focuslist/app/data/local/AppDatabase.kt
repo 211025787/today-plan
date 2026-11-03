@@ -13,6 +13,7 @@ import com.focuslist.app.data.local.dao.NoteDao
 import com.focuslist.app.data.local.dao.PlanDao
 import com.focuslist.app.data.local.dao.TagDao
 import com.focuslist.app.data.local.dao.TaskDao
+import com.focuslist.app.data.local.dao.TripDao
 import com.focuslist.app.data.local.entity.CategoryEntity
 import com.focuslist.app.data.local.entity.FocusRecordEntity
 import com.focuslist.app.data.local.entity.HabitCheckEntity
@@ -24,6 +25,9 @@ import com.focuslist.app.data.local.entity.QuickNoteEntity
 import com.focuslist.app.data.local.entity.SubTaskEntity
 import com.focuslist.app.data.local.entity.TagEntity
 import com.focuslist.app.data.local.entity.TaskEntity
+import com.focuslist.app.data.local.entity.TripEntity
+import com.focuslist.app.data.local.entity.TripLegEntity
+import com.focuslist.app.data.local.entity.TripStopEntity
 
 /**
  * v3 → v4：备注增加标题与关联日期字段，新增备注附件表。
@@ -46,13 +50,64 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
 }
 
 /**
- * 应用本地数据库（Room）：全部数据离线存储于设备，无任何网络依赖。
+ * v4 → v5：新增旅游规划——行程表、行程站点表、站间交通表。
+ * 手写建表保留既有数据；站点顺序与交通顺序都从 0 开始。
+ */
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `trips` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`title` TEXT NOT NULL, " +
+                "`emoji` TEXT NOT NULL, " +
+                "`colorHex` TEXT NOT NULL, " +
+                "`note` TEXT NOT NULL, " +
+                "`createdAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `trip_stops` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`tripId` INTEGER NOT NULL, " +
+                "`sortIndex` INTEGER NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`region` TEXT NOT NULL, " +
+                "`lat` REAL NOT NULL, " +
+                "`lon` REAL NOT NULL, " +
+                "`stayMinutes` INTEGER NOT NULL, " +
+                "`note` TEXT NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_stops_tripId` ON `trip_stops` (`tripId`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `trip_legs` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`tripId` INTEGER NOT NULL, " +
+                "`sortIndex` INTEGER NOT NULL, " +
+                "`mode` TEXT NOT NULL, " +
+                "`durationMinutes` INTEGER NOT NULL, " +
+                "`fromStation` TEXT NOT NULL, " +
+                "`toStation` TEXT NOT NULL, " +
+                "`serviceNo` TEXT NOT NULL, " +
+                "`lines` TEXT NOT NULL, " +
+                "`distanceMeters` INTEGER NOT NULL, " +
+                "`polyline` TEXT NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_legs_tripId` ON `trip_legs` (`tripId`)")
+    }
+}
+
+/**
+ * 应用本地数据库（Room）：业务数据全部保存在设备。
+ *
+ * 除了旅游规划的底图瓦片与真实路线按需联网外，应用不发起其它网络请求，
+ * 行程 / 站点 / 交通（含缓存的路线折线）同样只写本机数据库。
  *
  * 版本历史：
  * - v1：任务/子任务/专注记录/习惯/打卡/清单
  * - v2：任务增加标签、软删除（垃圾桶）、含时刻截止时间；新增标签表
  * - v3：新增计划表（时间范围 + 每日目标时长）、计划当日累计表、快速备注表
  * - v4：备注增加标题、关联日期；新增备注附件表（图片/视频）
+ * - v5：新增旅游规划表：行程、行程站点、站间交通（含真实路线折线）
  */
 @Database(
     entities = [
@@ -66,9 +121,12 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
         PlanEntity::class,
         PlanLogEntity::class,
         QuickNoteEntity::class,
-        NoteAttachmentEntity::class
+        NoteAttachmentEntity::class,
+        TripEntity::class,
+        TripStopEntity::class,
+        TripLegEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -122,6 +180,13 @@ abstract class AppDatabase : RoomDatabase() {
      */
     abstract fun noteDao(): NoteDao
 
+    /**
+     * 获取行程 DAO。
+     *
+     * @return 行程数据访问对象
+     */
+    abstract fun tripDao(): TripDao
+
     companion object {
         /** 数据库文件名 */
         private const val DB_NAME = "focus_list.db"
@@ -138,7 +203,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, DB_NAME)
-                    .addMigrations(MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }

@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- 悬浮计时胶囊：应用退到后台时在桌面上方显示当前计时 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- 旅游规划：地图底图与真实道路路线需要联网；行程数据仍只保存在本机 -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".FocusListApp"

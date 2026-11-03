@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,6 +62,7 @@ import com.focuslist.app.ui.stats.AchievementsScreen
 import com.focuslist.app.ui.stats.MonthReviewScreen
 import com.focuslist.app.ui.stats.StatsScreen
 import com.focuslist.app.ui.theme.FocusListTheme
+import com.focuslist.app.ui.travel.TravelScreen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -83,6 +85,9 @@ enum class Destinations(val route: String, val label: String, val icon: ImageVec
 
     /** 习惯打卡页 */
     HABITS("habits", "习惯", Icons.Default.Star),
+
+    /** 旅游规划页 */
+    TRAVEL("travel", "行程", Icons.Default.TravelExplore),
 
     /** 我的页 */
     MINE("mine", "我的", Icons.Default.Person)
@@ -259,6 +264,8 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 }
                 composable(Destinations.FOCUS.route) { FocusScreen(container) }
                 composable(Destinations.HABITS.route) { HabitsScreen(container) }
+                // 旅游规划：地图 + 行程（搜索地点 / 停留 / 交通方式）
+                composable(Destinations.TRAVEL.route) { TravelScreen(container) }
                 composable(Destinations.MINE.route) {
                     SettingsScreen(
                         container = container,
