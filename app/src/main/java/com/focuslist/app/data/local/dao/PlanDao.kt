@@ -181,6 +181,15 @@ interface PlanDao {
     @Query("UPDATE plans SET title = :newTitle WHERE title = :oldTitle")
     suspend fun renameByTitle(oldTitle: String, newTitle: String): Int
 
+    /**
+     * 更新计划卡片尺寸（日历网格中占用的列数与行数编码）。
+     *
+     * @param id 计划 ID
+     * @param cardSize 卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2
+     */
+    @Query("UPDATE plans SET cardSize = :cardSize WHERE id = :id")
+    suspend fun updateCardSize(id: Long, cardSize: Int)
+
     // ---- 备份 / 恢复：全量读写 ----
 
     /** 同步读取全部计划（含已归档），用于导出备份。 */

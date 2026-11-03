@@ -499,6 +499,18 @@ class HomeViewModel(
     }
 
     /**
+     * 更新计划卡片尺寸（日历网格中占用列数与行数）。
+     *
+     * @param planId 计划 ID
+     * @param cardSize 卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2
+     */
+    fun updateCardSize(planId: Long, cardSize: Int) {
+        viewModelScope.launch {
+            planRepository.updateCardSize(planId, cardSize)
+        }
+    }
+
+    /**
      * 批量删除选中的计划：逐个停计时与删库，完成后退出多选模式。
      */
     fun deleteSelected() {

@@ -17,6 +17,7 @@ import androidx.room.PrimaryKey
  * @property note 计划备注说明，可为空串
  * @property archived 是否归档（归档后不再出现在首页）
  * @property sortOrder 排序权重，数值越小越靠前
+ * @property cardSize 卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2（日历网格中占用列数与行数）
  * @property createdAt 创建时间戳（毫秒）
  */
 @Entity(tableName = "plans")
@@ -31,6 +32,7 @@ data class PlanEntity(
     val note: String = "",
     val archived: Boolean = false,
     val sortOrder: Int = 0,
+    val cardSize: Int = 3,
     val createdAt: Long = System.currentTimeMillis()
 )
 

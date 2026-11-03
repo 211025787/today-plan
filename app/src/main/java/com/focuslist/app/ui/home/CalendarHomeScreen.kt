@@ -7,10 +7,14 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +45,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
@@ -72,6 +77,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -79,12 +85,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -282,6 +295,10 @@ fun CalendarHomeScreen(
     val selectedIds by viewModel.selectMode.collectAsState()
     // 长按单卡片弹出的操作菜单：查看统计 / 编辑时长 / 删除
     var menuPlan by remember { mutableStateOf<PlanEntity?>(null) }
+    // 长按菜单「调整卡片大小」进入调整模式的目标计划
+    var resizingPlan by remember { mutableStateOf<PlanEntity?>(null) }
+    // 拖动中实时预览尺寸（内存态，不写库），松手时才落库；让 span 和高度跟手即时变化
+    val liveCardSizes = remember { mutableStateMapOf<Long, PlanCardSize>() }
     // 计划投入统计弹层：点卡片打开
     var insightPlan by remember { mutableStateOf<PlanEntity?>(null) }
     // 编辑今日时长对话框的目标计划
@@ -625,8 +642,12 @@ fun CalendarHomeScreen(
                         if (anyPlanRunning) {
                             AntiBurnInGlow()
                         }
+                        // 单格宽度 = (屏宽 - 左右内边距 - 3个列间距) / 4 列
+                        val cellWidth = (LocalConfiguration.current.screenWidthDp.dp - 12.dp * 2 - 10.dp * 3) / 4
+                        val gridSpacing = 10.dp
+
                         LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
+                            columns = GridCells.Fixed(4),
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = if (manageMode) 200.dp else 170.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -634,7 +655,7 @@ fun CalendarHomeScreen(
                         ) {
                             // 当天没有计划时的提示（仍可展示备注）
                             if (dayPlans.isEmpty()) {
-                                item(span = { GridItemSpan(2) }, key = "empty_hint") {
+                                item(span = { GridItemSpan(4) }, key = "empty_hint") {
                                     Text(
                                         text = "这一天没有生效中的计划，点右下角圆点添加",
                                         style = MaterialTheme.typography.bodyMedium,
@@ -643,7 +664,11 @@ fun CalendarHomeScreen(
                                     )
                                 }
                             }
-                            items(dayPlans, key = { it.id }) { plan ->
+                            items(
+                                dayPlans,
+                                key = { it.id },
+                                span = { GridItemSpan((liveCardSizes[it.id] ?: PlanCardSize.of(it.cardSize)).cols) }
+                            ) { plan ->
                                 // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
                                 val totalSec = viewModel.daySecondsOf(state, plan.id, day)
                                 val isSelected = plan.id in selectedIds
@@ -670,9 +695,15 @@ fun CalendarHomeScreen(
                                     manageMode = manageMode,
                                     selected = isSelected,
                                     paceText = paceText,
+                                    cardSize = liveCardSizes[plan.id] ?: PlanCardSize.of(plan.cardSize),
+                                    cellWidth = cellWidth,
+                                    gridSpacing = gridSpacing,
+                                    resizing = resizingPlan?.id == plan.id,
                                     onToggleTimer = { viewModel.toggleTimer(plan.id) },
                                     onClick = {
-                                        if (manageMode) {
+                                        if (resizingPlan?.id == plan.id) {
+                                            resizingPlan = null
+                                        } else if (manageMode) {
                                             viewModel.toggleSelectPlan(plan.id)
                                         } else {
                                             insightPlan = plan
@@ -684,7 +715,14 @@ fun CalendarHomeScreen(
                                         } else {
                                             menuPlan = plan
                                         }
-                                    }
+                                    },
+                                    onResizeLive = { newSize -> liveCardSizes[plan.id] = newSize },
+                                    onResizeEnd = { newSize ->
+                                        viewModel.updateCardSize(plan.id, newSize.code)
+                                        liveCardSizes.remove(plan.id)
+                                        resizingPlan = null
+                                    },
+                                    onEnterResize = { resizingPlan = plan }
                                 )
                             }
 
@@ -699,7 +737,7 @@ fun CalendarHomeScreen(
 
                             // 当日备注区：标题 + 最多 3 条预览 + 展开全部
                             if (dayNotes.isNotEmpty()) {
-                                item(span = { GridItemSpan(2) }, key = "notes_header") {
+                                item(span = { GridItemSpan(4) }, key = "notes_header") {
                                     Text(
                                         text = "📝 当日备注 · ${dayNotes.size} 条",
                                         style = MaterialTheme.typography.titleSmall,
@@ -708,11 +746,11 @@ fun CalendarHomeScreen(
                                     )
                                 }
                                 val shownNotes = if (notesExpanded) dayNotes else dayNotes.take(3)
-                                items(shownNotes, key = { "note_${it.id}" }, span = { GridItemSpan(2) }) { note ->
+                                items(shownNotes, key = { "note_${it.id}" }, span = { GridItemSpan(4) }) { note ->
                                     DayNotePreviewCard(note = note, onClick = { onOpenNote(note.id, 0L) })
                                 }
                                 if (dayNotes.size > 3) {
-                                    item(span = { GridItemSpan(2) }, key = "notes_toggle") {
+                                    item(span = { GridItemSpan(4) }, key = "notes_toggle") {
                                         TextButton(
                                             onClick = { notesExpanded = !notesExpanded },
                                             modifier = Modifier.fillMaxWidth()
@@ -881,6 +919,7 @@ fun CalendarHomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
+
                                 deleteConfirmPlan = plan
                                 menuPlan = null
                             }
@@ -1211,9 +1250,16 @@ private fun GradientPlanCard(
     manageMode: Boolean,
     selected: Boolean,
     paceText: String?,
+    cardSize: PlanCardSize,
+    cellWidth: Dp,
+    gridSpacing: Dp,
+    resizing: Boolean,
     onToggleTimer: () -> Unit,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onResizeEnd: (PlanCardSize) -> Unit,
+    onResizeLive: (PlanCardSize) -> Unit,
+    onEnterResize: () -> Unit
 ) {
     val base = parseThemeColor(plan.colorHex)
     // 由计划色派生的深色渐变
@@ -1226,10 +1272,37 @@ private fun GradientPlanCard(
     }
     // 倒计时剩余秒数（可为负，超出目标后继续计时）
     val remainSec = goalSec - todaySec
+    // 拖动角标累积偏移（像素）
+    var dragX by remember { mutableStateOf(0f) }
+    var dragY by remember { mutableStateOf(0f) }
+    val density = LocalDensity.current
+    // 吸附阈值：半格宽度
+    val thresholdPx = with(density) { (cellWidth * 0.5f).toPx() }
+    // 拖动中预览尺寸：右拖放大列、左拖缩小列；下拖放大行、上拖缩小行
+    val previewSize = if (resizing) {
+        val cols = when {
+            dragX > thresholdPx -> 2
+            dragX < -thresholdPx -> 1
+            else -> cardSize.cols
+        }
+        val rows = when {
+            dragY > thresholdPx -> 2
+            dragY < -thresholdPx -> 1
+            else -> cardSize.rows
+        }
+        PlanCardSize.fromColsRows(cols, rows)
+    } else {
+        cardSize
+    }
+    // 卡片高度 = 单格宽度 × 行数 + 行间距 × (行数-1)
+    // 拖动中即时跟手（无动画延迟），松手后动画吸附到档位
+    val targetHeight = cellWidth * previewSize.rows + gridSpacing * (previewSize.rows - 1)
+    val animatedHeight by animateDpAsState(targetValue = targetHeight, label = "cardHeight")
+    val displayHeight = if (resizing) targetHeight else animatedHeight
 
     Box(
         modifier = Modifier
-            .aspectRatio(1f)
+            .height(displayHeight)
             .clip(RoundedCornerShape(22.dp))
             .background(Brush.linearGradient(listOf(base, deep)))
             .combinedClickable(
@@ -1312,10 +1385,145 @@ private fun GradientPlanCard(
                 color = Color.White.copy(alpha = 0.85f)
             )
         }
+        // 非调整模式：右下角长按触发区（透明，长按进入调整模式）
+        if (!resizing) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(56.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { onClick() },
+                            onLongPress = { onEnterResize() }
+                        )
+                    }
+            )
+        }
+        // 调整模式：右下角白色弧形角标 + 左上角尺寸标签
+        if (resizing) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp)
+                    .size(28.dp)
+                    .pointerInput(cardSize, cellWidth) {
+                        detectDragGestures(
+                            onDragStart = {
+                                dragX = 0f
+                                dragY = 0f
+                            },
+                            onDragEnd = {
+                                val cols = when {
+                                    dragX > thresholdPx -> 2
+                                    dragX < -thresholdPx -> 1
+                                    else -> cardSize.cols
+                                }
+                                val rows = when {
+                                    dragY > thresholdPx -> 2
+                                    dragY < -thresholdPx -> 1
+                                    else -> cardSize.rows
+                                }
+                                onResizeEnd(PlanCardSize.fromColsRows(cols, rows))
+                            },
+                            onDrag = { _, amount ->
+                                dragX += amount.x
+                                dragY += amount.y
+                                // 实时跟手：超过阈值立即切换预览尺寸（span + 高度即时变化）
+                                val cols = when {
+                                    dragX > thresholdPx -> 2
+                                    dragX < -thresholdPx -> 1
+                                    else -> cardSize.cols
+                                }
+                                val rows = when {
+                                    dragY > thresholdPx -> 2
+                                    dragY < -thresholdPx -> 1
+                                    else -> cardSize.rows
+                                }
+                                onResizeLive(PlanCardSize.fromColsRows(cols, rows))
+                            }
+                        )
+                    }
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val stroke = 2.5.dp.toPx()
+                    drawArc(
+                        color = Color.White,
+                        startAngle = 0f,
+                        sweepAngle = 90f,
+                        useCenter = false,
+                        style = Stroke(width = stroke, cap = StrokeCap.Round),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        topLeft = Offset(stroke / 2, stroke / 2)
+                    )
+                }
+            }
+            // 当前预览尺寸标签
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.7f))
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = previewSize.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Black
+                )
+            }
+        }
     }
 }
 /** 范围删除日期显示格式 */
 private val rangeDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA)
+
+/**
+ * 计划卡片尺寸：日历网格中占用的列数与行数。
+ *
+ * @property code 持久化编码
+ * @property cols 占用列数（1 或 2）
+ * @property rows 占用行数（1 或 2）
+ * @property label 展示标签
+ */
+enum class PlanCardSize(val code: Int, val cols: Int, val rows: Int, val label: String) {
+    /** 1×1 小卡 */
+    SMALL(0, 1, 1, "1×1"),
+
+    /** 1×2 高卡 */
+    TALL(1, 1, 2, "1×2"),
+
+    /** 2×1 宽卡 */
+    WIDE(2, 2, 1, "2×1"),
+
+    /** 2×2 大卡 */
+    LARGE(3, 2, 2, "2×2");
+
+    companion object {
+        /**
+         * 按持久化编码取尺寸；非法值回退为 1×1。
+         *
+         * @param code 编码
+         * @return 对应尺寸
+         */
+        fun of(code: Int): PlanCardSize = entries.firstOrNull { it.code == code } ?: SMALL
+
+        /**
+         * 按列数与行数组合尺寸。
+         *
+         * @param cols 列数
+         * @param rows 行数
+         * @return 对应尺寸
+         */
+        fun fromColsRows(cols: Int, rows: Int): PlanCardSize = when {
+            cols >= 2 && rows >= 2 -> LARGE
+            cols >= 2 -> WIDE
+            rows >= 2 -> TALL
+            else -> SMALL
+        }
+    }
+}
 
 /**
  * 按日期范围删除计划对话框：选起止日期，列出范围内生效的计划，勾选删除计划实体及其全部计时记录。

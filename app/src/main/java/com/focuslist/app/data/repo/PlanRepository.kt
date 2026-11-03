@@ -88,6 +88,16 @@ class PlanRepository(private val planDao: PlanDao) {
     }
 
     /**
+     * 更新计划卡片尺寸（日历网格中占用的列数与行数编码）。
+     *
+     * @param planId 计划 ID
+     * @param cardSize 卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2
+     */
+    suspend fun updateCardSize(planId: Long, cardSize: Int) {
+        planDao.updateCardSize(planId, cardSize)
+    }
+
+    /**
      * 仅在指定日期范围内移除计划，范围外的日期保留。
      *
      * 按覆盖情况处理：
