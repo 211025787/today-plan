@@ -123,6 +123,16 @@ class TripRepository(private val db: AppDatabase) {
     }
 
     /**
+     * 更新行程卡片尺寸（日历网格中占用列数与行数）。
+     *
+     * @param tripId 行程 ID
+     * @param cardSize 卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2
+     */
+    suspend fun updateCardSize(tripId: Long, cardSize: Int) {
+        dao.updateCardSize(tripId, cardSize)
+    }
+
+    /**
      * 删除一条行程及其全部站点与交通。
      *
      * @param tripId 行程 ID

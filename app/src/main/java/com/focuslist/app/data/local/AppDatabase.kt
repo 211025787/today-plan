@@ -118,6 +118,16 @@ private val MIGRATION_6_7 = object : Migration(6, 7) {
 }
 
 /**
+ * v7 → v8：行程增加卡片尺寸字段，让旅游规划卡片也能在日历网格中自定义大小。
+ * 手写 ALTER 保留既有数据，旧行程 cardSize 默认 3（2×2）。
+ */
+private val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE trips ADD COLUMN cardSize INTEGER NOT NULL DEFAULT 3")
+    }
+}
+
+/**
  * 应用本地数据库（Room）：业务数据全部保存在设备。
  *
  * 除了旅游规划的底图瓦片与真实路线按需联网外，应用不发起其它网络请求，
@@ -131,6 +141,7 @@ private val MIGRATION_6_7 = object : Migration(6, 7) {
  * - v5：新增旅游规划表：行程、行程站点、站间交通（含真实路线折线）
  * - v6：行程增加起止日期，用于首页日历显示旅游规划
  * - v7：计划增加卡片尺寸，日历网格中每个计划可自定义 1×1 / 1×2 / 2×1 / 2×2
+ * - v8：行程增加卡片尺寸，旅游规划卡片同样可自定义大小
  */
 @Database(
     entities = [
@@ -149,7 +160,7 @@ private val MIGRATION_6_7 = object : Migration(6, 7) {
         TripStopEntity::class,
         TripLegEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -226,7 +237,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, DB_NAME)
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }

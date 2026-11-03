@@ -78,6 +78,15 @@ interface TripDao {
     @Query("UPDATE trips SET updatedAt = :updatedAt WHERE id = :id")
     suspend fun touchTrip(id: Long, updatedAt: Long)
 
+    /**
+     * 更新行程卡片尺寸（日历网格中占用的列数与行数编码）。
+     *
+     * @param id 行程 ID
+     * @param cardSize 卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2
+     */
+    @Query("UPDATE trips SET cardSize = :cardSize WHERE id = :id")
+    suspend fun updateCardSize(id: Long, cardSize: Int)
+
     // ---- 站点 ----
 
     /**

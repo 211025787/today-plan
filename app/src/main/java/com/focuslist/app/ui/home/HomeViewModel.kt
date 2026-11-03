@@ -422,7 +422,9 @@ class HomeViewModel(
      * @return 生效计划
      */
     fun plansOfDay(state: HomeUiState, dayStart: Long): List<PlanEntity> {
+        // 按卡片尺寸降序排列：大卡片优先入位，小卡片填充空隙，减少 LazyGrid 空格
         return state.plans.filter { it.startDate <= dayStart && it.endDate >= dayStart }
+            .sortedByDescending { it.cardSize }
     }
 
     /**
@@ -433,7 +435,9 @@ class HomeViewModel(
      * @return 生效行程
      */
     fun tripsOfDay(state: HomeUiState, dayStart: Long): List<TripEntity> {
+        // 按卡片尺寸降序排列，与计划卡片保持一致的紧凑排列策略
         return state.trips.filter { it.startDate > 0L && it.startDate <= dayStart && it.endDate >= dayStart }
+            .sortedByDescending { it.cardSize }
     }
 
     /**
@@ -507,6 +511,18 @@ class HomeViewModel(
     fun updateCardSize(planId: Long, cardSize: Int) {
         viewModelScope.launch {
             planRepository.updateCardSize(planId, cardSize)
+        }
+    }
+
+    /**
+     * 更新行程卡片尺寸（日历网格中占用列数与行数）。
+     *
+     * @param tripId 行程 ID
+     * @param cardSize 卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2
+     */
+    fun updateTripCardSize(tripId: Long, cardSize: Int) {
+        viewModelScope.launch {
+            tripRepository.updateCardSize(tripId, cardSize)
         }
     }
 
