@@ -198,8 +198,9 @@ class TravelMapState(
         val focusY = cy + (centroid.y - viewSize.height / 2f) / scale
         val targetZoom = (zoom + log2(zoomChange.coerceAtLeast(0.05f))).coerceIn(MIN_ZOOM, MAX_ZOOM)
         val newScale = TravelGeo.TILE_SIZE * 2.0.pow(targetZoom.toDouble())
-        val newCenterX = focusX - (centroid.x - viewSize.width / 2f - pan.x) / newScale
-        val newCenterY = focusY - (centroid.y - viewSize.height / 2f - pan.y) / newScale
+        // pan 是手指位移，地图要跟着手指走：手指右拖 pan.x>0 → 相机中心左移（看更西边）→ newCenterX 减小
+        val newCenterX = focusX - (centroid.x - viewSize.width / 2f + pan.x) / newScale
+        val newCenterY = focusY - (centroid.y - viewSize.height / 2f + pan.y) / newScale
         val next = TravelGeo.fromWorld(newCenterX, newCenterY)
         centerLat = next.lat.coerceIn(-75.0, 80.0)
         centerLon = normalizeLon(next.lon)
@@ -393,7 +394,7 @@ fun TravelMap(
         TextStyle(color = onSurface, fontSize = 10.sp, fontWeight = FontWeight.Medium)
     }
     val numberStyle = remember(color) {
-        TextStyle(color = color, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+        TextStyle(color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
     val legLabelStyle = remember(onSurface) {
         TextStyle(color = onSurface, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
@@ -575,14 +576,13 @@ fun TravelMap(
                     moveTo(screen.first().x, screen.first().y)
                     for (i in 1 until screen.size) lineTo(screen[i].x, screen[i].y)
                 }
-                val halo = if (dark) Color.Black.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.88f)
-                drawPath(path, halo, style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
                 val leg = pairLegs.getOrNull(index)
                 val mode = TravelMode.of(leg?.mode)
+                // 每段路线按交通方式独立配色，语义清晰且天然多彩；未设置交通时用中性灰
                 val lineColor = if (leg == null) {
                     onSurfaceVariant.copy(alpha = 0.55f)
                 } else {
-                    color
+                    legColorOf(mode)
                 }
                 val effect = when {
                     leg == null -> PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 6.dp.toPx()))
@@ -643,10 +643,11 @@ fun TravelMap(
                 val p = markerPoints[index]
                 if (p.x < -80.dp.toPx() || p.x > size.width + 80.dp.toPx()) return@forEachIndexed
                 if (p.y < -80.dp.toPx() || p.y > size.height + 80.dp.toPx()) return@forEachIndexed
-                val radius = 15.dp.toPx()
+                // 标记圆圈缩小一点，减少底图遮挡
+                val radius = 11.dp.toPx()
                 drawCircle(Color.Black.copy(alpha = 0.16f), radius, Offset(p.x, p.y + 2.dp.toPx()))
                 drawCircle(surface, radius, p)
-                drawCircle(color, radius, p, style = Stroke(width = 2.5.dp.toPx()))
+                drawCircle(color, radius, p, style = Stroke(width = 2.dp.toPx()))
                 val number = stopNumbers.getOrNull(index)
                 if (number != null) {
                     drawText(
@@ -775,4 +776,23 @@ private fun niceDistance(raw: Long): Long {
         if (value <= raw) chosen = value else break
     }
     return chosen
+}
+/**
+ * 按交通方式给路线配色：语义清晰且天然多彩，一眼区分飞的还是走的。
+ *
+ * @param mode 交通方式
+ * @return 该段路线颜色
+ */
+private fun legColorOf(mode: TravelMode): Color = when (mode) {
+    TravelMode.FLIGHT -> Color(0xFF4FC3F7)
+    TravelMode.HSR -> Color(0xFF3F51B5)
+    TravelMode.TRAIN -> Color(0xFF43A047)
+    TravelMode.COACH -> Color(0xFFEF6C00)
+    TravelMode.BUS -> Color(0xFFE53935)
+    TravelMode.SUBWAY -> Color(0xFF8E24AA)
+    TravelMode.CAR -> Color(0xFFFB8C00)
+    TravelMode.CRUISE -> Color(0xFF7E57C2)
+    TravelMode.BIKE -> Color(0xFF00ACC1)
+    TravelMode.WALK -> Color(0xFF6D4C41)
+    TravelMode.OTHER -> Color(0xFF757575)
 }

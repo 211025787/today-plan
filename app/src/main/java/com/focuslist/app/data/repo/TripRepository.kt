@@ -86,13 +86,17 @@ class TripRepository(private val db: AppDatabase) {
      * @param emoji 封面 emoji
      * @param colorHex 主题色
      * @param note 备注
+     * @param startDate 起始日 0 点时间戳；0 表示未设置
+     * @param endDate 结束日 0 点时间戳；0 表示未设置
      * @return 新行程 ID
      */
     suspend fun createTrip(
         title: String,
         emoji: String = "🏔",
         colorHex: String = "#4772FA",
-        note: String = ""
+        note: String = "",
+        startDate: Long = 0L,
+        endDate: Long = 0L
     ): Long {
         val now = System.currentTimeMillis()
         return dao.insertTrip(
@@ -101,6 +105,8 @@ class TripRepository(private val db: AppDatabase) {
                 emoji = emoji,
                 colorHex = colorHex,
                 note = note,
+                startDate = startDate,
+                endDate = endDate,
                 createdAt = now,
                 updatedAt = now
             )

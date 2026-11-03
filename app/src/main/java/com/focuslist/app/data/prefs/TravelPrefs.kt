@@ -34,6 +34,13 @@ class TravelPrefs(context: Context) {
             prefs.edit().putBoolean(KEY_MAP_HINT, value).apply()
         }
 
+    /** 高德地图开放平台的 Web 服务 Key；空串表示未配置，POI 在线搜索不可用 */
+    var amapKey: String
+        get() = prefs.getString(KEY_AMAP_KEY, "").orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_AMAP_KEY, value).apply()
+        }
+
     private companion object {
         /** 上次打开的行程 */
         const val KEY_ACTIVE_TRIP = "active_trip_id"
@@ -43,5 +50,8 @@ class TravelPrefs(context: Context) {
 
         /** 地图提示 */
         const val KEY_MAP_HINT = "map_hint_seen"
+
+        /** 高德地图 Key */
+        const val KEY_AMAP_KEY = "amap_key"
     }
 }

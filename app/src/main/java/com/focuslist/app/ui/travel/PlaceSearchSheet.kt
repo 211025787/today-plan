@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.focuslist.app.data.local.entity.TripStopEntity
+import com.focuslist.app.data.travel.TravelPoiClient
 import com.focuslist.app.util.LatLon
 import com.focuslist.app.util.TravelFormat
 import com.focuslist.app.util.TravelGeo
@@ -75,7 +76,8 @@ fun PlaceSearchSheet(
     lastStop: TripStopEntity?,
     onDismiss: () -> Unit,
     onPickPlace: (TravelPlace) -> Unit,
-    onPickOnMap: () -> Unit
+    onPickOnMap: () -> Unit,
+    poiClient: TravelPoiClient? = null
 ) {
     var query by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
@@ -92,6 +94,19 @@ fun PlaceSearchSheet(
                 .sortedBy { it.second }
                 .take(6)
                 .toList()
+        }
+    }
+    var onlineResults by remember { mutableStateOf<List<TravelPlace>>(emptyList()) }
+    var onlineLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(query) {
+        if (query.isBlank() || poiClient == null) {
+            onlineResults = emptyList()
+            onlineLoading = false
+        } else {
+            delay(500)
+            onlineLoading = true
+            onlineResults = poiClient.search(query)
+            onlineLoading = false
         }
     }
 
@@ -231,7 +246,7 @@ fun PlaceSearchSheet(
                         SearchTipCard()
                     }
                 } else {
-                    if (results.isEmpty()) {
+                    if (results.isEmpty() && onlineResults.isEmpty() && !onlineLoading) {
                         item {
                             Column(
                                 modifier = Modifier
@@ -250,6 +265,30 @@ fun PlaceSearchSheet(
                         }
                     } else {
                         items(results, key = { it.name }) { place ->
+                            PlaceRow(
+                                place = place,
+                                lastStop = lastStop,
+                                onClick = { onPickPlace(place) }
+                            )
+                        }
+                    }
+                    if (onlineLoading) {
+                        item {
+                            Text(
+                                text = "在线搜索中…",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+                    if (onlineResults.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TravelSectionTitle("在线搜索结果")
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        items(onlineResults, key = { "poi_${it.name}_${it.lat}_${it.lon}" }) { place ->
                             PlaceRow(
                                 place = place,
                                 lastStop = lastStop,

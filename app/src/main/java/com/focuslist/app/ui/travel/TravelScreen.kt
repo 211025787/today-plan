@@ -73,6 +73,7 @@ import com.focuslist.app.AppContainer
 import com.focuslist.app.data.local.entity.TripEntity
 import com.focuslist.app.data.local.entity.TripStopEntity
 import com.focuslist.app.data.prefs.TravelPrefs
+import com.focuslist.app.data.travel.TravelPoiClient
 import com.focuslist.app.data.travel.TravelRouteClient
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.parseThemeColor
@@ -96,16 +97,22 @@ import kotlinx.coroutines.launch
  * 4. 地图上连线标注方式与时长，地点标注停留时长。
  *
  * @param container 依赖容器
+ * @param focusTripId 从首页 FAB 进入时指定的行程 ID；<=0 表示不指定，沿用上次活跃行程
  */
 @Composable
-fun TravelScreen(container: AppContainer) {
+fun TravelScreen(container: AppContainer, focusTripId: Long = -1L) {
     val context = LocalContext.current
     val prefs = remember { TravelPrefs(context) }
     val routeClient = remember {
         TravelRouteClient { prefs.routeEndpoint.ifBlank { TravelRouteClient.DEFAULT_ENDPOINT } }
     }
+    val poiClient = remember { TravelPoiClient { prefs.amapKey } }
     val viewModel: TravelViewModel = viewModel {
         TravelViewModel(container.tripRepository, prefs, routeClient)
+    }
+    // 从首页 FAB 带行程 ID 进入时切到该行程；<=0 表示不指定，沿用上次活跃行程
+    LaunchedEffect(focusTripId) {
+        if (focusTripId > 0L) viewModel.selectTrip(focusTripId)
     }
     val trips by viewModel.trips.collectAsState()
     val plan by viewModel.plan.collectAsState()
@@ -370,7 +377,8 @@ fun TravelScreen(container: AppContainer) {
             onPickOnMap = {
                 sheet = null
                 picking = true
-            }
+            },
+            poiClient = poiClient
         )
 
         is TravelSheet.Stop -> {

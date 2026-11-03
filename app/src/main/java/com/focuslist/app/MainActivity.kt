@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.TravelExplore
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -71,6 +71,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 底部 Dock 导航目标：首页（日历）、专注、习惯、我的，共四项。
+ * 旅游规划不在 Dock，从首页 FAB「添加旅游规划」进入。
  *
  * @property route 路由名
  * @property label 标签文案（无障碍）
@@ -86,12 +87,12 @@ enum class Destinations(val route: String, val label: String, val icon: ImageVec
     /** 习惯打卡页 */
     HABITS("habits", "习惯", Icons.Default.Star),
 
-    /** 旅游规划页 */
-    TRAVEL("travel", "行程", Icons.Default.TravelExplore),
-
     /** 我的页 */
     MINE("mine", "我的", Icons.Default.Person)
 }
+
+/** 旅游规划页路由参数名 */
+const val TRAVEL_ARG_TRIP_ID = "tripId"
 
 /** 主 Tab 路由集合：仅这些路由显示 Dock 悬浮栏 */
 /** 通知点击直达习惯页 */
@@ -259,13 +260,29 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                         container = container,
                         onOpenNote = { id, date ->
                             navController.navigate("note_editor?noteId=$id&date=$date")
+                        },
+                        onOpenTravel = { tripId ->
+                            navController.navigate("travel?tripId=$tripId")
                         }
                     )
                 }
                 composable(Destinations.FOCUS.route) { FocusScreen(container) }
                 composable(Destinations.HABITS.route) { HabitsScreen(container) }
-                // 旅游规划：地图 + 行程（搜索地点 / 停留 / 交通方式）
-                composable(Destinations.TRAVEL.route) { TravelScreen(container) }
+                // 旅游规划：从首页 FAB 进入，不在 Dock；tripId=-1 进旅游主页，>0 直接编辑该行程
+                composable(
+                    route = "travel?tripId={$TRAVEL_ARG_TRIP_ID}",
+                    arguments = listOf(
+                        navArgument(TRAVEL_ARG_TRIP_ID) {
+                            type = NavType.LongType
+                            defaultValue = -1L
+                        }
+                    )
+                ) { entry ->
+                    TravelScreen(
+                        container = container,
+                        focusTripId = entry.arguments?.getLong(TRAVEL_ARG_TRIP_ID) ?: -1L
+                    )
+                }
                 composable(Destinations.MINE.route) {
                     SettingsScreen(
                         container = container,

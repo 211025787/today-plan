@@ -26,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
 import com.focuslist.app.data.backup.BackupCodec
+import com.focuslist.app.data.prefs.TravelPrefs
 import com.focuslist.app.data.backup.BackupPayload
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.ThemeColors
@@ -377,6 +379,35 @@ fun SettingsScreen(
                         "›",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // 地图与搜索
+            SectionLabel("地图与搜索")
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("高德地图 Key", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = "配置后可在行程搜索中按名称查找景点、酒店等具体地点；留空则只用内置目的地与地图点选。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    val travelPrefs = remember { TravelPrefs(context) }
+                    var amapKey by remember { mutableStateOf(travelPrefs.amapKey) }
+                    OutlinedTextField(
+                        value = amapKey,
+                        onValueChange = {
+                            amapKey = it
+                            travelPrefs.amapKey = it
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        placeholder = { Text("在高德开放平台申请的 Web 服务 Key") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
             }

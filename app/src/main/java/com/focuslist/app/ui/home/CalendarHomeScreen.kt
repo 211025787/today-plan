@@ -90,6 +90,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
 import com.focuslist.app.data.local.entity.PlanEntity
+import com.focuslist.app.data.local.entity.TripEntity
 import com.focuslist.app.ui.common.AntiBurnInGlow
 import com.focuslist.app.ui.common.DayDetailState
 import com.focuslist.app.ui.common.ExpandableFab
@@ -162,17 +163,19 @@ private fun monthStartForOffset(offset: Int): Long {
  *
  * @param container 依赖容器
  * @param onOpenNote 打开备注全屏页回调（备注 ID，<=0 表示新建；关联日期 0 点时间戳）
+ * @param onOpenTravel 打开旅游规划页回调（行程 ID；新建后传入）
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CalendarHomeScreen(
     container: AppContainer,
-    onOpenNote: (Long, Long) -> Unit = { _, _ -> }
+    onOpenNote: (Long, Long) -> Unit = { _, _ -> },
+    onOpenTravel: (Long) -> Unit = {}
 ) {
     // LocalContext 需在 Composable 作用域先取出，再传入 ViewModel 工厂
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val viewModel: HomeViewModel = viewModel {
-        HomeViewModel(container.planRepository, container.noteRepository, appContext)
+        HomeViewModel(container.planRepository, container.noteRepository, container.tripRepository, appContext)
     }
     val state by viewModel.uiState.collectAsState()
     val weekLogs by viewModel.weekLogs.collectAsState()
@@ -231,6 +234,8 @@ fun CalendarHomeScreen(
     // 添加计划/备注弹层
     var showAddPlan by remember { mutableStateOf(false) }
     var showQuickPlan by remember { mutableStateOf(false) }
+    // 新建旅游规划弹层
+    var showNewTrip by remember { mutableStateOf(false) }
     // 收工小结弹层
     var showWrap by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -402,7 +407,8 @@ fun CalendarHomeScreen(
                                         state.selectedDay ?: DateUtils.startOfDay(System.currentTimeMillis())
                                     )
                                 }
-                            )
+                            ),
+                            FabMenuItem(icon = "🧳", label = "添加旅游规划", onClick = { showNewTrip = true })
                         )
                     )
                 }
@@ -682,6 +688,15 @@ fun CalendarHomeScreen(
                                 )
                             }
 
+                            // 当日旅游行程卡片：emoji + 标题 + 日期范围，点击跳旅游规划页
+                            val dayTrips = viewModel.tripsOfDay(state, day)
+                            items(dayTrips, key = { "trip_${it.id}" }) { trip ->
+                                GradientTripCard(
+                                    trip = trip,
+                                    onClick = { onOpenTravel(trip.id) }
+                                )
+                            }
+
                             // 当日备注区：标题 + 最多 3 条预览 + 展开全部
                             if (dayNotes.isNotEmpty()) {
                                 item(span = { GridItemSpan(2) }, key = "notes_header") {
@@ -762,6 +777,24 @@ fun CalendarHomeScreen(
             onSave = { plan ->
                 scope.launch { container.planRepository.save(plan) }
                 showQuickPlan = false
+            }
+        )
+    }
+
+    // 新建旅游规划弹层：填标题 + 起止日期，创建空行程后跳旅游规划页
+    if (showNewTrip) {
+        NewTripDialog(
+            onDismiss = { showNewTrip = false },
+            onCreate = { title, start, end ->
+                showNewTrip = false
+                scope.launch {
+                    val tripId = container.tripRepository.createTrip(
+                        title = title,
+                        startDate = start,
+                        endDate = end
+                    )
+                    onOpenTravel(tripId)
+                }
             }
         )
     }
@@ -1004,6 +1037,7 @@ private fun HomeMonthGrid(state: HomeUiState, viewModel: HomeViewModel, monthSta
                         inMonth = inMonth,
                         isToday = dayStart == today,
                         plans = if (inMonth) viewModel.plansOfDay(state, dayStart) else emptyList(),
+                        trips = if (inMonth) viewModel.tripsOfDay(state, dayStart) else emptyList(),
                         state = state,
                         viewModel = viewModel,
                         onClick = { onSelectDay(dayStart) },
@@ -1022,6 +1056,7 @@ private fun HomeMonthGrid(state: HomeUiState, viewModel: HomeViewModel, monthSta
  * @param inMonth 是否属于当前展示月
  * @param isToday 是否今天
  * @param plans 当天生效计划（标签来源）
+ * @param trips 当天生效旅游行程（标签来源，与计划并列）
  * @param state 首页 UI 状态（算当日完成度）
  * @param viewModel 首页 ViewModel（算当日完成度）
  * @param onClick 点击回调
@@ -1033,6 +1068,7 @@ private fun DayCellHome(
     inMonth: Boolean,
     isToday: Boolean,
     plans: List<PlanEntity>,
+    trips: List<TripEntity>,
     state: HomeUiState,
     viewModel: HomeViewModel,
     onClick: () -> Unit,
@@ -1065,8 +1101,10 @@ private fun DayCellHome(
                     }
                 )
             }
-            // 事项标签（至多 3 个，超出显示 +N）：每行即迷你进度条，行尾小字为当日完成率数值
-            plans.take(3).forEach { plan ->
+            // 事项标签（计划 + 行程，至多 3 个，超出显示 +N）：计划标签带迷你进度条，行程标签纯色条
+            val planLabels = plans.take(3)
+            val tripLabels = trips.take((3 - planLabels.size).coerceAtLeast(0))
+            planLabels.forEach { plan ->
                 val goalSec = plan.dailyGoalMinutes * 60L
                 val progress = if (goalSec > 0) {
                     (viewModel.daySecondsOf(state, plan.id, dayStart) * 100 / goalSec).toInt()
@@ -1115,9 +1153,32 @@ private fun DayCellHome(
                     )
                 }
             }
-            if (plans.size > 3) {
+            // 行程标签：emoji + 名称，无进度条
+            tripLabels.forEach { trip ->
+                val baseColor = parseThemeColor(trip.colorHex)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 1.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(baseColor.copy(alpha = 0.18f))
+                        .padding(horizontal = 3.dp)
+                ) {
+                    Text(trip.emoji, fontSize = 8.sp)
+                    Text(
+                        text = trip.title,
+                        fontSize = 8.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f).padding(start = 2.dp)
+                    )
+                }
+            }
+            if (plans.size + trips.size > 3) {
                 Text(
-                    text = "+${plans.size - 3}",
+                    text = "+${plans.size + trips.size - 3}",
                     fontSize = 8.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 3.dp)
@@ -1521,4 +1582,194 @@ private fun RangeMonthGrid(
             }
         }
     }
+}
+/**
+ * 选中日的旅游行程卡片：行程色渐变背景 + emoji + 标题 + 日期范围，点击跳旅游规划页。
+ *
+ * @param trip 行程实体
+ * @param onClick 点击回调
+ */
+@Composable
+private fun GradientTripCard(trip: TripEntity, onClick: () -> Unit) {
+    val base = parseThemeColor(trip.colorHex)
+    // 由行程色派生的深色渐变
+    val deep = Color(base.red * 0.55f, base.green * 0.55f, base.blue * 0.55f)
+    val dateFmt = remember { SimpleDateFormat("M/d", Locale.CHINA) }
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(22.dp))
+            .background(Brush.linearGradient(listOf(base, deep)))
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(trip.emoji, fontSize = 28.sp)
+            Text(
+                text = trip.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (trip.startDate > 0L && trip.endDate > 0L) {
+                Text(
+                    text = "${dateFmt.format(Date(trip.startDate))} - ${dateFmt.format(Date(trip.endDate))}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.85f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 新建旅游规划对话框：填标题 + 选起止日期，创建后跳旅游规划页。
+ *
+ * @param onDismiss 关闭回调
+ * @param onCreate 创建回调（标题，起始日 0 点，结束日 0 点）
+ */
+@Composable
+private fun NewTripDialog(
+    onDismiss: () -> Unit,
+    onCreate: (title: String, startDate: Long, endDate: Long) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var startDate by remember { mutableStateOf(0L) }
+    var endDate by remember { mutableStateOf(0L) }
+    var pickingStart by remember { mutableStateOf(false) }
+    var pickingEnd by remember { mutableStateOf(false) }
+    val dateFmt = remember { SimpleDateFormat("yyyy/M/d", Locale.CHINA) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("添加旅游规划") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("行程名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // 起始日期行：点选弹内嵌月历
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { pickingStart = true }.padding(vertical = 4.dp)
+                ) {
+                    Text("起始日期", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        if (startDate > 0) dateFmt.format(Date(startDate)) else "未选择",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // 结束日期行
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { pickingEnd = true }.padding(vertical = 4.dp)
+                ) {
+                    Text("结束日期", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        if (endDate > 0) dateFmt.format(Date(endDate)) else "未选择",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onCreate(title.trim(), startDate, endDate) },
+                enabled = title.isNotBlank() && startDate > 0 && endDate >= startDate
+            ) { Text("创建") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+    if (pickingStart) {
+        SimpleMonthPicker(
+            onDismiss = { pickingStart = false },
+            onPick = {
+                startDate = it
+                pickingStart = false
+            }
+        )
+    }
+    if (pickingEnd) {
+        SimpleMonthPicker(
+            onDismiss = { pickingEnd = false },
+            onPick = {
+                endDate = it
+                pickingEnd = false
+            }
+        )
+    }
+}
+
+/**
+ * 简单月份选择器：内嵌 RangeMonthGrid 点选单日，带翻月按钮。
+ *
+ * @param onDismiss 关闭回调
+ * @param onPick 选中某天 0 点时间戳回调
+ */
+@Composable
+private fun SimpleMonthPicker(
+    onDismiss: () -> Unit,
+    onPick: (Long) -> Unit
+) {
+    var monthStart by remember { mutableStateOf(monthStartForOffset(0)) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance().apply { timeInMillis = monthStart; add(Calendar.MONTH, -1) }
+                    monthStart = cal.timeInMillis
+                }) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上月")
+                }
+                Text(
+                    text = monthTitleFormat.format(Date(monthStart)),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
+                )
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance().apply { timeInMillis = monthStart; add(Calendar.MONTH, 1) }
+                    monthStart = cal.timeInMillis
+                }) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下月")
+                }
+            }
+        },
+        text = {
+            Column {
+                // 星期表头
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    weekHeaders.forEach { h ->
+                        Text(
+                            text = h,
+                            style = MaterialTheme.typography.labelMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                RangeMonthGrid(
+                    displayMonth = monthStart,
+                    rangeStart = null,
+                    rangeEnd = null,
+                    onDateSelected = {
+                        onDismiss()
+                        onPick(it)
+                    }
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
 }

@@ -13,6 +13,8 @@ import com.focuslist.app.util.TravelMode
  * @property emoji 封面 emoji
  * @property colorHex 主题色，路线与站点标记都用它
  * @property note 备注
+ * @property startDate 行程起始日 0 点时间戳（毫秒）；0 表示未设置，不显示到日历
+ * @property endDate 行程结束日 0 点时间戳（毫秒）；0 表示未设置
  * @property createdAt 创建时间戳（毫秒）
  * @property updatedAt 最近更新时间戳（毫秒），行程库按它倒序
  */
@@ -23,6 +25,8 @@ data class TripEntity(
     val emoji: String = "🏔",
     val colorHex: String = "#4772FA",
     val note: String = "",
+    val startDate: Long = 0L,
+    val endDate: Long = 0L,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

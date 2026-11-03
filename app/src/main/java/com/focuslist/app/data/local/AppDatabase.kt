@@ -97,6 +97,17 @@ private val MIGRATION_4_5 = object : Migration(4, 5) {
 }
 
 /**
+ * v5 → v6：行程增加起止日期字段，用于在首页日历上显示旅游规划。
+ * 手写 ALTER 保留既有数据，旧行程 startDate/endDate 默认 0（不显示到日历）。
+ */
+private val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE trips ADD COLUMN startDate INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE trips ADD COLUMN endDate INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/**
  * 应用本地数据库（Room）：业务数据全部保存在设备。
  *
  * 除了旅游规划的底图瓦片与真实路线按需联网外，应用不发起其它网络请求，
@@ -108,6 +119,7 @@ private val MIGRATION_4_5 = object : Migration(4, 5) {
  * - v3：新增计划表（时间范围 + 每日目标时长）、计划当日累计表、快速备注表
  * - v4：备注增加标题、关联日期；新增备注附件表（图片/视频）
  * - v5：新增旅游规划表：行程、行程站点、站间交通（含真实路线折线）
+ * - v6：行程增加起止日期，用于首页日历显示旅游规划
  */
 @Database(
     entities = [
@@ -126,7 +138,7 @@ private val MIGRATION_4_5 = object : Migration(4, 5) {
         TripStopEntity::class,
         TripLegEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -203,7 +215,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, DB_NAME)
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }

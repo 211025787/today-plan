@@ -6,8 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.data.local.entity.PlanLogEntity
 import com.focuslist.app.data.local.entity.QuickNoteEntity
+import com.focuslist.app.data.local.entity.TripEntity
 import com.focuslist.app.data.repo.NoteRepository
 import com.focuslist.app.data.repo.PlanRepository
+import com.focuslist.app.data.repo.TripRepository
 import com.focuslist.app.ui.plan.PlanTimerEntry
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.ui.plan.PlanTimerService
@@ -34,6 +36,7 @@ import java.util.Locale
  * @property shownMonth 当前展示月份 1 号 0 点时间戳
  * @property monthOffset 当前月份相对本月的偏移（0 为当月），供翻页器反向同步
  * @property plans 全部未归档计划（前端按天过滤生效范围）
+ * @property trips 全部旅游行程（startDate>0 且落在该天的才显示到日历）
  * @property monthLogs 当前网格区间内的累计记录
  * @property selectedDay 选中日期（0 点）；null 表示日历展开状态
  * @property timers 并行秒表 Map：planId -> 条目（运行中或已暂停）
@@ -42,6 +45,7 @@ data class HomeUiState(
     val shownMonth: Long = 0L,
     val monthOffset: Int = 0,
     val plans: List<PlanEntity> = emptyList(),
+    val trips: List<TripEntity> = emptyList(),
     val monthLogs: List<PlanLogEntity> = emptyList(),
     val selectedDay: Long? = null,
     val timers: Map<Long, PlanTimerEntry> = emptyMap()
@@ -89,12 +93,14 @@ private const val WEIGHT_TITLE = 3
  *
  * @property planRepository 计划仓库
  * @property noteRepository 备注仓库（搜索备注用）
+ * @property tripRepository 行程仓库（日历显示旅游规划用）
  * @property appContext 应用上下文（启动前台计时服务用）
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val planRepository: PlanRepository,
     private val noteRepository: NoteRepository,
+    private val tripRepository: TripRepository,
     private val appContext: Context
 ) : ViewModel() {
 
@@ -231,6 +237,8 @@ class HomeViewModel(
             monthLogs = logs,
             timers = timers
         )
+    }.combine(tripRepository.observeTrips()) { state, trips ->
+        state.copy(trips = trips)
     }.combine(selectedDay) { state, day ->
         state.copy(selectedDay = day)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
@@ -415,6 +423,17 @@ class HomeViewModel(
      */
     fun plansOfDay(state: HomeUiState, dayStart: Long): List<PlanEntity> {
         return state.plans.filter { it.startDate <= dayStart && it.endDate >= dayStart }
+    }
+
+    /**
+     * 计算某天生效的旅游行程列表（startDate>0 且落在该天）。
+     *
+     * @param state 当前 UI 状态
+     * @param dayStart 当天 0 点时间戳
+     * @return 生效行程
+     */
+    fun tripsOfDay(state: HomeUiState, dayStart: Long): List<TripEntity> {
+        return state.trips.filter { it.startDate > 0L && it.startDate <= dayStart && it.endDate >= dayStart }
     }
 
     /**
