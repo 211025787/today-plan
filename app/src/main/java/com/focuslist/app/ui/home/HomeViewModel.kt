@@ -422,9 +422,8 @@ class HomeViewModel(
      * @return 生效计划
      */
     fun plansOfDay(state: HomeUiState, dayStart: Long): List<PlanEntity> {
-        // 按卡片尺寸降序排列：大卡片优先入位，小卡片填充空隙，减少 LazyGrid 空格
+        // 保持原始顺序（按创建时间），不按卡片尺寸重排，避免调整大小后位置跳变
         return state.plans.filter { it.startDate <= dayStart && it.endDate >= dayStart }
-            .sortedByDescending { it.cardSize }
     }
 
     /**
@@ -435,9 +434,8 @@ class HomeViewModel(
      * @return 生效行程
      */
     fun tripsOfDay(state: HomeUiState, dayStart: Long): List<TripEntity> {
-        // 按卡片尺寸降序排列，与计划卡片保持一致的紧凑排列策略
+        // 保持原始顺序，不按卡片尺寸重排
         return state.trips.filter { it.startDate > 0L && it.startDate <= dayStart && it.endDate >= dayStart }
-            .sortedByDescending { it.cardSize }
     }
 
     /**
