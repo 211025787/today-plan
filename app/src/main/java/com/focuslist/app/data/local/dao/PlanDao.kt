@@ -33,6 +33,16 @@ interface PlanDao {
     fun observeAll(): Flow<List<PlanEntity>>
 
     /**
+     * 观察生效范围与 [start, end] 相交的未归档计划（日历按月按需加载用，避免一次性全量读取）。
+     *
+     * @param start 区间起点 0 点（含）
+     * @param end 区间终点 0 点（含）
+     * @return 生效范围与区间相交的计划流
+     */
+    @Query("SELECT * FROM plans WHERE archived = 0 AND startDate <= :end AND endDate >= :start ORDER BY sortOrder ASC, id ASC")
+    fun observeInRange(start: Long, end: Long): Flow<List<PlanEntity>>
+
+    /**
      * 插入计划。
      *
      * @param plan 计划实体

@@ -428,31 +428,6 @@ fun StopEditorSheet(
                             step = if (mode == TravelMode.WALK || mode == TravelMode.BIKE) 10 else 30
                         )
 
-                        if (mode.needsStations) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            val labels = mode.stationLabels ?: ("出发站" to "到达站")
-                            val fromHints = remember(prev.id, prev.name, mode) {
-                                TravelPlaces.stationSuggestions(prev.name, prev.region, mode)
-                            }
-                            val toHints = remember(name, region, mode) {
-                                TravelPlaces.stationSuggestions(name, region, mode)
-                            }
-                            StationField(
-                                label = labels.first,
-                                value = fromStation,
-                                onChange = { fromStation = it },
-                                suggestions = fromHints,
-                                color = color
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            StationField(
-                                label = labels.second,
-                                value = toStation,
-                                onChange = { toStation = it },
-                                suggestions = toHints,
-                                color = color
-                            )
-                        }
 
                         if (mode.needsService && !mode.lineMode) {
                             Spacer(modifier = Modifier.height(12.dp))
@@ -587,53 +562,7 @@ fun StopEditorSheet(
 }
 
 /**
- * 站点输入框 + 常用站点建议。
- *
- * @param label 标题
- * @param value 当前值
- * @param onChange 变化回调
- * @param suggestions 建议站点
- * @param color 主题色
- */
-@Composable
-private fun StationField(
-    label: String,
-    value: String,
-    onChange: (String) -> Unit,
-    suggestions: List<String>,
-    color: Color
-) {
-    Column {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { onChange(it.take(20)) },
-            label = { Text(label) },
-            placeholder = { Text("选填，可输入具体站点") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (suggestions.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                suggestions.take(4).forEach { suggestion ->
-                    TravelChip(
-                        text = suggestion,
-                        selected = value == suggestion,
-                        color = color,
-                        onClick = { onChange(suggestion) }
-                    )
-                }
-            }
-        }
-    }
-}
 
-/**
  * 地铁线路多选：先选城市里已有的线路，再支持自定义补充。
  *
  * @param lines 已选线路（顺序即换乘顺序）

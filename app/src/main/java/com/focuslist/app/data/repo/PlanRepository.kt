@@ -41,6 +41,17 @@ class PlanRepository(private val planDao: PlanDao) {
     }
 
     /**
+     * 观察生效范围与 [start, end] 相交的未归档计划（日历按月按需加载用）。
+     *
+     * @param start 区间起点 0 点（含）
+     * @param end 区间终点 0 点（含）
+     * @return 生效范围与区间相交的计划流
+     */
+    fun observePlansInRange(start: Long, end: Long): Flow<List<PlanEntity>> {
+        return planDao.observeInRange(start, end)
+    }
+
+    /**
      * 观察日期区间内的累计记录（月历完成度聚合用）。
      *
      * @param start 区间起点 0 点（含）

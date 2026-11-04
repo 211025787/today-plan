@@ -64,7 +64,7 @@ fun GlassDockBar(items: List<DockItem>, currentRoute: String?, onSelect: (DockIt
                     .weight(1f)
                     .height(72.dp)
                     .navigationBarsPadding()
-                    .offset(y = -16.dp, x = 6.dp)
+                    .offset(y = -16.dp, x = 12.dp)
                     .glass(cornerRadius = 36.dp)
                     .padding(horizontal = 8.dp)
             ) {

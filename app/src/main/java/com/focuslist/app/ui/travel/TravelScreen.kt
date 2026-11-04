@@ -75,7 +75,9 @@ import com.focuslist.app.data.local.entity.TripStopEntity
 import com.focuslist.app.data.prefs.TravelPrefs
 import com.focuslist.app.data.travel.TravelPoiClient
 import com.focuslist.app.data.travel.TravelRouteClient
+import com.focuslist.app.ui.common.BottomFadeEdge
 import com.focuslist.app.ui.common.GlassCard
+import com.focuslist.app.ui.common.TopFadeEdge
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.Gcj02
 import com.focuslist.app.util.LatLon
@@ -188,6 +190,10 @@ fun TravelScreen(container: AppContainer, focusTripId: Long = -1L) {
             modifier = Modifier.fillMaxSize()
         )
 
+        // 渐变遮罩：只覆盖地图与路线内容，按钮/顶栏/行程条在渐变之后绘制，浮于渐变之上保持可见
+        BottomFadeEdge(modifier = Modifier.align(Alignment.BottomCenter))
+        TopFadeEdge(modifier = Modifier.align(Alignment.TopCenter))
+
         // 顶部：标题 + 地图库 / 添加 + 搜索条
         Column(
             modifier = Modifier
@@ -286,6 +292,7 @@ fun TravelScreen(container: AppContainer, focusTripId: Long = -1L) {
             }
         }
 
+
         // 底部横向行程条：地点与交通交替，点任意一段去编辑
         if (plan.hasTrip) {
             Box(
@@ -293,7 +300,7 @@ fun TravelScreen(container: AppContainer, focusTripId: Long = -1L) {
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp)
-                    .padding(bottom = 84.dp)
+                    .padding(bottom = 32.dp)
             ) {
                 ItineraryStrip(
                     plan = plan,

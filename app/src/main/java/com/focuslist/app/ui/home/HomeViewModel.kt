@@ -222,14 +222,17 @@ class HomeViewModel(
         monthOffset.flatMapLatest { offset ->
             val monthStart = monthStartOf(offset)
             val gridStart = gridStartOf(monthStart)
-            // 网格固定 6 行 7 列 = 42 天
-            planRepository.observeLogsBetween(gridStart, gridStart + 42 * DateUtils.DAY_MILLIS - 1)
+            // 提前预取前一个月和后一个月：区间向前后各扩 31 天，滑动到邻月时计划与完成度均已就绪
+            val rangeStart = gridStart - 31 * DateUtils.DAY_MILLIS
+            val rangeEnd = gridStart + 42 * DateUtils.DAY_MILLIS - 1 + 31 * DateUtils.DAY_MILLIS
+            combine(
+                planRepository.observeLogsBetween(rangeStart, rangeEnd),
+                planRepository.observePlansInRange(rangeStart, rangeEnd)
+            ) { logs, plans -> Triple(offset, logs, plans) }
         },
-        planRepository.observeAllPlans(),
         PlanTimerHolder.timers
-    ) { logs, plans, timers ->
-        Triple(logs, plans, timers)
-    }.combine(monthOffset) { (logs, plans, timers), offset ->
+    ) { data, timers ->
+        val (offset, logs, plans) = data
         HomeUiState(
             shownMonth = monthStartOf(offset),
             monthOffset = offset,
