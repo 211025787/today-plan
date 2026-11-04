@@ -725,11 +725,11 @@ fun CalendarHomeScreen(
                                 onTripClick = { trip -> onOpenTravel(trip.id) },
                                 onToggleTimer = { planId -> viewModel.toggleTimer(planId) },
                                 onToggleSelect = { planId -> viewModel.toggleSelectPlan(planId) },
-                                onPlanLayout = { planId, cols, rows, x, y ->
-                                    viewModel.updateCardLayout(planId, cols, rows, x, y)
+                                onPlanLayout = { planId, cols, rows, x, y, z ->
+                                    viewModel.updateCardLayout(planId, cols, rows, x, y, z)
                                 },
-                                onTripLayout = { tripId, cols, rows, x, y ->
-                                    viewModel.updateTripCardLayout(tripId, cols, rows, x, y)
+                                onTripLayout = { tripId, cols, rows, x, y, z ->
+                                    viewModel.updateTripCardLayout(tripId, cols, rows, x, y, z)
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             )

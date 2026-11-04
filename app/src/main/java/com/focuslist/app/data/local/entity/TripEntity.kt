@@ -20,6 +20,7 @@ import com.focuslist.app.util.TravelMode
  * @property cardRows 卡片占行数（1-4；0 表示沿用 cardSize）
  * @property cardX 卡片左上角列（0 起）；-1 表示还没手动摆放
  * @property cardY 卡片左上角行（0 起）；-1 表示还没手动摆放
+ * @property cardZ 最近一次移动/缩放的叠放时间戳；越大越靠上
  * @property createdAt 创建时间戳（毫秒）
  * @property updatedAt 最近更新时间戳（毫秒），行程库按它倒序
  */
@@ -37,6 +38,7 @@ data class TripEntity(
     val cardRows: Int = 0,
     val cardX: Int = -1,
     val cardY: Int = -1,
+    val cardZ: Long = 0L,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

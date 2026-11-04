@@ -44,8 +44,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -135,8 +137,8 @@ fun DayCardBoard(
     onTripClick: (TripEntity) -> Unit,
     onToggleTimer: (Long) -> Unit,
     onToggleSelect: (Long) -> Unit,
-    onPlanLayout: (Long, Int, Int, Int, Int) -> Unit,
-    onTripLayout: (Long, Int, Int, Int, Int) -> Unit,
+    onPlanLayout: (Long, Int, Int, Int, Int, Long) -> Unit,
+    onTripLayout: (Long, Int, Int, Int, Int, Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -201,7 +203,7 @@ fun DayCardBoard(
             if (needsPlace || needsShape) {
                 val key = "p${plan.id}"
                 if (autoPlaced.add(key)) {
-                    onPlanLayout(plan.id, box.cols, box.rows, box.x, box.y)
+                    onPlanLayout(plan.id, box.cols, box.rows, box.x, box.y, plan.cardZ)
                 }
             }
         }
@@ -214,7 +216,7 @@ fun DayCardBoard(
             if (needsPlace || needsShape) {
                 val key = "t${trip.id}"
                 if (autoPlaced.add(key)) {
-                    onTripLayout(trip.id, box.cols, box.rows, box.x, box.y)
+                    onTripLayout(trip.id, box.cols, box.rows, box.x, box.y, trip.cardZ)
                 }
             }
         }
@@ -235,11 +237,11 @@ fun DayCardBoard(
     var foregroundKey by remember { mutableStateOf<String?>(null) }
     val spacingPx = with(density) { spacing.toPx() }
 
-    fun commit(box: CardBox) {
+    fun commit(box: CardBox, z: Long) {
         if (box.trip) {
-            onTripLayout(box.key, box.cols, box.rows, box.x, box.y)
+            onTripLayout(box.key, box.cols, box.rows, box.x, box.y, z)
         } else {
-            onPlanLayout(box.key, box.cols, box.rows, box.x, box.y)
+            onPlanLayout(box.key, box.cols, box.rows, box.x, box.y, z)
         }
     }
 
@@ -306,7 +308,7 @@ fun DayCardBoard(
                 .coerceIn(0, CardBoard.COLUMNS - start.cols)
             val ny = ((start.y * stepPx + dragY) / stepPx).roundToInt().coerceAtLeast(0)
             // 松手时如果目标压到别人，自动吸到最近的空位
-            commit(CardBoard.resolveMove(packed, start, nx, ny))
+            commit(CardBoard.resolveMove(packed, start, nx, ny), System.currentTimeMillis())
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
         resetGesture()
@@ -319,7 +321,7 @@ fun DayCardBoard(
             val cols = (liveWidthPx + spacingPx) / stepPx
             val rows = (liveHeightPx + spacingPx) / stepPx
             val shape = CardBoard.nearestShape(cols, rows)
-            commit(CardBoard.resizeToAllowed(start, shape))
+            commit(CardBoard.resizeToAllowed(start, shape), System.currentTimeMillis())
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
         resetGesture()
@@ -348,8 +350,9 @@ fun DayCardBoard(
             )
         }
 
-        plans.forEachIndexed { index, data ->
-            val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
+        plans.indices.sortedBy { plans[it].plan.cardZ }.forEach { index ->
+            val data = plans[index]
+            val box = planBoxes.getOrNull(index) ?: return@forEach
             val key = "p${data.plan.id}"
             val active = activeKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
@@ -408,8 +411,9 @@ fun DayCardBoard(
             )
         }
 
-        trips.forEachIndexed { index, data ->
-            val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
+        trips.indices.sortedBy { trips[it].trip.cardZ }.forEach { index ->
+            val data = trips[index]
+            val box = tripBoxes.getOrNull(index) ?: return@forEach
             val key = "t${data.trip.id}"
             val active = activeKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
@@ -1167,23 +1171,29 @@ private fun ResizeGrip(
                 .padding(end = 5.dp, bottom = 5.dp)
                 .size(30.dp)
         ) {
-            val stroke = 4.5.dp.toPx()
-            // 更醒目的圆角括号，类似系统 Dock 右下角的白色角标
-            drawArc(
+            val stroke = 4.dp.toPx()
+            val inset = 3.dp.toPx()
+            val radius = 7.dp.toPx()
+            // 更醒目的白色直角括号，类似系统 Dock 右下角的白色角标
+            val path = Path().apply {
+                moveTo(size.width * 0.16f, size.height - inset)
+                lineTo(size.width - inset - radius, size.height - inset)
+                quadraticBezierTo(
+                    size.width - inset,
+                    size.height - inset,
+                    size.width - inset,
+                    size.height - inset - radius
+                )
+                lineTo(size.width - inset, size.height * 0.16f)
+            }
+            drawPath(
+                path = path,
                 color = Color.White.copy(alpha = 0.96f),
-                startAngle = 0f,
-                sweepAngle = 90f,
-                useCenter = false,
-                topLeft = Offset(stroke / 2f, stroke / 2f),
-                size = Size(size.width - stroke, size.height - stroke),
-                style = Stroke(stroke, cap = StrokeCap.Round)
-            )
-            drawLine(
-                color = Color.White.copy(alpha = 0.75f),
-                start = Offset(size.width * 0.56f, size.height * 0.9f),
-                end = Offset(size.width * 0.9f, size.height * 0.56f),
-                strokeWidth = 1.8.dp.toPx(),
-                cap = StrokeCap.Round
+                style = Stroke(
+                    width = stroke,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
             )
         }
     }

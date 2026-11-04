@@ -144,6 +144,18 @@ private val MIGRATION_8_9 = object : Migration(8, 9) {
 }
 
 /**
+ * v9 → v10：卡片增加叠放时间戳，缩放/移动后最新操作的卡片保持在最上层；
+ * 旧数据默认 0（按原顺序绘制）。
+ */
+private val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        listOf("plans", "trips").forEach { table ->
+            db.execSQL("ALTER TABLE $table ADD COLUMN cardZ INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+}
+
+/**
  * 应用本地数据库（Room）：业务数据全部保存在设备。
  *
  * 除了旅游规划的底图瓦片与真实路线按需联网外，应用不发起其它网络请求，
@@ -159,6 +171,7 @@ private val MIGRATION_8_9 = object : Migration(8, 9) {
  * - v7：计划增加卡片尺寸，日历网格中每个计划可自定义 1×1 / 1×2 / 2×1 / 2×2
  * - v8：行程增加卡片尺寸，旅游规划卡片同样可自定义大小
  * - v9：卡片改为自由画布：占列/占行（1-4）与左上角坐标（列/行）
+ * - v10：卡片增加叠放时间戳，缩放/移动后保持最新卡片置顶
  */
 @Database(
     entities = [
@@ -177,7 +190,7 @@ private val MIGRATION_8_9 = object : Migration(8, 9) {
         TripStopEntity::class,
         TripLegEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -254,7 +267,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, DB_NAME)
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }

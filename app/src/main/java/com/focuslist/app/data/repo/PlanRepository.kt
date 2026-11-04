@@ -105,9 +105,10 @@ class PlanRepository(private val planDao: PlanDao) {
      * @param rows 占行数（1-4）
      * @param x 左上角列（0 起）
      * @param y 左上角行（0 起）
+     * @param z 叠放时间戳；越大越靠上
      */
-    suspend fun updateCardLayout(planId: Long, cols: Int, rows: Int, x: Int, y: Int) {
-        planDao.updateCardLayout(planId, cols, rows, x, y)
+    suspend fun updateCardLayout(planId: Long, cols: Int, rows: Int, x: Int, y: Int, z: Long) {
+        planDao.updateCardLayout(planId, cols, rows, x, y, z)
     }
 
     /**
