@@ -1,6 +1,5 @@
 package com.focuslist.app.ui.home
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,7 +50,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +70,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
@@ -143,21 +141,25 @@ fun DayCardBoard(
 ) {
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
-    val context = LocalContext.current
     val step = cellWidth + spacing
     val stepPx = with(density) { step.toPx() }
 
-    // 数据库里的尺寸/坐标 → 算法占位。cardCols/cardRows 为 0 的旧数据用 cardSize 兜底。
+    // 数据库里的尺寸/坐标 → 算法占位。cardCols/cardRows 为 0 的旧数据用 cardSize 兜底；
+    // 非六种规格（例如之前拖出的 4×1 / 3×2）在这里归一化到最近的合法档位。
     val boxes = remember(plans, trips) {
         buildList {
             plans.forEach { data ->
                 val plan = data.plan
+                val shape = CardBoard.allowedShape(
+                    if (plan.cardCols > 0) plan.cardCols else legacyCols(plan.cardSize),
+                    if (plan.cardRows > 0) plan.cardRows else legacyRows(plan.cardSize)
+                )
                 add(
                     CardBox(
                         key = plan.id,
                         trip = false,
-                        cols = if (plan.cardCols > 0) plan.cardCols else legacyCols(plan.cardSize),
-                        rows = if (plan.cardRows > 0) plan.cardRows else legacyRows(plan.cardSize),
+                        cols = shape.cols,
+                        rows = shape.rows,
                         x = plan.cardX,
                         y = plan.cardY
                     )
@@ -165,12 +167,16 @@ fun DayCardBoard(
             }
             trips.forEach { data ->
                 val trip = data.trip
+                val shape = CardBoard.allowedShape(
+                    if (trip.cardCols > 0) trip.cardCols else legacyCols(trip.cardSize),
+                    if (trip.cardRows > 0) trip.cardRows else legacyRows(trip.cardSize)
+                )
                 add(
                     CardBox(
                         key = trip.id,
                         trip = true,
-                        cols = if (trip.cardCols > 0) trip.cardCols else legacyCols(trip.cardSize),
-                        rows = if (trip.cardRows > 0) trip.cardRows else legacyRows(trip.cardSize),
+                        cols = shape.cols,
+                        rows = shape.rows,
                         x = trip.cardX,
                         y = trip.cardY
                     )
@@ -182,25 +188,32 @@ fun DayCardBoard(
     val planBoxes = packed.take(plans.size)
     val tripBoxes = packed.drop(plans.size)
 
-    // 旧卡 / 新卡第一次出现：自动补位并写回，从此位置固定
+    // 旧卡 / 新卡第一次出现：自动补位并写回，从此位置固定；
+    // 已有的非六种规格也一并写回最近的合法档位。
     val autoPlaced = remember { mutableSetOf<String>() }
     LaunchedEffect(packed) {
         plans.forEachIndexed { index, data ->
             val plan = data.plan
-            if (plan.cardX < 0 || plan.cardY < 0) {
+            val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
+            val needsPlace = plan.cardX < 0 || plan.cardY < 0
+            val needsShape = plan.cardCols > 0 &&
+                (plan.cardCols != box.cols || plan.cardRows != box.rows)
+            if (needsPlace || needsShape) {
                 val key = "p${plan.id}"
                 if (autoPlaced.add(key)) {
-                    val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
                     onPlanLayout(plan.id, box.cols, box.rows, box.x, box.y)
                 }
             }
         }
         trips.forEachIndexed { index, data ->
             val trip = data.trip
-            if (trip.cardX < 0 || trip.cardY < 0) {
+            val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
+            val needsPlace = trip.cardX < 0 || trip.cardY < 0
+            val needsShape = trip.cardCols > 0 &&
+                (trip.cardCols != box.cols || trip.cardRows != box.rows)
+            if (needsPlace || needsShape) {
                 val key = "t${trip.id}"
                 if (autoPlaced.add(key)) {
-                    val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
                     onTripLayout(trip.id, box.cols, box.rows, box.x, box.y)
                 }
             }
@@ -213,12 +226,14 @@ fun DayCardBoard(
     var activeStart by remember { mutableStateOf<CardBox?>(null) }
     var dragX by remember { mutableFloatStateOf(0f) }
     var dragY by remember { mutableFloatStateOf(0f) }
-    var liveCols by remember { mutableIntStateOf(1) }
-    var liveRows by remember { mutableIntStateOf(1) }
-    var requestedCols by remember { mutableIntStateOf(1) }
-    var requestedRows by remember { mutableIntStateOf(1) }
+    // 缩放中的实时像素宽高：跟手连续变化，松手才吸附到六种规格
+    var liveWidthPx by remember { mutableFloatStateOf(0f) }
+    var liveHeightPx by remember { mutableFloatStateOf(0f) }
+    var startWidthPx by remember { mutableFloatStateOf(0f) }
+    var startHeightPx by remember { mutableFloatStateOf(0f) }
     // 最近操作的卡片置顶：缩放后压在邻居上时，用户仍能完整看到自己刚调整的卡
     var foregroundKey by remember { mutableStateOf<String?>(null) }
+    val spacingPx = with(density) { spacing.toPx() }
 
     fun commit(box: CardBox) {
         if (box.trip) {
@@ -236,8 +251,6 @@ fun DayCardBoard(
         activeStart = box
         dragX = 0f
         dragY = 0f
-        liveCols = box.cols
-        liveRows = box.rows
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
     }
 
@@ -249,10 +262,10 @@ fun DayCardBoard(
         activeStart = box
         dragX = 0f
         dragY = 0f
-        liveCols = box.cols
-        liveRows = box.rows
-        requestedCols = box.cols
-        requestedRows = box.rows
+        startWidthPx = box.cols * stepPx - spacingPx
+        startHeightPx = box.rows * stepPx - spacingPx
+        liveWidthPx = startWidthPx
+        liveHeightPx = startHeightPx
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
     }
 
@@ -267,14 +280,13 @@ fun DayCardBoard(
         dragX += dx
         dragY += dy
         val start = activeStart ?: return
-        val wantCols = ((start.cols * stepPx + dragX) / stepPx).roundToInt().coerceIn(1, CardBoard.MAX_SPAN)
-        val wantRows = ((start.rows * stepPx + dragY) / stepPx).roundToInt().coerceIn(1, CardBoard.MAX_SPAN)
-        requestedCols = wantCols
-        requestedRows = wantRows
-        // 不盖住邻居：拖到邻居边界就停住，松手时提示先挪开
-        val (freeCols, freeRows) = CardBoard.maxFreeResize(packed, start, wantCols, wantRows)
-        liveCols = freeCols
-        liveRows = freeRows
+        // 连续跟手：卡片的右下角跟着手指走，不做整格吸附；
+        // 最小 1×1，最大 3 列 / 3 行，右边界限制在当前行剩余列数内。
+        val minWidth = stepPx - spacingPx
+        val maxWidth = minOf(3, CardBoard.COLUMNS - start.x) * stepPx - spacingPx
+        val maxHeight = 3 * stepPx - spacingPx
+        liveWidthPx = (startWidthPx + dragX).coerceIn(minWidth, maxWidth)
+        liveHeightPx = (startHeightPx + dragY).coerceIn(minWidth, maxHeight)
     }
 
     fun resetGesture() {
@@ -283,6 +295,8 @@ fun DayCardBoard(
         activeStart = null
         dragX = 0f
         dragY = 0f
+        liveWidthPx = 0f
+        liveHeightPx = 0f
     }
 
     fun endMove() {
@@ -301,21 +315,26 @@ fun DayCardBoard(
     fun endResize() {
         val start = activeStart
         if (gesture == BoardGesture.RESIZE && start != null) {
-            val resized = CardBoard.resize(start, liveCols, liveRows)
-            commit(resized)
-            if (requestedCols > liveCols || requestedRows > liveRows) {
-                Toast.makeText(context, "空间不够，先把旁边的卡片挪开", Toast.LENGTH_SHORT).show()
-            }
+            // 松手才把实时宽高吸附到允许的六种规格
+            val cols = (liveWidthPx + spacingPx) / stepPx
+            val rows = (liveHeightPx + spacingPx) / stepPx
+            val shape = CardBoard.nearestShape(cols, rows)
+            commit(CardBoard.resizeToAllowed(start, shape))
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
         resetGesture()
     }
 
-    val activeRows = when {
-        gesture == BoardGesture.RESIZE && activeStart != null -> activeStart!!.y + liveRows
-        else -> CardBoard.canvasRows(packed)
+    val activeResizeBottomPx = if (gesture == BoardGesture.RESIZE && activeStart != null) {
+        activeStart!!.y * stepPx + liveHeightPx + spacingPx
+    } else {
+        0f
     }
-    val boardRows = maxOf(CardBoard.canvasRows(packed), activeRows, 1)
+    val boardRows = maxOf(
+        CardBoard.canvasRows(packed),
+        ceil(activeResizeBottomPx / stepPx).toInt(),
+        1
+    )
     val boardHeight = cellWidth * boardRows + spacing * (boardRows - 1)
 
     Box(modifier = modifier.fillMaxWidth().height(boardHeight)) {
@@ -333,21 +352,33 @@ fun DayCardBoard(
             val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
             val key = "p${data.plan.id}"
             val active = activeKey == key
-            val cols = if (active && gesture == BoardGesture.RESIZE) liveCols else box.cols
-            val rows = if (active && gesture == BoardGesture.RESIZE) liveRows else box.rows
-            val x = if (active && gesture == BoardGesture.RESIZE) {
-                box.x.coerceAtMost(CardBoard.COLUMNS - cols).coerceAtLeast(0)
+            val resizing = active && gesture == BoardGesture.RESIZE
+            val faceCols = if (resizing) {
+                ((liveWidthPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
             } else {
-                box.x
+                box.cols
             }
-            val xPx = x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
+            val faceRows = if (resizing) {
+                ((liveHeightPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
+            } else {
+                box.rows
+            }
+            val xPx = box.x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
             val yPx = box.y * stepPx + if (active && gesture == BoardGesture.MOVE) dragY else 0f
-            val w = cellWidth * cols + spacing * (cols - 1)
-            val h = cellWidth * rows + spacing * (rows - 1)
+            val w = if (resizing) {
+                with(density) { liveWidthPx.toDp() }
+            } else {
+                cellWidth * box.cols + spacing * (box.cols - 1)
+            }
+            val h = if (resizing) {
+                with(density) { liveHeightPx.toDp() }
+            } else {
+                cellWidth * box.rows + spacing * (box.rows - 1)
+            }
             PlanBoardCard(
                 data = data,
-                cols = cols,
-                rows = rows,
+                cols = faceCols,
+                rows = faceRows,
                 width = w,
                 height = h,
                 manageMode = manageMode,
@@ -381,21 +412,33 @@ fun DayCardBoard(
             val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
             val key = "t${data.trip.id}"
             val active = activeKey == key
-            val cols = if (active && gesture == BoardGesture.RESIZE) liveCols else box.cols
-            val rows = if (active && gesture == BoardGesture.RESIZE) liveRows else box.rows
-            val x = if (active && gesture == BoardGesture.RESIZE) {
-                box.x.coerceAtMost(CardBoard.COLUMNS - cols).coerceAtLeast(0)
+            val resizing = active && gesture == BoardGesture.RESIZE
+            val faceCols = if (resizing) {
+                ((liveWidthPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
             } else {
-                box.x
+                box.cols
             }
-            val xPx = x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
+            val faceRows = if (resizing) {
+                ((liveHeightPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
+            } else {
+                box.rows
+            }
+            val xPx = box.x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
             val yPx = box.y * stepPx + if (active && gesture == BoardGesture.MOVE) dragY else 0f
-            val w = cellWidth * cols + spacing * (cols - 1)
-            val h = cellWidth * rows + spacing * (rows - 1)
+            val w = if (resizing) {
+                with(density) { liveWidthPx.toDp() }
+            } else {
+                cellWidth * box.cols + spacing * (box.cols - 1)
+            }
+            val h = if (resizing) {
+                with(density) { liveHeightPx.toDp() }
+            } else {
+                cellWidth * box.rows + spacing * (box.rows - 1)
+            }
             TripBoardCard(
                 trip = data.trip,
-                cols = cols,
-                rows = rows,
+                cols = faceCols,
+                rows = faceRows,
                 width = w,
                 height = h,
                 active = active,
@@ -617,15 +660,15 @@ private fun PlanFace(
             "${data.todaySec / 60} / ${plan.dailyGoalMinutes} 分"
         }
         val startPad = if (manageMode) 38.dp else 10.dp
-        val endPad = if (manageMode) 8.dp else 34.dp
-        val bottomPad = if (manageMode) 8.dp else 28.dp
+        val endPad = if (manageMode) 8.dp else 38.dp
+        val bottomPad = if (manageMode) 8.dp else 36.dp
 
         when {
             tiny -> {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 8.dp, end = 28.dp, top = 7.dp, bottom = 22.dp)
+                        .padding(start = 8.dp, end = 36.dp, top = 7.dp, bottom = 34.dp)
                 ) {
                     Text(text = plan.icon, fontSize = 17.sp)
                     Spacer(modifier = Modifier.weight(1f))
@@ -661,14 +704,14 @@ private fun PlanFace(
                         fontWeight = FontWeight.SemiBold,
                         maxLines = if (h >= 150.dp) 3 else 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 28.dp)
+                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 32.dp)
                     )
                     if (data.paceText != null && !manageMode && h >= 126.dp) {
                         PaceChip(text = data.paceText)
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(end = if (manageMode) 0.dp else 26.dp),
+                        modifier = Modifier.fillMaxWidth().padding(end = if (manageMode) 0.dp else 36.dp),
                         verticalAlignment = Alignment.Bottom
                     ) {
                         Text(
@@ -689,12 +732,12 @@ private fun PlanFace(
                         fontSize = 9.5.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 26.dp)
+                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 36.dp)
                     )
                     ProgressBar(
                         percent = percent,
                         color = Color.White,
-                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 26.dp)
+                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 36.dp)
                     )
                     Text(
                         text = goalLine,
@@ -702,7 +745,7 @@ private fun PlanFace(
                         fontSize = 8.5.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 26.dp)
+                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 36.dp)
                     )
                     if (plan.note.isNotBlank() && h >= 238.dp) {
                         Text(
@@ -711,7 +754,7 @@ private fun PlanFace(
                             fontSize = 9.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(end = if (manageMode) 0.dp else 26.dp)
+                            modifier = Modifier.padding(end = if (manageMode) 0.dp else 36.dp)
                         )
                     }
                 }
@@ -721,7 +764,7 @@ private fun PlanFace(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = startPad, end = endPad, top = 7.dp, bottom = 24.dp),
+                        .padding(start = startPad, end = endPad, top = 7.dp, bottom = 34.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -764,7 +807,7 @@ private fun PlanFace(
                         ProgressBar(
                             percent = percent,
                             color = Color.White,
-                            modifier = Modifier.padding(end = if (manageMode) 0.dp else 26.dp)
+                            modifier = Modifier.padding(end = if (manageMode) 0.dp else 34.dp)
                         )
                     }
                 }
@@ -812,7 +855,7 @@ private fun PlanFace(
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(end = if (manageMode) 0.dp else 28.dp),
+                        modifier = Modifier.fillMaxWidth().padding(end = if (manageMode) 0.dp else 36.dp),
                         verticalAlignment = Alignment.Bottom
                     ) {
                         Text(
@@ -836,12 +879,12 @@ private fun PlanFace(
                         fontSize = 8.5.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 28.dp)
+                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 36.dp)
                     )
                     ProgressBar(
                         percent = percent,
                         color = Color.White,
-                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 28.dp)
+                        modifier = Modifier.padding(end = if (manageMode) 0.dp else 36.dp)
                     )
                 }
             }
@@ -923,7 +966,7 @@ private fun TripBoardCard(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(start = 8.dp, end = 24.dp, top = 7.dp, bottom = 22.dp),
+                            .padding(start = 8.dp, end = 34.dp, top = 7.dp, bottom = 30.dp),
                         horizontalAlignment = Alignment.Start
                     ) {
                         Text(text = trip.emoji, fontSize = 21.sp)
@@ -942,7 +985,7 @@ private fun TripBoardCard(
                     Row(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(start = 10.dp, end = 34.dp, top = 7.dp, bottom = 24.dp),
+                            .padding(start = 10.dp, end = 38.dp, top = 7.dp, bottom = 32.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(text = trip.emoji, fontSize = 19.sp)
@@ -972,7 +1015,7 @@ private fun TripBoardCard(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(start = 12.dp, end = 12.dp, top = 9.dp, bottom = 28.dp),
+                            .padding(start = 12.dp, end = 12.dp, top = 9.dp, bottom = 34.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(text = trip.emoji, fontSize = 25.sp)
@@ -1097,11 +1140,10 @@ private fun ResizeGrip(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val density = LocalDensity.current
     Box(
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.BottomEnd,
         modifier = modifier
-            .size(44.dp)
+            .size(56.dp)
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = {
@@ -1120,22 +1162,27 @@ private fun ResizeGrip(
                 )
             }
     ) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.size(20.dp)) {
-            val stroke = 2.dp.toPx()
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .padding(end = 5.dp, bottom = 5.dp)
+                .size(30.dp)
+        ) {
+            val stroke = 4.5.dp.toPx()
+            // 更醒目的圆角括号，类似系统 Dock 右下角的白色角标
             drawArc(
-                color = Color.White.copy(alpha = 0.85f),
+                color = Color.White.copy(alpha = 0.96f),
                 startAngle = 0f,
                 sweepAngle = 90f,
                 useCenter = false,
-                topLeft = Offset(size.width * 0.12f, size.height * 0.12f),
-                size = Size(size.width * 0.76f, size.height * 0.76f),
+                topLeft = Offset(stroke / 2f, stroke / 2f),
+                size = Size(size.width - stroke, size.height - stroke),
                 style = Stroke(stroke, cap = StrokeCap.Round)
             )
             drawLine(
-                color = Color.White.copy(alpha = 0.65f),
-                start = Offset(size.width * 0.58f, size.height * 0.9f),
-                end = Offset(size.width * 0.9f, size.height * 0.58f),
-                strokeWidth = 1.4.dp.toPx(),
+                color = Color.White.copy(alpha = 0.75f),
+                start = Offset(size.width * 0.56f, size.height * 0.9f),
+                end = Offset(size.width * 0.9f, size.height * 0.56f),
+                strokeWidth = 1.8.dp.toPx(),
                 cap = StrokeCap.Round
             )
         }

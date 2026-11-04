@@ -177,35 +177,51 @@ class CardBoardTest {
     }
 
     @Test
-    fun maxFreeResize_stopsAtNeighborBoundary() {
-        val moving = card(1, 1, 1, x = 0, y = 0)
-        val right = card(2, 1, 1, x = 1, y = 0)
-        val below = card(3, 1, 1, x = 0, y = 1)
-        val (cols, rows) = CardBoard.maxFreeResize(
-            listOf(moving, right, below), moving, requestedCols = 2, requestedRows = 2
+    fun allowedShapes_areExactlySix() {
+        assertEquals(
+            listOf(1 to 1, 1 to 2, 2 to 1, 2 to 2, 1 to 3, 3 to 1),
+            CardBoard.ALLOWED_SHAPES.map { it.cols to it.rows }
         )
-        assertEquals(1, cols)
-        assertEquals(1, rows)
+        assertTrue(CardBoard.isAllowed(2, 2))
+        assertFalse(CardBoard.isAllowed(3, 2))
+        assertFalse(CardBoard.isAllowed(4, 1))
     }
 
     @Test
-    fun maxFreeResize_canGrowOneDirection() {
-        val moving = card(1, 1, 1, x = 0, y = 0)
-        val right = card(2, 1, 1, x = 1, y = 0)
-        val (cols, rows) = CardBoard.maxFreeResize(
-            listOf(moving, right), moving, requestedCols = 2, requestedRows = 2
-        )
-        assertEquals(1, cols)
-        assertEquals(2, rows)
+    fun nearestShape_snapsToSixPresets() {
+        assertEquals(1 to 1, CardBoard.nearestShape(1f, 1f).let { it.cols to it.rows })
+        assertEquals(2 to 1, CardBoard.nearestShape(2.2f, 1.1f).let { it.cols to it.rows })
+        assertEquals(1 to 2, CardBoard.nearestShape(1.1f, 2.2f).let { it.cols to it.rows })
+        assertEquals(2 to 2, CardBoard.nearestShape(2.1f, 2.1f).let { it.cols to it.rows })
+        assertEquals(3 to 1, CardBoard.nearestShape(3.1f, 1.1f).let { it.cols to it.rows })
+        assertEquals(1 to 3, CardBoard.nearestShape(1.1f, 3.1f).let { it.cols to it.rows })
     }
 
     @Test
-    fun maxFreeResize_returnsRequestWhenFree() {
-        val moving = card(1, 1, 1, x = 0, y = 0)
-        val (cols, rows) = CardBoard.maxFreeResize(
-            listOf(moving), moving, requestedCols = 3, requestedRows = 2
-        )
-        assertEquals(3, cols)
-        assertEquals(2, rows)
+    fun nearestShape_tiesPreferEarlierLargerShape() {
+        // 3×2 到 2×2 与 3×1 距离都是 1；列表里 2×2 在前
+        val shape = CardBoard.nearestShape(3f, 2f)
+        assertEquals(2, shape.cols)
+        assertEquals(2, shape.rows)
+    }
+
+    @Test
+    fun allowedShape_normalizesLegacyArbitrarySizes() {
+        assertEquals(3, CardBoard.allowedShape(4, 1).cols)
+        assertEquals(1, CardBoard.allowedShape(4, 1).rows)
+        assertEquals(2, CardBoard.allowedShape(3, 2).cols)
+        assertEquals(2, CardBoard.allowedShape(3, 2).rows)
+        assertEquals(1, CardBoard.allowedShape(1, 4).cols)
+        assertEquals(3, CardBoard.allowedShape(1, 4).rows)
+    }
+
+    @Test
+    fun resizeToAllowed_clampsXIntoColumns() {
+        val original = card(1, 1, 1, x = 3, y = 2)
+        val resized = CardBoard.resizeToAllowed(original, CardShape(2, 2))
+        assertEquals(2, resized.cols)
+        assertEquals(2, resized.rows)
+        assertEquals(2, resized.x)
+        assertEquals(2, resized.y)
     }
 }

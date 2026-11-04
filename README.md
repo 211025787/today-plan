@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.0.83-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.84-4772FA" alt="version">
 </p>
 
 **今日规划**是一个以离线为主的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来；新增的「行程」页还能把下一趟旅行直接画在地图上。所有计划、记录与行程都只保存在本机；只有旅游规划里的地图底图与真实道路路线需要联网获取，不会上传任何个人数据。
@@ -72,7 +72,7 @@ ffmpeg -y -framerate 25 -i .tmp_docs/frames/f%05d.jpg -i .tmp_docs/promo.wav \
 - **按日期范围删除**：只移除区间内的部分，范围外日期自动保留（覆盖中间时计划会被拆成前后两段）；
 - 格子高度自适应屏幕，底部自动避开系统导航条与悬浮 Dock。
 - **文字永远可读**：进度填充调淡到 28% 不透明度，标题与完成率数字统一深色——任何计划色下都读得清，也不再出现黑白混杂。
-- **卡片自由摆放**：长按卡片拖到任意位置，松手吸附到最近空格（不会盖住别的卡）；右下角弧形手柄**直接拖动改大小**，碰到邻居边界会停住并提示「空间不够」，不再弹「选尺寸」弹层；位置与大小写入数据库，之后不会再自动重排。卡片内容按实际宽高自适应，计时按钮和缩放手柄都有独立留白，不会压住文字。
+- **卡片自由摆放**：长按卡片拖到任意位置，松手吸附到最近空格；右下角是一个更大的白色圆角角标，**按住直接拖**，拖动中卡片宽高实时跟手，松手才吸附到 `1×1 / 1×2 / 2×1 / 2×2 / 1×3 / 3×1` 六种规格；缩放时若旁边有卡会临时盖住，松手后该卡置顶，长按可挪开。位置与大小写入数据库，之后不会再自动重排。卡片内容按实际宽高自适应，计时按钮和缩放手柄都有独立留白，不会压住文字。
 
 ### 🗺 旅游规划：把下一趟旅行画在地图上
 
@@ -443,7 +443,7 @@ build.bat test              # 只跑单元测试
 ./gradlew :app:testDebugUnitTest      # 等价于 build.bat test
 ```
 
-当前共 **657 条**用例，覆盖所有能脱离 Android 框架的纯逻辑（日期、解析、统计、文案、行程几何、目的地搜索与卡片自由排版）。
+当前共 **659 条**用例，覆盖所有能脱离 Android 框架的纯逻辑（日期、解析、统计、文案、行程几何、目的地搜索与卡片自由排版）。
 
 | 测试类 | 覆盖内容 |
 | --- | --- |
