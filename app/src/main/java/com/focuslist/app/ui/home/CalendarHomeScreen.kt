@@ -683,7 +683,7 @@ fun CalendarHomeScreen(
                             items(
                                 dayPlans,
                                 key = { it.id },
-                                span = { if (resizingPlan?.id == it.id) GridItemSpan(4) else GridItemSpan(PlanCardSize.of(it.cardSize).cols) }
+                                span = { GridItemSpan(PlanCardSize.of(it.cardSize).cols) }
                             ) { plan ->
                                 // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
                                 val totalSec = viewModel.daySecondsOf(state, plan.id, day)
@@ -714,7 +714,6 @@ fun CalendarHomeScreen(
                                     cardSize = PlanCardSize.of(plan.cardSize),
                                     cellWidth = cellWidth,
                                     gridSpacing = gridSpacing,
-                                    resizing = resizingPlan?.id == plan.id,
                                     onToggleTimer = { viewModel.toggleTimer(plan.id) },
                                     onClick = {
                                         if (resizingPlan?.id == plan.id) {
@@ -732,14 +731,7 @@ fun CalendarHomeScreen(
                                             menuPlan = plan
                                         }
                                     },
-                                    onResizeEnd = { newSize ->
-                                        viewModel.updateCardSize(plan.id, newSize.code)
-                                        resizingPlan = null
-                                    },
-                                    onEnterResize = { resizingPlan = plan },
-                                    onExitResize = {
-                                        resizingPlan = null
-                                    }
+                                    onEnterResize = { resizingPlan = plan }
                                 )
                             }
 
@@ -748,23 +740,15 @@ fun CalendarHomeScreen(
                             items(
                                 dayTrips,
                                 key = { "trip_${it.id}" },
-                                span = { if (resizingTrip?.id == it.id) GridItemSpan(4) else GridItemSpan(PlanCardSize.of(it.cardSize).cols) }
+                                span = { GridItemSpan(PlanCardSize.of(it.cardSize).cols) }
                             ) { trip ->
                                 GradientTripCard(
                                     trip = trip,
                                     cardSize = PlanCardSize.of(trip.cardSize),
                                     cellWidth = cellWidth,
                                     gridSpacing = gridSpacing,
-                                    resizing = resizingTrip?.id == trip.id,
                                     onClick = { onOpenTravel(trip.id) },
-                                    onResizeEnd = { newSize ->
-                                        viewModel.updateTripCardSize(trip.id, newSize.code)
-                                        resizingTrip = null
-                                    },
-                                    onEnterResize = { resizingTrip = trip },
-                                    onExitResize = {
-                                        resizingTrip = null
-                                    }
+                                    onEnterResize = { resizingTrip = trip }
                                 )
                             }
 
@@ -797,6 +781,38 @@ fun CalendarHomeScreen(
                                 }
                             }
                         }
+                        // 调整卡片大小：屏幕级遮罩预览，日历网格完全不动
+                        resizingPlan?.let { plan ->
+                            CardResizeDialog(
+                                title = plan.title,
+                                emoji = plan.icon,
+                                colorHex = plan.colorHex,
+                                initial = PlanCardSize.of(plan.cardSize),
+                                cellWidth = cellWidth,
+                                gridSpacing = gridSpacing,
+                                onDismiss = { resizingPlan = null },
+                                onConfirm = { newSize ->
+                                    viewModel.updateCardSize(plan.id, newSize.code)
+                                    resizingPlan = null
+                                }
+                            )
+                        }
+                        resizingTrip?.let { trip ->
+                            CardResizeDialog(
+                                title = trip.title,
+                                emoji = trip.emoji,
+                                colorHex = trip.colorHex,
+                                initial = PlanCardSize.of(trip.cardSize),
+                                cellWidth = cellWidth,
+                                gridSpacing = gridSpacing,
+                                onDismiss = { resizingTrip = null },
+                                onConfirm = { newSize ->
+                                    viewModel.updateTripCardSize(trip.id, newSize.code)
+                                    resizingTrip = null
+                                }
+                            )
+                        }
+
                             // 多选模式底部：删除所选按钮
                             if (manageMode && selectedIds.isNotEmpty()) {
                                 Row(
@@ -1300,13 +1316,10 @@ private fun GradientPlanCard(
     cardSize: PlanCardSize,
     cellWidth: Dp,
     gridSpacing: Dp,
-    resizing: Boolean,
     onToggleTimer: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    onResizeEnd: (PlanCardSize) -> Unit,
-    onEnterResize: () -> Unit,
-    onExitResize: () -> Unit
+    onEnterResize: () -> Unit
 ) {
     val base = parseThemeColor(plan.colorHex)
     // 由计划色派生的深色渐变
@@ -1319,36 +1332,17 @@ private fun GradientPlanCard(
     }
     // 倒计时剩余秒数（可为负，超出目标后继续计时）
     val remainSec = goalSec - todaySec
-    // 拖动中连续跟手的实时宽高（Dp）；非调整态不参与渲染
-    var liveWidth by remember { mutableStateOf(cellWidth * cardSize.cols) }
-    var liveHeight by remember { mutableStateOf(cellWidth * cardSize.rows) }
-    LaunchedEffect(resizing, cardSize) {
-        if (resizing) {
-            // 进入调整：以当前档位尺寸为拖动起点
-            liveWidth = cellWidth * cardSize.cols + gridSpacing * (cardSize.cols - 1)
-            liveHeight = cellWidth * cardSize.rows + gridSpacing * (cardSize.rows - 1)
-        }
-    }
-    // 内容布局尺寸：拖动中取最近档位（步进切换内容），松手后回 cardSize
-    val effectiveSize = if (resizing) {
-        PlanCardSize.fromColsRows(
-            (liveWidth / cellWidth).roundToInt().coerceIn(1, 3),
-            (liveHeight / cellWidth).roundToInt().coerceIn(1, 3)
-        )
-    } else {
-        cardSize
-    }
-    // 高度：拖动中连续跟手（无动画延迟），松手后动画吸附到档位
+    // 尺寸只由持久化档位决定：调整在屏幕级弹层里预览，卡片本身不参与实时重排
+    val effectiveSize = cardSize
     val targetHeight = cellWidth * cardSize.rows + gridSpacing * (cardSize.rows - 1)
     val animatedHeight by animateDpAsState(targetValue = targetHeight, label = "cardHeight")
-    val displayHeight = if (resizing) liveHeight else animatedHeight
 
     // 外层占满 grid slot 宽度（slot 有固定宽度约束，无法直接缩小 item 本身）
-    Box(modifier = Modifier.fillMaxWidth().height(displayHeight)) {
+    Box(modifier = Modifier.fillMaxWidth().height(animatedHeight)) {
         // 卡片本体：玻璃拟态——半透明渐变 + 白色细边框 + 顶部高光
         Box(
             modifier = Modifier
-                .then(if (resizing) Modifier.width(liveWidth) else Modifier.fillMaxWidth())
+                .fillMaxWidth()
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(22.dp))
                 .background(Brush.linearGradient(listOf(base, deep)))
@@ -1422,33 +1416,36 @@ private fun GradientPlanCard(
                 }
             }
             PlanCardSize.TALL -> {
-                // 1×2：垂直完整布局
-                Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-                    Text(text = plan.icon, fontSize = 26.sp)
+                // 1×2：两格高，保留标题/完成率/倒计时/进度条，去掉重复的目标行
+                Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+                    Text(text = plan.icon, fontSize = 22.sp)
                     Text(
                         text = plan.title,
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.labelLarge,
                         color = Color.White,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     if (paceText != null) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .padding(top = 4.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(Color.White.copy(alpha = 0.22f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(text = paceText, style = MaterialTheme.typography.labelSmall, color = Color.White)
-                        }
+                        Text(
+                            text = paceText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
                     Spacer(modifier = Modifier.weight(1f))
-                    Text(text = "$percent%", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                    Text(text = countdownText, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.85f))
+                    Text(text = "$percent%", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = countdownText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Spacer(modifier = Modifier.height(6.dp))
-                    // 进度条：完成率可视化
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1464,55 +1461,57 @@ private fun GradientPlanCard(
                                 .background(Color.White)
                         )
                     }
-                    Text(
-                        text = "今日 ${todaySec / 60}分 · 目标 ${plan.dailyGoalMinutes}分",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
                 }
             }
             PlanCardSize.WIDE -> {
-                // 2×1：横向——左 emoji+标题+角标，右 完成率+倒计时
+                // 2×1：只有一格高，压紧内边距与字号，去掉次要信息，保证不裁字
                 Row(
-                    modifier = Modifier.fillMaxSize().padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = plan.icon, fontSize = 26.sp)
+                        Text(text = plan.icon, fontSize = 18.sp)
                         Text(
                             text = plan.title,
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.labelLarge,
                             color = Color.White,
+                            fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         if (paceText != null) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .padding(top = 4.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(Color.White.copy(alpha = 0.22f))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(text = paceText, style = MaterialTheme.typography.labelSmall, color = Color.White)
-                            }
+                            Text(
+                                text = paceText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.85f),
+                                maxLines = 1
+                            )
                         }
                     }
                     Column(
                         modifier = Modifier.weight(1f),
                         horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.Bottom
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Text(text = "$percent%", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                        Text(text = countdownText, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.85f))
-                        Spacer(modifier = Modifier.height(6.dp))
-                        // 迷你进度条
+                        Text(
+                            text = "$percent%",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = countdownText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(5.dp)
+                                .height(4.dp)
                                 .clip(RoundedCornerShape(50))
                                 .background(Color.White.copy(alpha = 0.25f))
                         ) {
@@ -1524,12 +1523,6 @@ private fun GradientPlanCard(
                                     .background(Color.White)
                             )
                         }
-                        Text(
-                            text = "目标 ${plan.dailyGoalMinutes}分",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
                     }
                 }
             }
@@ -1655,98 +1648,84 @@ private fun GradientPlanCard(
                 }
             }
             PlanCardSize.WIDE3 -> {
-                // 3×1：超宽卡——三栏布局：左 emoji+标题+角标，中 完成率+倒计时，右 进度条+目标
+                // 3×1：一格高、三列宽——只保留最关键的三个信息，纵向压紧
                 Row(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 左栏：标识区
-                    Column(modifier = Modifier.weight(1.2f)) {
-                        Text(text = plan.icon, fontSize = 32.sp)
+                    Row(
+                        modifier = Modifier.weight(1.3f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = plan.icon, fontSize = 20.sp)
                         Text(
                             text = plan.title,
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.labelLarge,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 6.dp)
                         )
-                        if (paceText != null) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .padding(top = 4.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(Color.White.copy(alpha = 0.22f))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(text = paceText, style = MaterialTheme.typography.labelSmall, color = Color.White)
-                            }
-                        }
                     }
-                    // 中栏：完成率与倒计时
                     Column(
                         modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(text = "$percent%", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
-                        Text(text = countdownText, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.85f))
                         Text(
-                            text = "今日 ${todaySec / 60}分",
+                            text = "$percent%",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = countdownText,
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(top = 2.dp)
+                            color = Color.White.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                    // 右栏：竖向进度条 + 每日目标
-                    Column(
-                        modifier = Modifier.weight(0.8f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        // 竖向进度条
                         Box(
                             modifier = Modifier
-                                .width(8.dp)
-                                .height(48.dp)
+                                .width(46.dp)
+                                .height(6.dp)
                                 .clip(RoundedCornerShape(50))
                                 .background(Color.White.copy(alpha = 0.25f))
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight((percent / 100f).coerceIn(0f, 1f))
-                                    .align(Alignment.BottomCenter)
+                                    .fillMaxHeight()
+                                    .fillMaxWidth((percent / 100f).coerceIn(0f, 1f))
                                     .clip(RoundedCornerShape(50))
                                     .background(Color.White)
                             )
                         }
                         Text(
-                            text = "${plan.dailyGoalMinutes}分",
+                            text = " ${plan.dailyGoalMinutes}分",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(top = 6.dp)
+                            color = Color.White.copy(alpha = 0.75f)
                         )
                     }
                 }
             }
         }
 
-        // 调整大小覆盖层：常驻可见手柄 + 调整模式遮罩/快捷档位/尺寸标签
-        CardResizeOverlay(
-            cardSize = cardSize,
-            cellWidth = cellWidth,
-            gridSpacing = gridSpacing,
-            resizing = resizing,
-            onEnterResize = onEnterResize,
-            onResizeLive = { w, h ->
-                liveWidth = w
-                liveHeight = h
-            },
-            onResizeEnd = onResizeEnd,
-            onExitResize = onExitResize
-        )
+        // 右下角调整手柄：点开屏幕级调整弹层（卡片本身不参与拖动重排）
+        if (!manageMode) {
+            CardResizeHandle(
+                onClick = onEnterResize,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(2.dp)
+            )
+        }
         }
     }
 }
@@ -1803,175 +1782,6 @@ enum class PlanCardSize(val code: Int, val cols: Int, val rows: Int, val label: 
             cols >= 2 -> WIDE
             rows >= 2 -> TALL
             else -> SMALL
-        }
-    }
-}
-
-/**
- * 卡片调整大小覆盖层：常驻右下角可见拖动手柄 + 调整模式遮罩/快捷档位/尺寸标签。
- *
- * 借鉴 Notion / iOS 桌面小组件 / Material 调整大小模式：手柄常驻可见（不再隐藏在长按），
- * 点击进入调整模式后提供放大拖动手柄 + 整卡遮罩，拖动跟手连续调整宽高，松手吸附最近档位落库。
- * 计划卡片与旅游卡片共用此组件。
- *
- * @param cardSize 当前尺寸（非调整态）
- * @param cellWidth 单格宽度，用于换算拖动偏移与吸附档位
- * @param gridSpacing 网格间距，用于计算起点与上限的精确宽高
- * @param resizing 是否处于调整模式
- * @param onEnterResize 进入调整模式（点常驻手柄）
- * @param onResizeLive 拖动中实时宽高回调（Dp，连续跟手）
- * @param onResizeEnd 松手或点快捷档位落库回调
- * @param onExitResize 退出调整模式且不落库（点遮罩空白）
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun BoxScope.CardResizeOverlay(
-    cardSize: PlanCardSize,
-    cellWidth: Dp,
-    gridSpacing: Dp,
-    resizing: Boolean,
-    onEnterResize: () -> Unit,
-    onResizeLive: (width: Dp, height: Dp) -> Unit,
-    onResizeEnd: (PlanCardSize) -> Unit,
-    onExitResize: () -> Unit
-) {
-    val density = LocalDensity.current
-    // 拖动起点尺寸（当前档位的实际宽高，含间距）
-    val startW = cellWidth * cardSize.cols + gridSpacing * (cardSize.cols - 1)
-    val startH = cellWidth * cardSize.rows + gridSpacing * (cardSize.rows - 1)
-    // 连续跟手的宽高上下限：单格 0.8 倍 ~ 双格满宽
-    val minW = cellWidth * 0.8f
-    val maxW = cellWidth * 3 + gridSpacing * 2
-    val minH = cellWidth * 0.8f
-    val maxH = cellWidth * 3 + gridSpacing * 2
-    // 拖动累积偏移（像素）
-    var dragX by remember { mutableStateOf(0f) }
-    var dragY by remember { mutableStateOf(0f) }
-    // 由当前偏移算出的连续宽高（Dp），即跟手实时尺寸
-    val liveW = (startW + with(density) { dragX.toDp() }).coerceIn(minW, maxW)
-    val liveH = (startH + with(density) { dragY.toDp() }).coerceIn(minH, maxH)
-    // 预览档位：四舍五入到最近格，用于快捷按钮高亮和尺寸标签
-    val previewSize = if (resizing) {
-        PlanCardSize.fromColsRows(
-            (liveW / cellWidth).roundToInt().coerceIn(1, 3),
-            (liveH / cellWidth).roundToInt().coerceIn(1, 3)
-        )
-    } else {
-        cardSize
-    }
-    // 常驻手柄呼吸动画：温和提示"我可拖动"
-    val breathe = rememberInfiniteTransition(label = "breathe")
-    val breatheScale by breathe.animateFloat(
-        initialValue = 0.95f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "breatheScale"
-    )
-
-    if (!resizing) {
-        // 常驻可见手柄：右下角弧形勾状标记 + 呼吸动画，点击进入调整模式
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(1.dp)
-                .size(42.dp)
-                .scale(breatheScale)
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = { onEnterResize() })
-                }
-        ) {
-            // 弧形勾状标记：⌟ 形弧线，提示"可拖动调整大小"
-            Canvas(modifier = Modifier.size(32.dp)) {
-                val stroke = 3.dp.toPx()
-                val arcLen = size.width * 0.7f
-                drawArc(
-                    color = Color.White.copy(alpha = 0.85f),
-                    startAngle = 0f,
-                    sweepAngle = 90f,
-                    useCenter = false,
-                    topLeft = Offset(size.width * 0.15f, size.height * 0.15f),
-                    size = Size(arcLen, arcLen),
-
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-            }
-        }
-    } else {
-        // 调整模式：整卡半透明遮罩 + 白色边框高亮，点空白退出
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(Color.Black.copy(alpha = 0.20f))
-                .border(2.dp, Color.White, RoundedCornerShape(22.dp))
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = { onExitResize() })
-                }
-        )
-        // 右下角拖动手柄：放大弧形勾状标记，手动消费事件跟手拖动调整宽高
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(0.dp)
-                .size(58.dp)
-                .pointerInput(cardSize, cellWidth, gridSpacing) {
-                    detectDragGestures(
-                        onDragStart = {
-                            dragX = 0f
-                            dragY = 0f
-                        },
-                        onDragEnd = {
-                            // 松手吸附：四舍五入到最近档位落库
-                            val w = (startW + with(density) { dragX.toDp() }).coerceIn(minW, maxW)
-                            val h = (startH + with(density) { dragY.toDp() }).coerceIn(minH, maxH)
-                            val cols = (w / cellWidth).roundToInt().coerceIn(1, 3)
-                            val rows = (h / cellWidth).roundToInt().coerceIn(1, 3)
-                            onResizeEnd(PlanCardSize.fromColsRows(cols, rows))
-                        },
-                        onDrag = { _, amount ->
-                            dragX += amount.x
-                            dragY += amount.y
-                            // 连续跟手：由当前偏移即时算出宽高并上报
-                            val w = (startW + with(density) { dragX.toDp() }).coerceIn(minW, maxW)
-                            val h = (startH + with(density) { dragY.toDp() }).coerceIn(minH, maxH)
-                            onResizeLive(w, h)
-                        }
-                    )
-                }
-        ) {
-            // 弧形勾状标记：高对比白色，表示拖动中
-            Canvas(modifier = Modifier.size(38.dp)) {
-                val stroke = 3.5.dp.toPx()
-                val arcLen = size.width * 0.7f
-                drawArc(
-                    color = Color.White,
-                    startAngle = 0f,
-                    sweepAngle = 90f,
-                    useCenter = false,
-                    topLeft = Offset(size.width * 0.15f, size.height * 0.15f),
-                    size = Size(arcLen, arcLen),
-
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-            }
-        }
-        // 左上角当前预览尺寸标签
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(8.dp)
-                .clip(RoundedCornerShape(50))
-                .background(Color.White.copy(alpha = 0.92f))
-                .padding(horizontal = 10.dp, vertical = 3.dp)
-        ) {
-            Text(
-                text = previewSize.label,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.Black,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }
@@ -2263,11 +2073,8 @@ private fun GradientTripCard(
     cardSize: PlanCardSize,
     cellWidth: Dp,
     gridSpacing: Dp,
-    resizing: Boolean,
     onClick: () -> Unit,
-    onResizeEnd: (PlanCardSize) -> Unit,
-    onEnterResize: () -> Unit,
-    onExitResize: () -> Unit
+    onEnterResize: () -> Unit
 ) {
     val base = parseThemeColor(trip.colorHex)
     // 由行程色派生的深色渐变
@@ -2278,36 +2085,17 @@ private fun GradientTripCard(
     } else {
         ""
     }
-    // 拖动中连续跟手的实时宽高（Dp）；非调整态不参与渲染
-    var liveWidth by remember { mutableStateOf(cellWidth * cardSize.cols) }
-    var liveHeight by remember { mutableStateOf(cellWidth * cardSize.rows) }
-    LaunchedEffect(resizing, cardSize) {
-        if (resizing) {
-            // 进入调整：以当前档位尺寸为拖动起点
-            liveWidth = cellWidth * cardSize.cols + gridSpacing * (cardSize.cols - 1)
-            liveHeight = cellWidth * cardSize.rows + gridSpacing * (cardSize.rows - 1)
-        }
-    }
-    // 内容布局尺寸：拖动中取最近档位，松手后回 cardSize
-    val effectiveSize = if (resizing) {
-        PlanCardSize.fromColsRows(
-            (liveWidth / cellWidth).roundToInt().coerceIn(1, 3),
-            (liveHeight / cellWidth).roundToInt().coerceIn(1, 3)
-        )
-    } else {
-        cardSize
-    }
-    // 高度：拖动中连续跟手，松手后动画吸附到档位
+    // 尺寸只由持久化档位决定：调整在屏幕级弹层里预览
+    val effectiveSize = cardSize
     val targetHeight = cellWidth * cardSize.rows + gridSpacing * (cardSize.rows - 1)
     val animatedHeight by animateDpAsState(targetValue = targetHeight, label = "tripCardHeight")
-    val displayHeight = if (resizing) liveHeight else animatedHeight
 
     // 外层占满 grid slot 宽度（slot 有固定宽度约束，无法直接缩小 item 本身）
-    Box(modifier = Modifier.fillMaxWidth().height(displayHeight)) {
+    Box(modifier = Modifier.fillMaxWidth().height(animatedHeight)) {
         // 卡片本体：玻璃拟态——半透明渐变 + 白色细边框 + 顶部高光
         Box(
             modifier = Modifier
-                .then(if (resizing) Modifier.width(liveWidth) else Modifier.fillMaxWidth())
+                .fillMaxWidth()
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(22.dp))
                 .background(Brush.linearGradient(listOf(base, deep)))
@@ -2524,18 +2312,11 @@ private fun GradientTripCard(
             }
         }
         // 调整大小覆盖层（与计划卡片共用同一组件）
-        CardResizeOverlay(
-            cardSize = cardSize,
-            cellWidth = cellWidth,
-            gridSpacing = gridSpacing,
-            resizing = resizing,
-            onEnterResize = onEnterResize,
-            onResizeLive = { w, h ->
-                liveWidth = w
-                liveHeight = h
-            },
-            onResizeEnd = onResizeEnd,
-            onExitResize = onExitResize
+        CardResizeHandle(
+            onClick = onEnterResize,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(2.dp)
         )
         }
     }

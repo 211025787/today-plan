@@ -1,8 +1,8 @@
 package com.focuslist.app.ui.common
 
 import android.widget.ImageView
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -14,8 +14,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.viewinterop.AndroidView
@@ -103,37 +106,46 @@ fun WhaleGirlPet(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
         modifier = modifier
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .pointerInput("tap") {
-                detectTapGestures(onTap = {
-                    // 点击触发摸头动画
-                    if (!isDragging) {
+            // 一个手势处理器同时区分「轻点」与「拖动」：
+            // 之前用 detectTapGestures + detectDragGestures 两个 pointerInput 并存，
+            // 拖动检测会抢走按下/抬起事件，导致点击头经常不触发摸头动画。
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var total = Offset.Zero
+                    var dragging = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.changedToUpIgnoreConsumed()) {
+                            break
+                        }
+                        val delta = change.positionChange()
+                        total += delta
+                        if (!dragging && total.getDistance() > viewConfiguration.touchSlop) {
+                            dragging = true
+                            isDragging = true
+                            currentAnim = PetAnim.DRAGGING
+                        }
+                        if (dragging) {
+                            offsetX += delta.x
+                            offsetY += delta.y
+                            change.consume()
+                        }
+                    }
+                    if (dragging) {
+                        isDragging = false
+                        currentAnim = PetAnim.IDLE
+                    } else {
+                        // 轻点：摸摸头（连点也重新播放）
                         currentAnim = PetAnim.HEAD_PAT
                         interactTick++
                     }
-                })
-            }
-            .pointerInput("drag") {
-                detectDragGestures(
-                    onDragStart = {
-                        isDragging = true
-                        currentAnim = PetAnim.DRAGGING
-                    },
-                    onDragEnd = {
-                        isDragging = false
-                        currentAnim = PetAnim.IDLE
-                    },
-                    onDragCancel = {
-                        isDragging = false
-                        currentAnim = PetAnim.IDLE
-                    }
-                ) { _, amount ->
-                    offsetX += amount.x
-                    offsetY += amount.y
                 }
             }
     ) {
-        // key 包裹确保切换动画时 ImageView 重建，animated webp 从头播放
-        key(currentAnim) {
+        // key 带上 interactTick：同一动画重复触发时也会重建 ImageView，从头播放
+        key(currentAnim, interactTick) {
             AndroidView(
                 factory = { ctx ->
                     // ImageView 原生自动播放 AnimatedImageDrawable
