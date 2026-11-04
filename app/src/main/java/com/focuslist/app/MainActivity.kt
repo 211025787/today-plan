@@ -16,6 +16,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -46,6 +48,7 @@ import androidx.navigation.navArgument
 import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.timer.TimerPhase
 import com.focuslist.app.timer.TimerStateHolder
+import com.focuslist.app.ui.common.BottomFadeEdge
 import com.focuslist.app.ui.common.DayDetailState
 import com.focuslist.app.ui.common.DockItem
 import com.focuslist.app.ui.common.GlassBackground
@@ -341,6 +344,13 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                         onBack = { navController.popBackStack() }
                     )
                 }
+            }
+
+            // 底部渐变遮罩：从 Dock 栏顶部渐变到系统导航条，内容底部淡出融入背景（仅主 Tab 显示，与 Dock 同步）
+            if (currentRoute in mainRoutes && dockVisible) {
+                BottomFadeEdge(
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
             }
 
             // 悬浮 Dock：仅主 Tab 页面显示，底部居中；专注中自动收起
