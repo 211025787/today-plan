@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -41,25 +43,29 @@ data class DockItem(val route: String, val label: String, val icon: ImageVector)
 @Composable
 fun GlassDockBar(items: List<DockItem>, currentRoute: String?, onSelect: (DockItem) -> Unit) {
     Box(
+        // 横向 padding 收窄到 2dp 让导航胶囊更长；不加 navigationBarsPadding，让桌宠可延伸覆盖系统导航条
         modifier = Modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            .padding(horizontal = 2.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
+            // 间距 0dp 让导航胶囊紧贴桌宠，边缘覆盖桌宠白边
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+            // 底部对齐：桌宠贴屏幕底部覆盖导航条，导航胶囊靠上避开导航条
+            verticalAlignment = Alignment.Bottom
         ) {
-            // 导航胶囊
+            // 导航胶囊：加高到 72dp；navigationBarsPadding 抬到导航条上方；offset 整体上移 16dp 并右移 6dp（在 glass 外侧，背景与图标一起移动）
             Row(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .weight(1f)
-                    .height(62.dp)
-                    .glass(cornerRadius = 31.dp)
+                    .height(72.dp)
+                    .navigationBarsPadding()
+                    .offset(y = -16.dp, x = 6.dp)
+                    .glass(cornerRadius = 36.dp)
                     .padding(horizontal = 8.dp)
             ) {
                 items.forEach { item ->
@@ -91,10 +97,9 @@ fun GlassDockBar(items: List<DockItem>, currentRoute: String?, onSelect: (DockIt
                     }
                 }
             }
-            // 大肥鱼桌宠只在首页常驻，避免遮挡行程地图/专注页；放大到 140dp 完整露出头/身体/尾巴
-            if (currentRoute == "home") {
-                WhaleGirlPet(modifier = Modifier.size(140.dp))
-            }
+            // 大肥鱼桌宠在所有主 Tab 常驻，与首页保持一致；放大到 140dp 完整露出头/身体/尾巴
+            // 不再向右偏移，由导航胶囊紧贴覆盖桌宠左侧白边
+            WhaleGirlPet(modifier = Modifier.size(140.dp))
         }
     }
 }

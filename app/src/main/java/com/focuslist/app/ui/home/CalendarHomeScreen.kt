@@ -418,8 +418,8 @@ fun CalendarHomeScreen(
                 Box(
                     modifier = Modifier
                         .padding(bottom = 92.dp)
-                        // 月视图要让开桌宠的头；日卡片页让回右下角，避免盖住 3 列宽卡片
-                        .offset(x = if (state.selectedDay == null) (-144).dp else 0.dp)
+                        // 月视图向右贴近屏幕右边缘（仅留 6dp 余量）；日卡片页回右下角避免盖住 3 列宽卡片
+                        .offset(x = if (state.selectedDay == null) (-6).dp else 0.dp)
                 ) {
                     ExpandableFab(
                         items = listOf(
