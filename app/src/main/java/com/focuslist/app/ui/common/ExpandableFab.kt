@@ -6,8 +6,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
@@ -110,7 +113,8 @@ fun ExpandableFab(items: List<FabMenuItem>, modifier: Modifier = Modifier) {
             ) {
                 Column(
                     modifier = Modifier
-                        .glass(cornerRadius = 20.dp)
+                        .width(IntrinsicSize.Max)
+                        .glass(cornerRadius = 20.dp, fillAlpha = 0.95f)
                         .padding(8.dp)
                 ) {
                     items.forEach { item ->
@@ -118,6 +122,7 @@ fun ExpandableFab(items: List<FabMenuItem>, modifier: Modifier = Modifier) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier
+                                .fillMaxWidth()
                                 .clickable {
                                     expanded = false
                                     item.onClick()

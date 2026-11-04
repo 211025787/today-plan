@@ -381,17 +381,7 @@ fun CalendarHomeScreen(
                         }) {
                             Icon(Icons.Default.Search, contentDescription = "搜索")
                         }
-                        // 日历展开时允许翻月（与手势滑动共用翻页器，带动画）
-                        IconButton(onClick = {
-                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一月")
-                        }
-                        IconButton(onClick = {
-                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一月")
-                        }
+
                         // 功能菜单：添加计划 / 备注 / 旅游规划 / 删除计划，点击向下展开
                         ExpandableFab(
                             items = listOf(
@@ -501,13 +491,16 @@ fun CalendarHomeScreen(
                                 state = pagerState,
                                 pagerSnapDistance = PagerSnapDistance.atMost(1)
                             ),
+                            beyondBoundsPageCount = 1,
                             modifier = Modifier.fillMaxWidth().weight(1f)
                         ) { page ->
                             HomeMonthGrid(
                                 state = state,
                                 viewModel = viewModel,
                                 monthStart = monthStartForOffset(page - PAGER_INITIAL_PAGE),
-                                onSelectDay = viewModel::selectDay
+                                onSelectDay = { day ->
+                                    if (!pagerState.isScrollInProgress) viewModel.selectDay(day)
+                                }
                             )
                         }
                     }
