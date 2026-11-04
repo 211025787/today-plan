@@ -433,7 +433,7 @@ fun CalendarHomeScreen(
                     viewModel.clearQuery()
                     onOpenNote(noteId, day)
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().padding(padding)
             )
         } else {
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
