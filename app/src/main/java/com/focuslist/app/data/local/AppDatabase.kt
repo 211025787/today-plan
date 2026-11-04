@@ -128,6 +128,22 @@ private val MIGRATION_7_8 = object : Migration(7, 8) {
 }
 
 /**
+ * v8 → v9：卡片从「网格自动流式排列」改为「自由画布」。
+ * 计划与行程都补上占列/占行与左上角坐标；旧数据 cardCols/cardRows 为 0
+ * （沿用 cardSize 对应的尺寸），cardX/cardY 为 -1（首次打开时自动补位并写回）。
+ */
+private val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        listOf("plans", "trips").forEach { table ->
+            db.execSQL("ALTER TABLE $table ADD COLUMN cardCols INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE $table ADD COLUMN cardRows INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE $table ADD COLUMN cardX INTEGER NOT NULL DEFAULT -1")
+            db.execSQL("ALTER TABLE $table ADD COLUMN cardY INTEGER NOT NULL DEFAULT -1")
+        }
+    }
+}
+
+/**
  * 应用本地数据库（Room）：业务数据全部保存在设备。
  *
  * 除了旅游规划的底图瓦片与真实路线按需联网外，应用不发起其它网络请求，
@@ -142,6 +158,7 @@ private val MIGRATION_7_8 = object : Migration(7, 8) {
  * - v6：行程增加起止日期，用于首页日历显示旅游规划
  * - v7：计划增加卡片尺寸，日历网格中每个计划可自定义 1×1 / 1×2 / 2×1 / 2×2
  * - v8：行程增加卡片尺寸，旅游规划卡片同样可自定义大小
+ * - v9：卡片改为自由画布：占列/占行（1-4）与左上角坐标（列/行）
  */
 @Database(
     entities = [
@@ -160,7 +177,7 @@ private val MIGRATION_7_8 = object : Migration(7, 8) {
         TripStopEntity::class,
         TripLegEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -237,7 +254,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, DB_NAME)
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }

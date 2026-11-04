@@ -122,9 +122,6 @@ dependencies {
     // 备份文件的 JSON 编解码（纯 Java 库，单元测试也能直接跑）
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // Coil 图片加载：用于播放 animated webp（大肥鱼桌宠动画帧）
-    implementation("io.coil-kt:coil-compose:2.7.0")
-
     // ---- 自动化测试 ----
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.google.code.gson:gson:2.10.1")

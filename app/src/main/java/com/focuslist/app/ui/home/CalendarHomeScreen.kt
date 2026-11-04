@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -36,13 +35,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerSnapDistance
@@ -308,10 +304,6 @@ fun CalendarHomeScreen(
     val selectedIds by viewModel.selectMode.collectAsState()
     // 长按单卡片弹出的操作菜单：查看统计 / 编辑时长 / 删除
     var menuPlan by remember { mutableStateOf<PlanEntity?>(null) }
-    // 长按菜单「调整卡片大小」进入调整模式的目标计划
-    var resizingPlan by remember { mutableStateOf<PlanEntity?>(null) }
-    // 进入调整模式的旅游行程目标
-    var resizingTrip by remember { mutableStateOf<TripEntity?>(null) }
 
     // 计划投入统计弹层：点卡片打开
     var insightPlan by remember { mutableStateOf<PlanEntity?>(null) }
@@ -423,7 +415,12 @@ fun CalendarHomeScreen(
         floatingActionButton = {
             // 右下角圆点：添加计划 / 备注；搜索态下隐藏，避免遮挡结果
             if (!searchActive) {
-                Box(modifier = Modifier.padding(bottom = 92.dp)) {
+                Box(
+                    modifier = Modifier
+                        .padding(bottom = 92.dp)
+                        // 月视图要让开桌宠的头；日卡片页让回右下角，避免盖住 3 列宽卡片
+                        .offset(x = if (state.selectedDay == null) (-144).dp else 0.dp)
+                ) {
                     ExpandableFab(
                         items = listOf(
                             FabMenuItem(icon = "⚡", label = "一句话建计划", onClick = { showQuickPlan = true }),
@@ -511,10 +508,8 @@ fun CalendarHomeScreen(
                             }
                         }
                         // 月份网格翻页器：左右滑动跟手移动，松手后惯性吸附到相邻月（一次至多翻一页）
-                        // 调整卡片大小期间禁用翻页，避免 pager 抢占水平拖动事件导致左右缩放不跟手
                         HorizontalPager(
                             state = pagerState,
-                            userScrollEnabled = resizingPlan == null && resizingTrip == null,
                             flingBehavior = PagerDefaults.flingBehavior(
                                 state = pagerState,
                                 pagerSnapDistance = PagerSnapDistance.atMost(1)
@@ -662,157 +657,115 @@ fun CalendarHomeScreen(
                         val cellWidth = (LocalConfiguration.current.screenWidthDp.dp - 12.dp * 2 - 10.dp * 3) / 4
                         val gridSpacing = 10.dp
 
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(4),
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = if (manageMode) 200.dp else 170.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            // 当天没有计划时的提示（仍可展示备注）
-                            if (dayPlans.isEmpty()) {
-                                item(span = { GridItemSpan(4) }, key = "empty_hint") {
-                                    Text(
-                                        text = "这一天没有生效中的计划，点右下角圆点添加",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(vertical = 16.dp, horizontal = 4.dp)
+                        val dayTrips = viewModel.tripsOfDay(state, day)
+                        val planCards = dayPlans.map { plan ->
+                            val totalSec = viewModel.daySecondsOf(state, plan.id, day)
+                            val paceText = if (day == todayStart) {
+                                val allSec = (planTotals[plan.id] ?: 0L) +
+                                    (state.timers[plan.id]?.sessionSec ?: 0L)
+                                PlanPaces.chipText(
+                                    PlanPaces.of(
+                                        planStart = plan.startDate,
+                                        planEnd = plan.endDate,
+                                        goalMinutes = plan.dailyGoalMinutes,
+                                        totalSeconds = allSec,
+                                        today = todayStart
                                     )
-                                }
-                            }
-                            items(
-                                dayPlans,
-                                key = { it.id },
-                                span = { GridItemSpan(PlanCardSize.of(it.cardSize).cols) }
-                            ) { plan ->
-                                // 当日总秒数 = 库中累计 + 未落库段（暂停冻结也计入）
-                                val totalSec = viewModel.daySecondsOf(state, plan.id, day)
-                                val isSelected = plan.id in selectedIds
-                                // 整体节奏角标：只在今天、且确实落后时出现
-                                val paceText = if (day == todayStart) {
-                                    val allSec = (planTotals[plan.id] ?: 0L) +
-                                        (state.timers[plan.id]?.sessionSec ?: 0L)
-                                    PlanPaces.chipText(
-                                        PlanPaces.of(
-                                            planStart = plan.startDate,
-                                            planEnd = plan.endDate,
-                                            goalMinutes = plan.dailyGoalMinutes,
-                                            totalSeconds = allSec,
-                                            today = todayStart
-                                        )
-                                    )
-                                } else {
-                                    null
-                                }
-                                GradientPlanCard(
-                                    plan = plan,
-                                    todaySec = totalSec,
-                                    running = state.timers[plan.id]?.running == true,
-                                    manageMode = manageMode,
-                                    selected = isSelected,
-                                    paceText = paceText,
-                                    cardSize = PlanCardSize.of(plan.cardSize),
-                                    cellWidth = cellWidth,
-                                    gridSpacing = gridSpacing,
-                                    onToggleTimer = { viewModel.toggleTimer(plan.id) },
-                                    onClick = {
-                                        if (resizingPlan?.id == plan.id) {
-                                            resizingPlan = null
-                                        } else if (manageMode) {
-                                            viewModel.toggleSelectPlan(plan.id)
-                                        } else {
-                                            insightPlan = plan
-                                        }
-                                    },
-                                    onLongClick = {
-                                        if (manageMode) {
-                                            viewModel.toggleSelectPlan(plan.id)
-                                        } else {
-                                            menuPlan = plan
-                                        }
-                                    },
-                                    onEnterResize = { resizingPlan = plan }
                                 )
+                            } else {
+                                null
                             }
+                            DayPlanCardData(
+                                plan = plan,
+                                todaySec = totalSec,
+                                running = state.timers[plan.id]?.running == true,
+                                paceText = paceText
+                            )
+                        }
+                        val tripCards = dayTrips.map { DayTripCardData(it) }
 
-                            // 当日旅游行程卡片：emoji + 标题 + 日期范围，点击跳旅游规划页
-                            val dayTrips = viewModel.tripsOfDay(state, day)
-                            items(
-                                dayTrips,
-                                key = { "trip_${it.id}" },
-                                span = { GridItemSpan(PlanCardSize.of(it.cardSize).cols) }
-                            ) { trip ->
-                                GradientTripCard(
-                                    trip = trip,
-                                    cardSize = PlanCardSize.of(trip.cardSize),
-                                    cellWidth = cellWidth,
-                                    gridSpacing = gridSpacing,
-                                    onClick = { onOpenTravel(trip.id) },
-                                    onEnterResize = { resizingTrip = trip }
+                        // 自由画布：卡片位置由数据库决定，不再跟着网格自动重排。
+                        // 长按拖动换位置，右下角手柄直接拖大小；点卡片仍打开投入统计。
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(start = 12.dp, end = 12.dp)
+                                .padding(bottom = if (manageMode) 200.dp else 170.dp)
+                        ) {
+                            if (planCards.isEmpty() && tripCards.isEmpty()) {
+                                Text(
+                                    text = "这一天没有生效中的计划，点右下角圆点添加",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 16.dp, horizontal = 4.dp)
                                 )
                             }
+                            DayCardBoard(
+                                plans = planCards,
+                                trips = tripCards,
+                                cellWidth = cellWidth,
+                                spacing = gridSpacing,
+                                manageMode = manageMode,
+                                selectedPlanIds = selectedIds,
+                                onPlanClick = { plan ->
+                                    if (manageMode) {
+                                        viewModel.toggleSelectPlan(plan.id)
+                                    } else {
+                                        insightPlan = plan
+                                    }
+                                },
+                                onPlanLongClick = { plan ->
+                                    if (manageMode) {
+                                        viewModel.toggleSelectPlan(plan.id)
+                                    } else {
+                                        menuPlan = plan
+                                    }
+                                },
+                                onTripClick = { trip -> onOpenTravel(trip.id) },
+                                onToggleTimer = { planId -> viewModel.toggleTimer(planId) },
+                                onToggleSelect = { planId -> viewModel.toggleSelectPlan(planId) },
+                                onPlanLayout = { planId, cols, rows, x, y ->
+                                    viewModel.updateCardLayout(planId, cols, rows, x, y)
+                                },
+                                onTripLayout = { tripId, cols, rows, x, y ->
+                                    viewModel.updateTripCardLayout(tripId, cols, rows, x, y)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
 
                             // 当日备注区：标题 + 最多 3 条预览 + 展开全部
                             if (dayNotes.isNotEmpty()) {
-                                item(span = { GridItemSpan(4) }, key = "notes_header") {
-                                    Text(
-                                        text = "📝 当日备注 · ${dayNotes.size} 条",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 6.dp, start = 2.dp)
-                                    )
-                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "📝 当日备注 · ${dayNotes.size} 条",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 6.dp, start = 2.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
                                 val shownNotes = if (notesExpanded) dayNotes else dayNotes.take(3)
-                                items(shownNotes, key = { "note_${it.id}" }, span = { GridItemSpan(4) }) { note ->
+                                shownNotes.forEach { note ->
                                     DayNotePreviewCard(note = note, onClick = { onOpenNote(note.id, 0L) })
+                                    Spacer(modifier = Modifier.height(8.dp))
                                 }
                                 if (dayNotes.size > 3) {
-                                    item(span = { GridItemSpan(4) }, key = "notes_toggle") {
-                                        TextButton(
-                                            onClick = { notesExpanded = !notesExpanded },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(
-                                                text = if (notesExpanded) "收起备注" else "展开全部 ${dayNotes.size} 条备注",
-                                                style = MaterialTheme.typography.labelMedium
-                                            )
-                                        }
+                                    TextButton(
+                                        onClick = { notesExpanded = !notesExpanded },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = if (notesExpanded) {
+                                                "收起备注"
+                                            } else {
+                                                "展开全部 ${dayNotes.size} 条备注"
+                                            },
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
                                     }
                                 }
                             }
                         }
-                        // 调整卡片大小：屏幕级遮罩预览，日历网格完全不动
-                        resizingPlan?.let { plan ->
-                            CardResizeDialog(
-                                title = plan.title,
-                                emoji = plan.icon,
-                                colorHex = plan.colorHex,
-                                initial = PlanCardSize.of(plan.cardSize),
-                                cellWidth = cellWidth,
-                                gridSpacing = gridSpacing,
-                                onDismiss = { resizingPlan = null },
-                                onConfirm = { newSize ->
-                                    viewModel.updateCardSize(plan.id, newSize.code)
-                                    resizingPlan = null
-                                }
-                            )
-                        }
-                        resizingTrip?.let { trip ->
-                            CardResizeDialog(
-                                title = trip.title,
-                                emoji = trip.emoji,
-                                colorHex = trip.colorHex,
-                                initial = PlanCardSize.of(trip.cardSize),
-                                cellWidth = cellWidth,
-                                gridSpacing = gridSpacing,
-                                onDismiss = { resizingTrip = null },
-                                onConfirm = { newSize ->
-                                    viewModel.updateTripCardSize(trip.id, newSize.code)
-                                    resizingTrip = null
-                                }
-                            )
-                        }
-
                             // 多选模式底部：删除所选按钮
                             if (manageMode && selectedIds.isNotEmpty()) {
                                 Row(
@@ -896,16 +849,20 @@ fun CalendarHomeScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                resizingPlan = plan
-                                menuPlan = null
-                            }
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(Icons.Default.AspectRatio, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text("调整卡片大小", style = MaterialTheme.typography.bodyLarge)
+                        Icon(
+                            Icons.Default.AspectRatio,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "长按卡片拖动换位置，右下角拖动改大小",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     Row(
                         modifier = Modifier

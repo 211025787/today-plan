@@ -15,7 +15,11 @@ import com.focuslist.app.util.TravelMode
  * @property note 备注
  * @property startDate 行程起始日 0 点时间戳（毫秒）；0 表示未设置，不显示到日历
  * @property endDate 行程结束日 0 点时间戳（毫秒）；0 表示未设置
- * @property cardSize 卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2（日历网格中占用列数与行数）
+ * @property cardSize 旧版卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2；仅用于旧数据兜底
+ * @property cardCols 卡片占列数（1-4；0 表示沿用 cardSize）
+ * @property cardRows 卡片占行数（1-4；0 表示沿用 cardSize）
+ * @property cardX 卡片左上角列（0 起）；-1 表示还没手动摆放
+ * @property cardY 卡片左上角行（0 起）；-1 表示还没手动摆放
  * @property createdAt 创建时间戳（毫秒）
  * @property updatedAt 最近更新时间戳（毫秒），行程库按它倒序
  */
@@ -29,6 +33,10 @@ data class TripEntity(
     val startDate: Long = 0L,
     val endDate: Long = 0L,
     val cardSize: Int = 3,
+    val cardCols: Int = 0,
+    val cardRows: Int = 0,
+    val cardX: Int = -1,
+    val cardY: Int = -1,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

@@ -1,7 +1,7 @@
 package com.focuslist.app.data.backup
 
 /** 备份文件结构版本；结构变更时递增，导入时据此判断是否兼容 */
-const val BACKUP_SCHEMA_VERSION: Int = 4
+const val BACKUP_SCHEMA_VERSION: Int = 5
 
 /** 任务 */
 data class BackupTask(
@@ -94,6 +94,11 @@ data class BackupPlan(
     val note: String = "",
     val archived: Boolean = false,
     val sortOrder: Int = 0,
+    val cardSize: Int = 3,
+    val cardCols: Int = 0,
+    val cardRows: Int = 0,
+    val cardX: Int = -1,
+    val cardY: Int = -1,
     val createdAt: Long = 0
 )
 
@@ -190,13 +195,20 @@ data class BackupAchievement(
 )
 
 /**
- * 行程快照（schema 4 起纳入备份）。
+ * 行程快照（schema 4 起纳入备份；schema 5 补齐日历日期与卡片排版）。
  *
  * @property id 行程 ID
  * @property title 名称
  * @property emoji 封面
  * @property colorHex 主题色
  * @property note 备注
+ * @property startDate 起始日 0 点时间戳；0 表示未设置
+ * @property endDate 结束日 0 点时间戳；0 表示未设置
+ * @property cardSize 旧版卡片尺寸编码
+ * @property cardCols 占列数（1-4）
+ * @property cardRows 占行数（1-4）
+ * @property cardX 左上角列；-1 表示未摆放
+ * @property cardY 左上角行；-1 表示未摆放
  * @property createdAt 创建时间
  * @property updatedAt 更新时间
  */
@@ -206,6 +218,13 @@ data class BackupTrip(
     val emoji: String = "🗺",
     val colorHex: String = "#4772FA",
     val note: String = "",
+    val startDate: Long = 0L,
+    val endDate: Long = 0L,
+    val cardSize: Int = 3,
+    val cardCols: Int = 0,
+    val cardRows: Int = 0,
+    val cardX: Int = -1,
+    val cardY: Int = -1,
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 )
@@ -273,7 +292,7 @@ data class BackupTripLeg(
  * @property settings 偏好设置快照；schema 1 的旧备份没有这一项，导入时跳过
  * @property templates 计划模板快照；schema 1 的旧备份没有这一项，导入时跳过
  * @property achievements 成就解锁记录快照；schema 2 及更早的备份没有这一项，导入时保留本机记录
- * @property trips 行程快照；schema 3 及更早的备份没有这一项，导入时为空
+ * @property trips 行程快照；schema 3 及更早的备份没有这一项，导入时为空；schema 5 起带日历日期与卡片排版
  * @property tripStops 行程站点快照
  * @property tripLegs 站间交通快照
  */

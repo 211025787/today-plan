@@ -97,7 +97,9 @@ class BackupManager(
                     BackupPlan(
                         id = it.id, title = it.title, icon = it.icon, colorHex = it.colorHex,
                         dailyGoalMinutes = it.dailyGoalMinutes, startDate = it.startDate, endDate = it.endDate,
-                        note = it.note, archived = it.archived, sortOrder = it.sortOrder, createdAt = it.createdAt
+                        note = it.note, archived = it.archived, sortOrder = it.sortOrder,
+                        cardSize = it.cardSize, cardCols = it.cardCols, cardRows = it.cardRows,
+                        cardX = it.cardX, cardY = it.cardY, createdAt = it.createdAt
                     )
                 },
                 planLogs = planDao.getAllLogs().map {
@@ -115,7 +117,10 @@ class BackupManager(
                 trips = tripDao.getAllTrips().map {
                     BackupTrip(
                         id = it.id, title = it.title, emoji = it.emoji, colorHex = it.colorHex,
-                        note = it.note, createdAt = it.createdAt, updatedAt = it.updatedAt
+                        note = it.note, startDate = it.startDate, endDate = it.endDate,
+                        cardSize = it.cardSize, cardCols = it.cardCols, cardRows = it.cardRows,
+                        cardX = it.cardX, cardY = it.cardY,
+                        createdAt = it.createdAt, updatedAt = it.updatedAt
                     )
                 },
                 tripStops = tripDao.getAllTripStops().map {

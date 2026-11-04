@@ -91,8 +91,10 @@ fun GlassDockBar(items: List<DockItem>, currentRoute: String?, onSelect: (DockIt
                     }
                 }
             }
-            // 大肥鱼桌宠：DeepSeek 大肥鱼，放大至 100dp 突出于导航栏，可拖动互动
-            WhaleGirlPet(modifier = Modifier.size(100.dp))
+            // 大肥鱼桌宠只在首页常驻，避免遮挡行程地图/专注页；放大到 140dp 完整露出头/身体/尾巴
+            if (currentRoute == "home") {
+                WhaleGirlPet(modifier = Modifier.size(140.dp))
+            }
         }
     }
 }

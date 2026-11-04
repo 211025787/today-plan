@@ -17,7 +17,11 @@ import androidx.room.PrimaryKey
  * @property note 计划备注说明，可为空串
  * @property archived 是否归档（归档后不再出现在首页）
  * @property sortOrder 排序权重，数值越小越靠前
- * @property cardSize 卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2（日历网格中占用列数与行数）
+ * @property cardSize 旧版卡片尺寸编码：0=1×1, 1=1×2, 2=2×1, 3=2×2；仅用于旧数据兜底
+ * @property cardCols 卡片占列数（1-4，自由调整后写入；0 表示沿用 cardSize）
+ * @property cardRows 卡片占行数（1-4，自由调整后写入；0 表示沿用 cardSize）
+ * @property cardX 卡片左上角列（0 起）；-1 表示还没手动摆放
+ * @property cardY 卡片左上角行（0 起）；-1 表示还没手动摆放
  * @property createdAt 创建时间戳（毫秒）
  */
 @Entity(tableName = "plans")
@@ -33,6 +37,10 @@ data class PlanEntity(
     val archived: Boolean = false,
     val sortOrder: Int = 0,
     val cardSize: Int = 3,
+    val cardCols: Int = 0,
+    val cardRows: Int = 0,
+    val cardX: Int = -1,
+    val cardY: Int = -1,
     val createdAt: Long = System.currentTimeMillis()
 )
 

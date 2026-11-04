@@ -525,6 +525,36 @@ class HomeViewModel(
     }
 
     /**
+     * 保存计划卡片的自由位置与大小。
+     *
+     * @param planId 计划 ID
+     * @param cols 占列数（1-4）
+     * @param rows 占行数（1-4）
+     * @param x 左上角列（0 起）
+     * @param y 左上角行（0 起）
+     */
+    fun updateCardLayout(planId: Long, cols: Int, rows: Int, x: Int, y: Int) {
+        viewModelScope.launch {
+            planRepository.updateCardLayout(planId, cols, rows, x, y)
+        }
+    }
+
+    /**
+     * 保存行程卡片的自由位置与大小。
+     *
+     * @param tripId 行程 ID
+     * @param cols 占列数（1-4）
+     * @param rows 占行数（1-4）
+     * @param x 左上角列（0 起）
+     * @param y 左上角行（0 起）
+     */
+    fun updateTripCardLayout(tripId: Long, cols: Int, rows: Int, x: Int, y: Int) {
+        viewModelScope.launch {
+            tripRepository.updateCardLayout(tripId, cols, rows, x, y)
+        }
+    }
+
+    /**
      * 批量删除选中的计划：逐个停计时与删库，完成后退出多选模式。
      */
     fun deleteSelected() {

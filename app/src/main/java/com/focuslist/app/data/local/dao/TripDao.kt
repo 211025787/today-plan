@@ -87,6 +87,18 @@ interface TripDao {
     @Query("UPDATE trips SET cardSize = :cardSize WHERE id = :id")
     suspend fun updateCardSize(id: Long, cardSize: Int)
 
+    /**
+     * 更新行程卡片的自由画布位置与大小。
+     *
+     * @param id 行程 ID
+     * @param cols 占列数（1-4）
+     * @param rows 占行数（1-4）
+     * @param x 左上角列（0 起）
+     * @param y 左上角行（0 起）
+     */
+    @Query("UPDATE trips SET cardCols = :cols, cardRows = :rows, cardX = :x, cardY = :y WHERE id = :id")
+    suspend fun updateCardLayout(id: Long, cols: Int, rows: Int, x: Int, y: Int)
+
     // ---- 站点 ----
 
     /**

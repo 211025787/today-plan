@@ -133,6 +133,19 @@ class TripRepository(private val db: AppDatabase) {
     }
 
     /**
+     * 更新行程卡片的自由画布位置与大小。
+     *
+     * @param tripId 行程 ID
+     * @param cols 占列数（1-4）
+     * @param rows 占行数（1-4）
+     * @param x 左上角列（0 起）
+     * @param y 左上角行（0 起）
+     */
+    suspend fun updateCardLayout(tripId: Long, cols: Int, rows: Int, x: Int, y: Int) {
+        dao.updateCardLayout(tripId, cols, rows, x, y)
+    }
+
+    /**
      * 删除一条行程及其全部站点与交通。
      *
      * @param tripId 行程 ID

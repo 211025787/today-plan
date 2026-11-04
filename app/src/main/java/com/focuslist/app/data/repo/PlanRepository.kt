@@ -98,6 +98,19 @@ class PlanRepository(private val planDao: PlanDao) {
     }
 
     /**
+     * 更新计划卡片的自由画布位置与大小。
+     *
+     * @param planId 计划 ID
+     * @param cols 占列数（1-4）
+     * @param rows 占行数（1-4）
+     * @param x 左上角列（0 起）
+     * @param y 左上角行（0 起）
+     */
+    suspend fun updateCardLayout(planId: Long, cols: Int, rows: Int, x: Int, y: Int) {
+        planDao.updateCardLayout(planId, cols, rows, x, y)
+    }
+
+    /**
      * 仅在指定日期范围内移除计划，范围外的日期保留。
      *
      * 按覆盖情况处理：

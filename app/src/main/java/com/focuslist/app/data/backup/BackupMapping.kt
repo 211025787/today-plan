@@ -52,7 +52,9 @@ fun BackupTag.toEntity(): TagEntity =
 fun BackupPlan.toEntity(): PlanEntity = PlanEntity(
     id = id, title = title, icon = icon, colorHex = colorHex,
     dailyGoalMinutes = dailyGoalMinutes, startDate = startDate, endDate = endDate,
-    note = note, archived = archived, sortOrder = sortOrder, createdAt = createdAt
+    note = note, archived = archived, sortOrder = sortOrder,
+    cardSize = cardSize, cardCols = cardCols, cardRows = cardRows,
+    cardX = cardX, cardY = cardY, createdAt = createdAt
 )
 
 fun BackupPlanLog.toEntity(): PlanLogEntity =
@@ -66,6 +68,9 @@ fun BackupAttachment.toEntity(): NoteAttachmentEntity =
 
 fun BackupTrip.toEntity(): TripEntity = TripEntity(
     id = id, title = title, emoji = emoji, colorHex = colorHex, note = note,
+    startDate = startDate, endDate = endDate,
+    cardSize = cardSize, cardCols = cardCols, cardRows = cardRows,
+    cardX = cardX, cardY = cardY,
     createdAt = createdAt, updatedAt = updatedAt
 )
 

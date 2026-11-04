@@ -20,7 +20,15 @@ class BackupCodecTest {
             BackupPlan(
                 id = 7, title = "学习英语", icon = "📚", colorHex = "#4772FA",
                 dailyGoalMinutes = 30, startDate = 1_762_000_000_000L, endDate = 1_763_000_000_000L,
-                note = "每天半小时", archived = false, sortOrder = 1, createdAt = 1_761_000_000_000L
+                note = "每天半小时", archived = false, sortOrder = 1,
+                cardCols = 2, cardRows = 1, cardX = 0, cardY = 0, createdAt = 1_761_000_000_000L
+            )
+        ),
+        trips = listOf(
+            BackupTrip(
+                id = 2, title = "西安三日", emoji = "🗺", colorHex = "#4772FA",
+                startDate = 1_762_000_000_000L, endDate = 1_762_200_000_000L,
+                cardCols = 2, cardRows = 2, cardX = 2, cardY = 0
             )
         ),
         planLogs = listOf(
@@ -58,6 +66,7 @@ class BackupCodecTest {
         assertEquals(original.appVersion, restored.appVersion)
         assertEquals(original.exportedAt, restored.exportedAt)
         assertEquals(original.plans, restored.plans)
+        assertEquals(original.trips, restored.trips)
         assertEquals(original.planLogs, restored.planLogs)
         assertEquals(original.notes, restored.notes)
         assertEquals(original.noteAttachments, restored.noteAttachments)

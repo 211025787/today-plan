@@ -190,6 +190,18 @@ interface PlanDao {
     @Query("UPDATE plans SET cardSize = :cardSize WHERE id = :id")
     suspend fun updateCardSize(id: Long, cardSize: Int)
 
+    /**
+     * 更新计划卡片的自由画布位置与大小。
+     *
+     * @param id 计划 ID
+     * @param cols 占列数（1-4）
+     * @param rows 占行数（1-4）
+     * @param x 左上角列（0 起）
+     * @param y 左上角行（0 起）
+     */
+    @Query("UPDATE plans SET cardCols = :cols, cardRows = :rows, cardX = :x, cardY = :y WHERE id = :id")
+    suspend fun updateCardLayout(id: Long, cols: Int, rows: Int, x: Int, y: Int)
+
     // ---- 备份 / 恢复：全量读写 ----
 
     /** 同步读取全部计划（含已归档），用于导出备份。 */
