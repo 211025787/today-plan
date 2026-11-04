@@ -71,6 +71,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.rememberDatePickerState
+
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -391,10 +392,26 @@ fun CalendarHomeScreen(
                         }) {
                             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一月")
                         }
-                        // 按日期范围删除计划入口
-                        IconButton(onClick = { showRangeDelete = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "范围删除")
-                        }
+                        // 功能菜单：添加计划 / 备注 / 旅游规划 / 删除计划，点击向下展开
+                        ExpandableFab(
+                            items = listOf(
+                                FabMenuItem(icon = "⚡", label = "一句话建计划", onClick = { showQuickPlan = true }),
+                                FabMenuItem(icon = "📋", label = "添加计划", onClick = { showAddPlan = true }),
+                                FabMenuItem(
+                                    icon = "📝",
+                                    label = "备注",
+                                    onClick = {
+                                        // 新备注默认关联当前查看的日期（未选中日则为今天）
+                                        onOpenNote(
+                                            -1L,
+                                            state.selectedDay ?: DateUtils.startOfDay(System.currentTimeMillis())
+                                        )
+                                    }
+                                ),
+                                FabMenuItem(icon = "🧳", label = "添加旅游规划", onClick = { showNewTrip = true }),
+                                FabMenuItem(icon = "🗑️", label = "删除计划", onClick = { showRangeDelete = true })
+                            )
+                        )
                     } else {
                         // 选中日卡片页：管理 / 取消多选
                         TextButton(onClick = {
@@ -411,36 +428,6 @@ fun CalendarHomeScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-        },
-        floatingActionButton = {
-            // 右下角圆点：添加计划 / 备注；搜索态下隐藏，避免遮挡结果
-            if (!searchActive) {
-                Box(
-                    modifier = Modifier
-                        .padding(bottom = 92.dp)
-                        // 月视图向右贴近屏幕右边缘（仅留 6dp 余量）；日卡片页回右下角避免盖住 3 列宽卡片
-                        .offset(x = if (state.selectedDay == null) (-6).dp else 0.dp)
-                ) {
-                    ExpandableFab(
-                        items = listOf(
-                            FabMenuItem(icon = "⚡", label = "一句话建计划", onClick = { showQuickPlan = true }),
-                            FabMenuItem(icon = "📋", label = "添加计划", onClick = { showAddPlan = true }),
-                            FabMenuItem(
-                                icon = "📝",
-                                label = "备注",
-                                onClick = {
-                                    // 新备注默认关联当前查看的日期（未选中日则为今天）
-                                    onOpenNote(
-                                        -1L,
-                                        state.selectedDay ?: DateUtils.startOfDay(System.currentTimeMillis())
-                                    )
-                                }
-                            ),
-                            FabMenuItem(icon = "🧳", label = "添加旅游规划", onClick = { showNewTrip = true })
-                        )
-                    )
-                }
-            }
         }
     ) { padding ->
         if (searchActive) {
