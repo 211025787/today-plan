@@ -40,8 +40,10 @@ import java.util.Locale
  * @property monthLogs 当前网格区间内的累计记录
  * @property selectedDay 选中日期（0 点）；null 表示日历展开状态
  * @property timers 并行秒表 Map：planId -> 条目（运行中或已暂停）
+ * @property loaded 数据库首批数据是否已到达；false 时界面显示骨架屏而不是空白日历
  */
 data class HomeUiState(
+    val loaded: Boolean = false,
     val shownMonth: Long = 0L,
     val monthOffset: Int = 0,
     val plans: List<PlanEntity> = emptyList(),
@@ -68,6 +70,15 @@ sealed class HomeSearchHit {
     /** 命中的计划 */
     data class PlanHit(
         val plan: PlanEntity,
+        override val score: Int,
+        override val title: String,
+        override val ranges: List<IntRange>,
+        override val snippet: String
+    ) : HomeSearchHit()
+
+    /** 命中的旅游行程 */
+    data class TripHit(
+        val trip: TripEntity,
         override val score: Int,
         override val title: String,
         override val ranges: List<IntRange>,
@@ -129,8 +140,10 @@ class HomeViewModel(
     val searchResults: StateFlow<List<HomeSearchHit>> = combine(
         planRepository.observeAllPlans(),
         noteRepository.observeAll(),
+        tripRepository.observeTrips(),
+        tripRepository.observeAllStops(),
         query
-    ) { plans, notes, text ->
+    ) { plans, notes, trips, stops, text ->
         val tokens = Search.tokenize(text)
         if (Search.isBlank(text) || tokens.isEmpty()) {
             return@combine emptyList<HomeSearchHit>()
@@ -186,7 +199,42 @@ class HomeViewModel(
                 )
             }
         }
-        (planHits + noteHits).sortedByDescending { it.score }.take(Search.DEFAULT_LIMIT)
+        // 旅游行程：标题 / 备注 / 经过的地点都能搜到
+        val stopsByTrip = stops.groupBy { it.tripId }
+        val tripHits = Search.rank(trips, tokens) { trip ->
+            val placeNames = stopsByTrip[trip.id].orEmpty().joinToString("、") { it.name }
+            listOf(
+                Search.Field(trip.title, WEIGHT_TITLE),
+                Search.Field(trip.note, 1),
+                Search.Field(placeNames, 1)
+            )
+        }.map { m ->
+            val trip = m.item
+            when (m.fieldIndex) {
+                0 -> HomeSearchHit.TripHit(
+                    trip = trip,
+                    score = m.score,
+                    title = trip.title,
+                    ranges = m.ranges,
+                    snippet = trip.note.ifBlank { tripRangeText(trip) }
+                )
+                else -> {
+                    val raw = if (m.fieldIndex == 1) {
+                        trip.note
+                    } else {
+                        stopsByTrip[trip.id].orEmpty().joinToString("、") { it.name }
+                    }
+                    HomeSearchHit.TripHit(
+                        trip = trip,
+                        score = m.score,
+                        title = Search.snippet(raw, m.ranges),
+                        ranges = emptyList(),
+                        snippet = "🗺 ${trip.title} · ${tripRangeText(trip)}"
+                    )
+                }
+            }
+        }
+        (planHits + noteHits + tripHits).sortedByDescending { it.score }.take(Search.DEFAULT_LIMIT)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
@@ -234,6 +282,7 @@ class HomeViewModel(
     ) { data, timers ->
         val (offset, logs, plans) = data
         HomeUiState(
+            loaded = true,
             shownMonth = monthStartOf(offset),
             monthOffset = offset,
             plans = plans,
@@ -283,6 +332,17 @@ class HomeViewModel(
         }
         monthOffset.value = offset
         selectedDay.value = null
+    }
+
+    /** 行程日期区间文案；未设日期时给一个稳定兜底 */
+    private fun tripRangeText(trip: TripEntity): String {
+        if (trip.startDate <= 0L && trip.endDate <= 0L) {
+            return "旅游规划"
+        }
+        val fmt = SimpleDateFormat("M月d日", Locale.CHINA)
+        val from = if (trip.startDate > 0L) fmt.format(Date(trip.startDate)) else "待定"
+        val to = if (trip.endDate > 0L) fmt.format(Date(trip.endDate)) else "待定"
+        return "$from - $to"
     }
 
     /** 「2026/11/1 - 2026/11/30」形式的计划生效区间文案 */

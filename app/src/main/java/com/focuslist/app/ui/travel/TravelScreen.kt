@@ -1,6 +1,8 @@
 package com.focuslist.app.ui.travel
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -55,6 +57,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +71,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
 import com.focuslist.app.data.local.entity.TripEntity
@@ -80,6 +84,8 @@ import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.common.TopFadeEdge
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.Gcj02
+import com.focuslist.app.util.Ics
+import com.focuslist.app.util.IcsTrip
 import com.focuslist.app.util.LatLon
 import com.focuslist.app.util.TravelFormat
 import com.focuslist.app.util.TravelGeo
@@ -87,6 +93,7 @@ import com.focuslist.app.util.TravelMode
 import com.focuslist.app.util.TravelPlace
 import com.focuslist.app.util.TravelSummaries
 import com.focuslist.app.util.TravelTemplates
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -128,6 +135,39 @@ fun TravelScreen(container: AppContainer, focusTripId: Long = -1L) {
     var creatingTrip by remember { mutableStateOf(false) }
     var editingTrip by remember { mutableStateOf<TripEntity?>(null) }
     var picking by remember { mutableStateOf(false) }
+
+    // 导出行程到系统日历：一个行程 = 一个覆盖整段日期的整天事件
+    val exportScope = rememberCoroutineScope()
+    var pendingExportTrip by remember { mutableStateOf<TripEntity?>(null) }
+    val icsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/calendar")
+    ) { uri ->
+        val trip = pendingExportTrip
+        pendingExportTrip = null
+        if (uri != null && trip != null) {
+            exportScope.launch {
+                val ok = runCatching {
+                    val stops = container.tripRepository.observeStops(trip.id).first()
+                    val icsTrip = IcsTrip(
+                        id = trip.id,
+                        title = trip.title,
+                        note = trip.note,
+                        start = trip.startDate,
+                        end = trip.endDate,
+                        stops = stops.map { it.name }
+                    )
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(Ics.forTrip(icsTrip).toByteArray())
+                    } ?: error("无法写入所选位置")
+                }.isSuccess
+                Toast.makeText(
+                    context,
+                    if (ok) "已导出「${trip.title}」到日历文件" else "导出失败，请换一个位置再试",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
 
     BackHandler(enabled = picking) { picking = false }
 
@@ -369,6 +409,10 @@ fun TravelScreen(container: AppContainer, focusTripId: Long = -1L) {
                 editingTrip = it
             },
             onDelete = { viewModel.deleteTrip(it.id) },
+            onExport = { trip ->
+                pendingExportTrip = trip
+                icsLauncher.launch(Ics.tripFileNameOf(IcsTrip(id = trip.id, title = trip.title)))
+            },
             onUseTemplate = {
                 viewModel.createFromTemplate(it)
                 sheet = null

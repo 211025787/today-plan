@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.focuslist.app.data.local.entity.PlanEntity
+import com.focuslist.app.data.local.entity.TripEntity
 import com.focuslist.app.ui.theme.parseThemeColor
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -112,6 +113,7 @@ fun HomeSearchField(
  * @param query 当前关键词（决定是否展示空态提示）
  * @param onOpenPlan 点击计划：跳转到该计划生效日
  * @param onOpenNote 点击备注：打开备注详情（备注 ID，关联日期）
+ * @param onOpenTrip 点击旅游行程：打开该行程的规划页
  * @param modifier 布局修饰
  */
 @Composable
@@ -120,12 +122,13 @@ fun SearchResultList(
     query: String,
     onOpenPlan: (PlanEntity) -> Unit,
     onOpenNote: (Long, Long) -> Unit,
+    onOpenTrip: (TripEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (query.isBlank()) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Text(
-                text = "输入关键词，搜索计划标题、说明与备注内容",
+                text = "输入关键词，搜索计划、备注与旅游行程（含经过的地点）",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 40.dp)
@@ -161,6 +164,7 @@ fun SearchResultList(
             when (hit) {
                 is HomeSearchHit.PlanHit -> "plan_${hit.plan.id}"
                 is HomeSearchHit.NoteHit -> "note_${hit.note.id}"
+                is HomeSearchHit.TripHit -> "trip_${hit.trip.id}"
             }
         }) { hit ->
             when (hit) {
@@ -172,6 +176,15 @@ fun SearchResultList(
                     subtitle = hit.snippet,
                     tag = "计划",
                     onClick = { onOpenPlan(hit.plan) }
+                )
+                is HomeSearchHit.TripHit -> SearchResultCard(
+                    badge = hit.trip.emoji.ifBlank { "🗺" },
+                    badgeColor = parseThemeColor(hit.trip.colorHex),
+                    title = hit.title,
+                    ranges = hit.ranges,
+                    subtitle = hit.snippet,
+                    tag = "旅游",
+                    onClick = { onOpenTrip(hit.trip) }
                 )
                 is HomeSearchHit.NoteHit -> SearchResultCard(
                     badge = "📝",

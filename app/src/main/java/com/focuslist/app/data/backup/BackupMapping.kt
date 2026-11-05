@@ -70,7 +70,7 @@ fun BackupTrip.toEntity(): TripEntity = TripEntity(
     id = id, title = title, emoji = emoji, colorHex = colorHex, note = note,
     startDate = startDate, endDate = endDate,
     cardSize = cardSize, cardCols = cardCols, cardRows = cardRows,
-    cardX = cardX, cardY = cardY,
+    cardX = cardX, cardY = cardY, cardZ = cardZ,
     createdAt = createdAt, updatedAt = updatedAt
 )
 

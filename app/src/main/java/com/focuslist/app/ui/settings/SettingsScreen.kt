@@ -494,7 +494,7 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ActionRow(
                         title = "导出备份",
-                        subtitle = "把数据、偏好设置、计划模板与成就保存成一个 JSON 文件",
+                        subtitle = "把计划、备注、旅游规划（含站点与交通）、偏好设置、计划模板与成就保存成一个 JSON 文件",
                         enabled = !backupBusy,
                         onClick = { exportLauncher.launch(BackupNames.suggestFileName(System.currentTimeMillis())) }
                     )

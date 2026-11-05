@@ -209,6 +209,7 @@ data class BackupAchievement(
  * @property cardRows 占行数（1-4）
  * @property cardX 左上角列；-1 表示未摆放
  * @property cardY 左上角行；-1 表示未摆放
+ * @property cardZ 最近一次移动/缩放的叠放时间戳
  * @property createdAt 创建时间
  * @property updatedAt 更新时间
  */
@@ -225,6 +226,7 @@ data class BackupTrip(
     val cardRows: Int = 0,
     val cardX: Int = -1,
     val cardY: Int = -1,
+    val cardZ: Long = 0L,
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 )

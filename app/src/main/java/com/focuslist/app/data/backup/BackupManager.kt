@@ -119,7 +119,7 @@ class BackupManager(
                         id = it.id, title = it.title, emoji = it.emoji, colorHex = it.colorHex,
                         note = it.note, startDate = it.startDate, endDate = it.endDate,
                         cardSize = it.cardSize, cardCols = it.cardCols, cardRows = it.cardRows,
-                        cardX = it.cardX, cardY = it.cardY,
+                        cardX = it.cardX, cardY = it.cardY, cardZ = it.cardZ,
                         createdAt = it.createdAt, updatedAt = it.updatedAt
                     )
                 },

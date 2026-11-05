@@ -112,6 +112,14 @@ interface TripDao {
     fun observeStops(tripId: Long): Flow<List<TripStopEntity>>
 
     /**
+     * 观察全部行程的站点（全局搜索用：搜「成都」也能找到经过成都的行程）。
+     *
+     * @return 所有站点流
+     */
+    @Query("SELECT * FROM trip_stops ORDER BY tripId ASC, sortIndex ASC, id ASC")
+    fun observeAllStops(): Flow<List<TripStopEntity>>
+
+    /**
      * 读取一条行程的全部站点。
      *
      * @param tripId 行程 ID

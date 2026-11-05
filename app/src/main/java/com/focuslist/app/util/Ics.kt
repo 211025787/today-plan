@@ -27,6 +27,25 @@ data class IcsPlan(
 )
 
 /**
+ * 导出到日历所需的行程信息。
+ *
+ * @property id 行程 ID（用于稳定 UID）
+ * @property title 行程名称
+ * @property note 备注
+ * @property start 起始日（0 点；<=0 表示未设置）
+ * @property end 截止日（0 点，含；<=0 表示未设置）
+ * @property stops 经过的地点名称，按顺序写进事件描述
+ */
+data class IcsTrip(
+    val id: Long,
+    val title: String,
+    val note: String = "",
+    val start: Long = 0L,
+    val end: Long = 0L,
+    val stops: List<String> = emptyList()
+)
+
+/**
  * 把计划导出成 iCalendar（.ics）文件。
  *
  * 这是应用主动生成的文件之一：本身不联网、不申请日历权限，只生成一个文件，
@@ -76,6 +95,59 @@ object Ics {
     }
 
     /**
+     * 生成单个行程的日历文本：一个覆盖整段日期的**整天事件**，不按天重复。
+     *
+     * 行程是「这几天去哪」而不是「每天做一点」，用 RRULE 会在日历里塞满重复条目；
+     * 没有设置日期时退化成「今天一天」，避免生成无法导入的非法事件。
+     *
+     * @param trip 行程信息
+     * @param now 生成时刻（毫秒）
+     * @return ICS 文本，行尾为 CRLF
+     */
+    fun forTrip(trip: IcsTrip, now: Long = System.currentTimeMillis()): String {
+        val today = DateUtils.startOfDay(now)
+        val start = if (trip.start > 0L) DateUtils.startOfDay(trip.start) else today
+        val last = if (trip.end > start) DateUtils.startOfDay(trip.end) else start
+        val title = trip.title.ifBlank { "未命名行程" }
+        val description = buildString {
+            if (trip.note.isNotBlank()) {
+                append(trip.note.trim()).append("\n")
+            }
+            if (trip.stops.isNotEmpty()) {
+                append("路线：").append(trip.stops.joinToString(" → ")).append("\n")
+            }
+            append("由「今日规划」导出。")
+        }
+        val lines = mutableListOf<String>()
+        lines += "BEGIN:VCALENDAR"
+        lines += "VERSION:2.0"
+        lines += "PRODID:$PRODID"
+        lines += "CALSCALE:GREGORIAN"
+        lines += "METHOD:PUBLISH"
+        lines += "BEGIN:VEVENT"
+        lines += "UID:focuslist-trip-${trip.id}@focuslist.app"
+        lines += "DTSTAMP:${stampOf(now)}"
+        lines += "DTSTART;VALUE=DATE:${dateOf(start)}"
+        lines += "DTEND;VALUE=DATE:${dateOf(DateUtils.addDays(last, 1))}"
+        lines += "SUMMARY:${escape("🗺 $title")}"
+        lines += "DESCRIPTION:${escape(description)}"
+        lines += "TRANSP:TRANSPARENT"
+        lines += "END:VEVENT"
+        lines += "END:VCALENDAR"
+        return lines.joinToString("\r\n") { fold(it) } + "\r\n"
+    }
+
+    /**
+     * 行程 .ics 文件名。
+     *
+     * @param trip 行程信息
+     * @return 文件名
+     */
+    fun tripFileNameOf(trip: IcsTrip): String {
+        return sanitizeFileName(trip.title.ifBlank { "行程" }) + ".ics"
+    }
+
+    /**
      * 事件标题：计划名 + 每日目标，日历格子窄，尽量短。
      *
      * @param plan 计划信息
@@ -117,11 +189,20 @@ object Ics {
      * @return 文件名
      */
     fun fileNameOf(plan: IcsPlan): String {
-        val raw = plan.title.ifBlank { "计划" }
+        return sanitizeFileName(plan.title.ifBlank { "计划" }) + ".ics"
+    }
+
+    /**
+     * 文件名清洗：去掉路径分隔符等非法字符，并避免空名。
+     *
+     * @param raw 原始名称
+     * @return 安全文件名（不含扩展名）
+     */
+    private fun sanitizeFileName(raw: String): String {
         val safe = raw.map { ch ->
             if (ch in "\\/:*?\"<>|" || ch == '\n' || ch == '\r') '_' else ch
         }.joinToString("").trim().trim('.')
-        return (safe.ifBlank { "计划" }) + ".ics"
+        return safe.ifBlank { "计划" }
     }
 
     /**
@@ -161,8 +242,11 @@ object Ics {
         var bytes = 0
         // 首行 75 字节，续行开头要留一个空格，因此可用 74 字节
         var limit = MAX_LINE_BYTES
-        for (ch in line) {
-            val size = ch.toString().toByteArray(Charsets.UTF_8).size
+        // 按「码点」而不是 Char 遍历：emoji 是代理对，按 Char 会把 4 字节算成 1+1，
+        // 既会算错行宽，也可能把 emoji 从中间切断产生非法 UTF-8
+        for (cp in line.codePoints().toArray()) {
+            val ch = String(Character.toChars(cp))
+            val size = ch.toByteArray(Charsets.UTF_8).size
             if (bytes + size > limit) {
                 segments += builder.toString()
                 builder.clear()

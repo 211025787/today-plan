@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Tune
@@ -93,6 +94,7 @@ fun TripLibrarySheet(
     onCreate: () -> Unit,
     onEdit: (TripEntity) -> Unit,
     onDelete: (TripEntity) -> Unit,
+    onExport: (TripEntity) -> Unit,
     onUseTemplate: (TripTemplate) -> Unit
 ) {
     var pendingDelete by remember { mutableStateOf<TripEntity?>(null) }
@@ -152,7 +154,8 @@ fun TripLibrarySheet(
                         active = trip.id == activeTripId,
                         onSelect = { onSelect(trip.id) },
                         onEdit = { onEdit(trip) },
-                        onDelete = { pendingDelete = trip }
+                        onDelete = { pendingDelete = trip },
+                        onExport = { onExport(trip) }
                     )
                 }
                 item {
@@ -306,7 +309,8 @@ private fun TripRow(
     active: Boolean,
     onSelect: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onExport: () -> Unit
 ) {
     val color = parseThemeColor(trip.colorHex)
     Row(
@@ -362,6 +366,14 @@ private fun TripRow(
                 text = "最近编辑 ${tripDateFmt.format(Date(trip.updatedAt))}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        IconButton(onClick = onExport) {
+            Icon(
+                Icons.Default.DateRange,
+                contentDescription = "导出到日历",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
             )
         }
         IconButton(onClick = onEdit) {

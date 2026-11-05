@@ -28,7 +28,20 @@ class BackupCodecTest {
             BackupTrip(
                 id = 2, title = "西安三日", emoji = "🗺", colorHex = "#4772FA",
                 startDate = 1_762_000_000_000L, endDate = 1_762_200_000_000L,
-                cardCols = 2, cardRows = 2, cardX = 2, cardY = 0
+                cardCols = 2, cardRows = 2, cardX = 2, cardY = 0, cardZ = 1_763_000_000_123L
+            )
+        ),
+        tripStops = listOf(
+            BackupTripStop(
+                id = 21, tripId = 2, sortIndex = 0, name = "西安北", region = "陕西",
+                lat = 34.37, lon = 108.93, stayMinutes = 60, note = "集合"
+            )
+        ),
+        tripLegs = listOf(
+            BackupTripLeg(
+                id = 31, tripId = 2, sortIndex = 0, mode = "HSR",
+                durationMinutes = 180, fromStation = "北京西", toStation = "西安北",
+                serviceNo = "G87", lines = "", distanceMeters = 1_200_000L, polyline = ""
             )
         ),
         planLogs = listOf(
@@ -175,5 +188,20 @@ class BackupCodecTest {
         assertEquals("first_focus", restored.achievements[0].id)
         assertEquals(1_762_000_500_000L, restored.achievements[0].unlockedAt)
         assertTrue(BackupCodec.encode(sample()).contains("\"achievements\""))
+    }
+
+    @Test
+    fun encodeThenDecode_keepsTripGeometryAndRoute() {
+        val restored = BackupCodec.decode(BackupCodec.encode(sample()))
+
+        assertEquals(1, restored.trips.size)
+        assertEquals("西安三日", restored.trips[0].title)
+        assertEquals(2, restored.trips[0].cardX)
+        assertEquals(2, restored.trips[0].cardRows)
+        assertEquals(1_763_000_000_123L, restored.trips[0].cardZ)
+        assertEquals(1, restored.tripStops.size)
+        assertEquals("西安北", restored.tripStops[0].name)
+        assertEquals(1, restored.tripLegs.size)
+        assertEquals("G87", restored.tripLegs[0].serviceNo)
     }
 }

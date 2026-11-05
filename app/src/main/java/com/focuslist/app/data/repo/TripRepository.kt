@@ -71,6 +71,9 @@ class TripRepository(private val db: AppDatabase) {
      */
     fun observeStops(tripId: Long): Flow<List<TripStopEntity>> = dao.observeStops(tripId)
 
+    /** 观察全部站点（全局搜索用）。 */
+    fun observeAllStops(): Flow<List<TripStopEntity>> = dao.observeAllStops()
+
     /**
      * 观察一条行程的交通段。
      *

@@ -216,6 +216,14 @@
 2. 胶囊进度条改自绘 MiniBarView（系统 ProgressBar 在部分 ROM 走满后显示红色）。
 - 测试 568 → 559 全绿；包 1.0.80（code 97）。
 
+### 2026-11-05（第 29 次）：用户反馈五连修 → v1.0.84
+
+1. 全局搜索加入旅游规划（标题/备注/经过地点，新增 observeAllStops 五流 combine），结果直达行程页。
+2. 搜索⇄日历 Crossfade 过渡；卡片页返回用 AnimatedVisibility + lastSelectedDay 淡出收起。
+3. 导出：备份补 cardZ 与 UI 说明；新增 Ics.forTrip（行程整天事件）与行程库导出按钮；修复 Ics.fold 按码点折行。
+4. 冷启动骨架屏（HomeUiState.loaded）。
+- 测试 659 → 673 全绿；包 1.0.84（code 169）。
+
 ## 下次可选题
 
 - 成就解锁时发通知（复用 Notifier 渠道，详情弹层给开关）

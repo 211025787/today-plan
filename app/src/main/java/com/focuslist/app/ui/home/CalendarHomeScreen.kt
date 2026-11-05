@@ -2,7 +2,9 @@ package com.focuslist.app.ui.home
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -207,6 +209,13 @@ fun CalendarHomeScreen(
     var searchActive by remember { mutableStateOf(false) }
     val query by viewModel.queryText.collectAsState()
     val results by viewModel.searchResults.collectAsState()
+    // 记住最后一次选中的日期：退出卡片页时 selectedDay 已变成 null，
+    // 但退出动画还要用这一天把内容画完，否则会「唰」地消失
+    var lastSelectedDay by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(state.selectedDay) {
+        state.selectedDay?.let { lastSelectedDay = it }
+    }
+
     // 是否有计划正在计时：用于防烧屏（页面持续微动 + 隐藏 Dock）
     val anyPlanRunning = state.timers.values.any { it.running }
 
@@ -420,7 +429,13 @@ fun CalendarHomeScreen(
             )
         }
     ) { padding ->
-        if (searchActive) {
+        // 搜索 ⇄ 日历用淡入淡出过渡，退出搜索不再「唰」地一下
+        Crossfade(
+            targetState = searchActive,
+            animationSpec = tween(durationMillis = 220),
+            label = "searchTransition"
+        ) { searching ->
+        if (searching) {
             SearchResultList(
                 results = results,
                 query = query,
@@ -432,6 +447,11 @@ fun CalendarHomeScreen(
                     searchActive = false
                     viewModel.clearQuery()
                     onOpenNote(noteId, day)
+                },
+                onOpenTrip = { trip ->
+                    searchActive = false
+                    viewModel.clearQuery()
+                    onOpenTravel(trip.id)
                 },
                 modifier = Modifier.fillMaxSize().padding(padding)
             )
@@ -506,8 +526,13 @@ fun CalendarHomeScreen(
                     }
                 }
 
-                // 选中日后：渐变方形计划卡片
-                state.selectedDay?.let { day ->
+                // 选中日后：渐变方形计划卡片；返回日历时淡出 + 收起，不再瞬间消失
+                AnimatedVisibility(
+                    visible = state.selectedDay != null,
+                    enter = fadeIn(animationSpec = tween(220)) + expandVertically(animationSpec = tween(260)),
+                    exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(220))
+                ) {
+                (state.selectedDay ?: lastSelectedDay)?.let { day ->
                     // 收工入口只在「今天」出现：有计时在跑，或到了晚上
                     val wrap = remember(day, state.plans, state.monthLogs, state.timers, nowMinute, todayStart) {
                         if (day != todayStart) {
@@ -769,8 +794,18 @@ fun CalendarHomeScreen(
                             }
                     }
                 }
+                }
             }
         }
+        }
+    }
+
+    // 首帧数据还没到达：用骨架屏盖住空白日历，加载完淡出
+    AnimatedVisibility(
+        visible = !state.loaded,
+        exit = fadeOut(animationSpec = tween(durationMillis = 300))
+    ) {
+        CalendarSkeleton()
     }
 
     // 添加计划弹层
@@ -2405,4 +2440,88 @@ private fun SimpleMonthPicker(
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
+}
+
+/**
+ * 日历加载骨架屏：与真实布局同构（标题 / 建议条 / 星期表头 / 6 行格子），
+ * 用缓慢呼吸的半透明色块占位，避免刚启动时空荡荡的日历。
+ */
+@Composable
+private fun CalendarSkeleton() {
+    val scheme = MaterialTheme.colorScheme
+    val transition = rememberInfiniteTransition(label = "skeleton")
+    val phase by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "skeletonPhase"
+    )
+    val placeholder = scheme.onSurfaceVariant.copy(alpha = phase * 0.16f)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(scheme.background)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp)
+            .padding(top = 96.dp, bottom = 104.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.45f)
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(placeholder)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(placeholder)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                repeat(7) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(12.dp)
+                            .padding(horizontal = 12.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(placeholder)
+                    )
+                }
+            }
+            repeat(6) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    repeat(7) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(placeholder)
+                        )
+                    }
+                }
+            }
+            Text(
+                text = "正在整理你的日历…",
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
 }
