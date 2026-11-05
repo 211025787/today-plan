@@ -1,20 +1,21 @@
 package com.focuslist.app.ui.home
 
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -93,6 +94,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -101,13 +103,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -125,6 +130,7 @@ import com.focuslist.app.ui.note.DayNotePreviewCard
 import com.focuslist.app.ui.plan.AddPlanSheet
 import com.focuslist.app.ui.plan.PlanInsightSheet
 import com.focuslist.app.ui.plan.QuickPlanSheet
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.focuslist.app.ui.theme.parseThemeColor
@@ -168,6 +174,28 @@ private const val PAGER_INITIAL_PAGE = PAGER_MONTH_RANGE
 private const val PAGER_PAGE_COUNT = PAGER_MONTH_RANGE * 2 + 1
 
 /**
+ * 返回手势进度 → 动画比例的系数。
+ * 1f 表示手指滑多少动画就走多少（完全 1:1 跟手）；0.5f 表示滑到系统允许的最大距离时，
+ * 动画只走一半，松手再补完剩下的。想调手感改这里一个数就行。
+ */
+private const val BACK_FOLLOW = 0.5f
+
+/**
+ * 上半窗口：孩子始终按「整屏高」测量，自己只报 `visible × 整屏高` 的高度，多出来的裁掉。
+ * 好处是收起过程中内容不重新排版——日历不会被压扁，就是单纯被推走。
+ * [visible] 在测量阶段才读取，返回手势每帧推进时只重跑布局，不触发重组。
+ */
+private fun Modifier.topPane(visible: () -> Float): Modifier = this
+    .layout { measurable, constraints ->
+        val width = constraints.maxWidth
+        val full = constraints.maxHeight
+        val placeable = measurable.measure(Constraints.fixed(width, full))
+        val height = (full * visible().coerceIn(0f, 1f)).roundToInt().coerceIn(0, full)
+        layout(width, height) { placeable.place(0, 0) }
+    }
+    .clipToBounds()
+
+/**
  * 相对当月偏移 [offset] 个月后的 1 号 0 点时间戳。
  *
  * @param offset 月份偏移（0 当月，正数未来，负数过去）
@@ -209,22 +237,34 @@ fun CalendarHomeScreen(
     var searchActive by remember { mutableStateOf(false) }
     val query by viewModel.queryText.collectAsState()
     val results by viewModel.searchResults.collectAsState()
-    // 记住最后一次选中的日期：返回日历时 selectedDay 已经变成 null，
-    // 但日历展开的那几百毫秒里还要把卡片继续画完——日历撑开多少，卡片就被挤掉多少，
-    // 退出因此和进入走的是同一条曲线，不会「唰」地一下消失。
+    // 日历 ⇄ 日卡片页的收展进度：0 = 日历满屏，1 = 卡片满屏。
+    // 平时用弹簧动画跑（进入 / 点「返回日历」）；全面屏手势返回时由手指直接驱动，
+    // 见下面的 PredictiveBackHandler——滑多少，动画就走多少。
+    val cardFraction = remember { Animatable(if (state.selectedDay != null) 1f else 0f) }
+    val cardSpring = remember {
+        spring<Float>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+            // 值域只有 0..1，默认按像素设的阈值放在这里会让动画提前「认为到位」
+            visibilityThreshold = 0.001f
+        )
+    }
+    // 两块内容在动画跑完之前都得留着画，跑完再从组合里摘掉（省得日历在卡片页白跑动画）
+    var calendarMounted by remember { mutableStateOf(state.selectedDay == null) }
+    var cardMounted by remember { mutableStateOf(state.selectedDay != null) }
+    // 退出动画期间 selectedDay 已是 null，还要用最后这一天把卡片画完
     var lastSelectedDay by remember { mutableStateOf<Long?>(null) }
-    var cardClosing by remember { mutableStateOf(false) }
     LaunchedEffect(state.selectedDay) {
         val day = state.selectedDay
         if (day != null) {
             lastSelectedDay = day
-            cardClosing = false
-        } else if (lastSelectedDay != null) {
-            cardClosing = true
-            // 日历 expandVertically 的弹簧约 300ms，这里留点余量：
-            // 拖长没有副作用（那时卡片剩余高度已是 0），提前收掉才会闪。
-            delay(420)
-            cardClosing = false
+            cardMounted = true
+            cardFraction.animateTo(1f, cardSpring)
+            calendarMounted = false
+        } else {
+            calendarMounted = true
+            cardFraction.animateTo(0f, cardSpring)
+            cardMounted = false
         }
     }
 
@@ -264,9 +304,28 @@ fun CalendarHomeScreen(
         onDispose { DayDetailState.set(false) }
     }
 
-    // 卡片页（已选中某天）时拦截返回键：回到日历而不是退出应用
-    androidx.activity.compose.BackHandler(enabled = state.selectedDay != null) {
-        viewModel.clearSelection()
+    // 卡片页（已选中某天）时接管系统返回，并接上 Android 的「预测式返回」：
+    // 从屏幕边缘往里滑，progress 0→1 直接映射成收展比例，日历和卡片跟着手指实时走；
+    // 松手完成手势 = 真的按了返回，中途放弃则弹回卡片页。
+    val backScope = androidx.compose.runtime.rememberCoroutineScope()
+    PredictiveBackHandler(enabled = state.selectedDay != null) { progress ->
+        try {
+            progress.collect { event ->
+                // 手势一动就把日历装回来，否则它会被当成「已卸载」而看不到跟手效果
+                if (!calendarMounted) calendarMounted = true
+                cardFraction.snapTo((1f - event.progress * BACK_FOLLOW).coerceIn(0f, 1f))
+            }
+            // 手势走完：执行返回
+            viewModel.clearSelection()
+        } catch (e: CancellationException) {
+            // 手势取消：卡片页弹回原位。
+            // 此刻本协程已被取消，animateTo 会立刻抛 Cancellation，得另起一个作用域来弹回。
+            backScope.launch {
+                cardFraction.animateTo(1f, cardSpring)
+                calendarMounted = false
+            }
+            throw e
+        }
     }
 
     // 搜索态拦截返回键：先退出搜索
@@ -469,17 +528,16 @@ fun CalendarHomeScreen(
             )
         } else {
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-                // 月历区：未选中日期时展示；选中日纵向收起，把空间让给卡片页
-                AnimatedVisibility(
-                    visible = state.selectedDay == null,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
-                ) {
+                // 月历区：始终按整屏高测量，只露出 (1 - 进度) 的高度，其余裁掉。
+                // 内容全程不重新排版，所以收起时不会把日历「压扁」，就是单纯被推上去。
+                if (calendarMounted) {
                     // 填满剩余屏幕高度：星期表头固定，月份网格按行均分其余空间；
                     // 底部留出系统导航条 + 悬浮 Dock 栏（62+10*2=82dp，再加 6dp 间隙）的空间
                     Column(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .fillMaxWidth()
+                            .topPane { 1f - cardFraction.value }
+                            .graphicsLayer { alpha = (1f - cardFraction.value).coerceIn(0f, 1f) }
                             .navigationBarsPadding()
                             .padding(bottom = 88.dp)
                             // 计划计时中缓慢漂移，防止长期停留烧屏
@@ -539,10 +597,16 @@ fun CalendarHomeScreen(
                 }
 
                 // 选中日后：渐变方形计划卡片。
-                // 进入：直接占满日历让出来的空间（和以前完全一致，日历收起多少它长多少）；
-                // 退出：靠 cardClosing 多留一会儿，日历展开多少它就被挤掉多少——进入的倒放。
-                val cardDay = state.selectedDay ?: if (cardClosing) lastSelectedDay else null
+                // 它拿的是日历让出来的剩余高度（weight 自动跟随），所以进入时「日历走多少它长多少」，
+                // 退出时「日历回来多少它被挤掉多少」——进出是同一条曲线，手势中途也严格跟手。
+                val cardDay = if (cardMounted) (state.selectedDay ?: lastSelectedDay) else null
                 cardDay?.let { day ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clipToBounds()
+                    ) {
                     // 收工入口只在「今天」出现：有计时在跑，或到了晚上
                     val wrap = remember(day, state.plans, state.monthLogs, state.timers, nowMinute, todayStart) {
                         if (day != todayStart) {
@@ -802,6 +866,7 @@ fun CalendarHomeScreen(
                                     )
                                 }
                             }
+                    }
                     }
                 }
             }
