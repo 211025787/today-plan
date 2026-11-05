@@ -59,7 +59,14 @@ import com.focuslist.app.ui.home.CalendarHomeScreen
 import com.focuslist.app.ui.note.NoteScreen
 import com.focuslist.app.ui.note.NotesScreen
 import com.focuslist.app.ui.plan.PlanTimerHolder
+import com.focuslist.app.ui.settings.AppearanceSettingsScreen
+import com.focuslist.app.ui.settings.BackupSettingsScreen
 import com.focuslist.app.ui.settings.CapsuleSettingsScreen
+import com.focuslist.app.ui.settings.DailyGoalSettingsScreen
+import com.focuslist.app.ui.settings.MapSearchSettingsScreen
+import com.focuslist.app.ui.settings.PlanTemplateSettingsScreen
+import com.focuslist.app.ui.settings.ReminderSettingsScreen
+import com.focuslist.app.ui.settings.SettingsRoutes
 import com.focuslist.app.ui.settings.SettingsScreen
 import com.focuslist.app.ui.stats.AchievementsScreen
 import com.focuslist.app.ui.stats.MonthReviewScreen
@@ -289,14 +296,30 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 composable(Destinations.MINE.route) {
                     SettingsScreen(
                         container = container,
-                        onOpenStats = { navController.navigate("stats") },
-                        onOpenCapsule = { navController.navigate("capsule_settings") },
-                        onOpenAchievements = { navController.navigate("achievements") },
-                        onOpenMonths = { navController.navigate("month_review") }
+                        onOpen = { route -> navController.navigate(route) }
                     )
                 }
+                // 「我的」页的各设置子页面：入口只留一行，具体设置点进去再改
+                composable(SettingsRoutes.APPEARANCE) {
+                    AppearanceSettingsScreen(container = container, onBack = { navController.popBackStack() })
+                }
+                composable(SettingsRoutes.DAILY_GOAL) {
+                    DailyGoalSettingsScreen(container = container, onBack = { navController.popBackStack() })
+                }
+                composable(SettingsRoutes.REMINDER) {
+                    ReminderSettingsScreen(container = container, onBack = { navController.popBackStack() })
+                }
+                composable(SettingsRoutes.TEMPLATES) {
+                    PlanTemplateSettingsScreen(container = container, onBack = { navController.popBackStack() })
+                }
+                composable(SettingsRoutes.MAP_SEARCH) {
+                    MapSearchSettingsScreen(container = container, onBack = { navController.popBackStack() })
+                }
+                composable(SettingsRoutes.BACKUP) {
+                    BackupSettingsScreen(container = container, onBack = { navController.popBackStack() })
+                }
                 // 专注统计页：今日/周/月/累计 + 年度总览与年度热力图
-                composable("stats") {
+                composable(SettingsRoutes.STATS) {
                     StatsScreen(
                         container = container,
                         onBack = { navController.popBackStack() },
@@ -305,15 +328,15 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                     )
                 }
                 // 月度回顾：整月逐日日历 + 上月同期对比
-                composable("month_review") {
+                composable(SettingsRoutes.MONTH_REVIEW) {
                     MonthReviewScreen(container = container, onBack = { navController.popBackStack() })
                 }
                 // 成就殿堂：长期专注沉淀的徽章墙
-                composable("achievements") {
+                composable(SettingsRoutes.ACHIEVEMENTS) {
                     AchievementsScreen(container = container, onBack = { navController.popBackStack() })
                 }
                 // 悬浮胶囊设置页（外观 / 权限 / 预览）
-                composable("capsule_settings") {
+                composable(SettingsRoutes.CAPSULE) {
                     CapsuleSettingsScreen(container = container, onBack = { navController.popBackStack() })
                 }
                 composable("notes") {
