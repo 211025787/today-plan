@@ -5,10 +5,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -456,12 +454,16 @@ fun CalendarHomeScreen(
                 modifier = Modifier.fillMaxSize().padding(padding)
             )
         } else {
-            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-                // 月历区：未选中日期时展示；选中后动画收起
+            // 日历 ⇄ 日卡片：两层叠在同一块区域做交叉淡入淡出。
+            // 注意不要用 Column 上下排（高度伸缩动画会让两张页面互相挤压），
+            // 也不要把多个子元素直接塞进 AnimatedVisibility（它们会被压到同一个 0,0 坐标）。
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                // 月历区：未选中日期时展示；选中日淡出
                 AnimatedVisibility(
                     visible = state.selectedDay == null,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
+                    modifier = Modifier.fillMaxSize(),
+                    enter = fadeIn(animationSpec = tween(220)),
+                    exit = fadeOut(animationSpec = tween(180))
                 ) {
                     // 填满剩余屏幕高度：星期表头固定，月份网格按行均分其余空间；
                     // 底部留出系统导航条 + 悬浮 Dock 栏（62+10*2=82dp，再加 6dp 间隙）的空间
@@ -526,12 +528,16 @@ fun CalendarHomeScreen(
                     }
                 }
 
-                // 选中日后：渐变方形计划卡片；返回日历时淡出 + 收起，不再瞬间消失
+                // 选中日后：渐变方形计划卡片；返回日历时淡出，不再瞬间消失
                 AnimatedVisibility(
                     visible = state.selectedDay != null,
-                    enter = fadeIn(animationSpec = tween(220)) + expandVertically(animationSpec = tween(260)),
-                    exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(220))
+                    modifier = Modifier.fillMaxSize(),
+                    enter = fadeIn(animationSpec = tween(240)),
+                    exit = fadeOut(animationSpec = tween(200))
                 ) {
+                // 必须套一层 Column：AnimatedVisibility 的多个子元素会叠在同一个 (0,0)，
+                // 之前卡片画布直接把「‹ 返回日历」和周条盖住了
+                Column(modifier = Modifier.fillMaxSize()) {
                 (state.selectedDay ?: lastSelectedDay)?.let { day ->
                     // 收工入口只在「今天」出现：有计时在跑，或到了晚上
                     val wrap = remember(day, state.plans, state.monthLogs, state.timers, nowMinute, todayStart) {
@@ -793,6 +799,7 @@ fun CalendarHomeScreen(
                                 }
                             }
                     }
+                }
                 }
                 }
             }
