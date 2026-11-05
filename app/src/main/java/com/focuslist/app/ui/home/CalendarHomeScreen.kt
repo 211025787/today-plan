@@ -5,8 +5,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -207,11 +209,23 @@ fun CalendarHomeScreen(
     var searchActive by remember { mutableStateOf(false) }
     val query by viewModel.queryText.collectAsState()
     val results by viewModel.searchResults.collectAsState()
-    // 记住最后一次选中的日期：退出卡片页时 selectedDay 已变成 null，
-    // 但退出动画还要用这一天把内容画完，否则会「唰」地消失
+    // 记住最后一次选中的日期：返回日历时 selectedDay 已经变成 null，
+    // 但日历展开的那几百毫秒里还要把卡片继续画完——日历撑开多少，卡片就被挤掉多少，
+    // 退出因此和进入走的是同一条曲线，不会「唰」地一下消失。
     var lastSelectedDay by remember { mutableStateOf<Long?>(null) }
+    var cardClosing by remember { mutableStateOf(false) }
     LaunchedEffect(state.selectedDay) {
-        state.selectedDay?.let { lastSelectedDay = it }
+        val day = state.selectedDay
+        if (day != null) {
+            lastSelectedDay = day
+            cardClosing = false
+        } else if (lastSelectedDay != null) {
+            cardClosing = true
+            // 日历 expandVertically 的弹簧约 300ms，这里留点余量：
+            // 拖长没有副作用（那时卡片剩余高度已是 0），提前收掉才会闪。
+            delay(420)
+            cardClosing = false
+        }
     }
 
     // 是否有计划正在计时：用于防烧屏（页面持续微动 + 隐藏 Dock）
@@ -454,16 +468,12 @@ fun CalendarHomeScreen(
                 modifier = Modifier.fillMaxSize().padding(padding)
             )
         } else {
-            // 日历 ⇄ 日卡片：两层叠在同一块区域做交叉淡入淡出。
-            // 注意不要用 Column 上下排（高度伸缩动画会让两张页面互相挤压），
-            // 也不要把多个子元素直接塞进 AnimatedVisibility（它们会被压到同一个 0,0 坐标）。
-            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                // 月历区：未选中日期时展示；选中日淡出
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                // 月历区：未选中日期时展示；选中日纵向收起，把空间让给卡片页
                 AnimatedVisibility(
                     visible = state.selectedDay == null,
-                    modifier = Modifier.fillMaxSize(),
-                    enter = fadeIn(animationSpec = tween(220)),
-                    exit = fadeOut(animationSpec = tween(180))
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
                 ) {
                     // 填满剩余屏幕高度：星期表头固定，月份网格按行均分其余空间；
                     // 底部留出系统导航条 + 悬浮 Dock 栏（62+10*2=82dp，再加 6dp 间隙）的空间
@@ -528,17 +538,11 @@ fun CalendarHomeScreen(
                     }
                 }
 
-                // 选中日后：渐变方形计划卡片；返回日历时淡出，不再瞬间消失
-                AnimatedVisibility(
-                    visible = state.selectedDay != null,
-                    modifier = Modifier.fillMaxSize(),
-                    enter = fadeIn(animationSpec = tween(240)),
-                    exit = fadeOut(animationSpec = tween(200))
-                ) {
-                // 必须套一层 Column：AnimatedVisibility 的多个子元素会叠在同一个 (0,0)，
-                // 之前卡片画布直接把「‹ 返回日历」和周条盖住了
-                Column(modifier = Modifier.fillMaxSize()) {
-                (state.selectedDay ?: lastSelectedDay)?.let { day ->
+                // 选中日后：渐变方形计划卡片。
+                // 进入：直接占满日历让出来的空间（和以前完全一致，日历收起多少它长多少）；
+                // 退出：靠 cardClosing 多留一会儿，日历展开多少它就被挤掉多少——进入的倒放。
+                val cardDay = state.selectedDay ?: if (cardClosing) lastSelectedDay else null
+                cardDay?.let { day ->
                     // 收工入口只在「今天」出现：有计时在跑，或到了晚上
                     val wrap = remember(day, state.plans, state.monthLogs, state.timers, nowMinute, todayStart) {
                         if (day != todayStart) {
@@ -799,8 +803,6 @@ fun CalendarHomeScreen(
                                 }
                             }
                     }
-                }
-                }
                 }
             }
         }
