@@ -302,7 +302,9 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                             navController.navigate("note_editor?noteId=$id&date=$date")
                         },
                         onOpenTravel = { tripId ->
-                            navController.navigate("travel?tripId=$tripId")
+                            // 记下进入前是不是停在日卡片页：返回手势左边露出的「上一页」要照着它画
+                            val fromCard = DayDetailState.open.value
+                            navController.navigate("travel?tripId=$tripId&fromCard=$fromCard")
                         },
                         // 主页顶栏：日历计划统计
                         onOpenPlanStats = { navController.navigate(SettingsRoutes.PLAN_STATS) }
@@ -318,17 +320,22 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 composable(Destinations.HABITS.route) { HabitsScreen(container) }
                 // 旅游规划：从首页 FAB 进入，不在 Dock；tripId=-1 进旅游主页，>0 直接编辑该行程
                 composable(
-                    route = "travel?tripId={$TRAVEL_ARG_TRIP_ID}",
+                    route = "travel?tripId={$TRAVEL_ARG_TRIP_ID}&fromCard={fromCard}",
                     arguments = listOf(
                         navArgument(TRAVEL_ARG_TRIP_ID) {
                             type = NavType.LongType
                             defaultValue = -1L
+                        },
+                        navArgument("fromCard") {
+                            type = NavType.BoolType
+                            defaultValue = false
                         }
                     )
                 ) { entry ->
                     TravelScreen(
                         container = container,
                         focusTripId = entry.arguments?.getLong(TRAVEL_ARG_TRIP_ID) ?: -1L,
+                        fromDayCard = entry.arguments?.getBoolean("fromCard") ?: false,
                         onBack = { navController.popBackStack() }
                     )
                 }

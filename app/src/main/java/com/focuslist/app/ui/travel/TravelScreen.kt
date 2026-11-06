@@ -113,12 +113,14 @@ import kotlinx.coroutines.launch
  *
  * @param container 依赖容器
  * @param focusTripId 从首页 FAB 进入时指定的行程 ID；<=0 表示不指定，沿用上次活跃行程
+ * @param fromDayCard 是否从「日卡片页」点进行程：决定返回手势左边露出的上一页预览是卡片页还是月历
  * @param onBack 返回上一页回调（边缘滑动手势松手 / 系统返回键时调用）
  */
 @Composable
 fun TravelScreen(
     container: AppContainer,
     focusTripId: Long = -1L,
+    fromDayCard: Boolean = false,
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -254,6 +256,7 @@ fun TravelScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         // 下层：返回时从左边逐渐露出的上一页（日历主页预览）
         PreviousCalendarPreview(
+            dayCardMode = fromDayCard,
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 31+ 专用：系统启动画面（SplashScreen）默认会把桌面图标放大显示一瞬，
+  接着才轮到应用内的 WarmSplash，于是出现「大图标 → 小图标 + 名言」两段式。
+  这里把系统图标换成全透明占位、动画时长归零、底色设成与 WarmSplash 相同的暖白，
+  系统那一帧就只是一层纯色，用户直接看到小图标 + 手写名言。
+
+  注意：同名 style 在不同限定符下是整体替换，不会合并属性，
+  所以 values/themes.xml 里的三个属性必须原样保留在这里。
+-->
+<resources>
+    <style name="Theme.FocusList" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_no_icon</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+        <item name="android:windowSplashScreenBackground">#FFFFF7EF</item>
+    </style>
+</resources>
