@@ -46,6 +46,9 @@ object SettingsRoutes {
     const val TEMPLATES = "settings_templates"
     const val MAP_SEARCH = "settings_map"
     const val BACKUP = "settings_backup"
+    // 日历计划维度的统计（数据源是 plan_logs，不是番茄专注记录）
+    const val PLAN_STATS = "plan_stats"
+    const val PLAN_REVIEW = "plan_review"
 }
 
 /**

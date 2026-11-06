@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -25,7 +26,8 @@ import com.focuslist.app.ui.common.GlassCard
 /**
  * 地图与搜索设置页：高德 Web 服务 Key 的配置与说明。
  *
- * Key 只存在本机偏好里，用于行程搜索时按名称查景点、酒店等具体地点。
+ * Key 的保存是**显式的**：默认只读展示已保存的值，点「编辑」才进入输入态，
+ * 点「确定」才真正写入本机偏好，并立刻回显「✓ 已保存」——不会边打字边悄悄存。
  *
  * @param container 依赖容器
  * @param onBack 返回回调
@@ -34,7 +36,12 @@ import com.focuslist.app.ui.common.GlassCard
 fun MapSearchSettingsScreen(container: AppContainer, onBack: () -> Unit) {
     val context = LocalContext.current
     val travelPrefs = remember { TravelPrefs(context) }
-    var amapKey by remember { mutableStateOf(travelPrefs.amapKey) }
+    // savedKey 是「已经落盘的那一份」，draft 只是编辑中的草稿，两者分开才谈得上取消 / 确定
+    var savedKey by remember { mutableStateOf(travelPrefs.amapKey) }
+    var editing by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf(savedKey) }
+    // 刚保存过：给一条持续可见的回执，用户能确认「确实存了」
+    var savedJustNow by remember { mutableStateOf(false) }
 
     SettingsDetailScreen(
         title = "地图与搜索",
@@ -50,12 +57,18 @@ fun MapSearchSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                         modifier = Modifier.weight(1f)
                     )
                     Text(
-                        text = if (amapKey.isBlank()) "未配置" else "已配置",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (amapKey.isBlank()) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                        text = if (editing) {
+                            "编辑中"
+                        } else if (savedKey.isBlank()) {
+                            "未配置"
                         } else {
+                            "已配置"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (editing) {
                             MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
                         }
                     )
                 }
@@ -65,26 +78,80 @@ fun MapSearchSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp)
                 )
-                OutlinedTextField(
-                    value = amapKey,
-                    onValueChange = {
-                        amapKey = it
-                        travelPrefs.amapKey = it
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                    placeholder = { Text("在高德开放平台申请的 Web 服务 Key") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                if (amapKey.isNotBlank()) {
-                    TextButton(
-                        onClick = {
-                            amapKey = ""
-                            travelPrefs.amapKey = ""
+
+                if (editing) {
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = {
+                            draft = it
+                            savedJustNow = false
                         },
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        placeholder = { Text("在高德开放平台申请的 Web 服务 Key") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Text(
+                        text = "改完点「确定」才会保存；留空并确定可清除已保存的 Key。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                     ) {
-                        Text("清空 Key")
+                        TextButton(onClick = {
+                            draft = savedKey
+                            editing = false
+                            savedJustNow = false
+                        }) { Text("取消") }
+                        Button(
+                            onClick = {
+                                val next = draft.trim()
+                                travelPrefs.amapKey = next
+                                savedKey = next
+                                draft = next
+                                editing = false
+                                savedJustNow = true
+                            },
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text(if (draft.isBlank() && savedKey.isNotBlank()) "清空并保存" else "确定")
+                        }
+                    }
+                } else {
+                    // 只读态：把保存结果明确写出来，Key 本身打码，避免整串暴露
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (savedKey.isBlank()) "当前：未保存任何 Key" else "当前：${maskKey(savedKey)}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            if (savedJustNow) {
+                                Text(
+                                    text = "✓ 已保存，下次搜索立即生效",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            } else {
+                                Text(
+                                    text = if (savedKey.isBlank()) "点「编辑」填一个 Key" else "已保存于本机设置",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+                        TextButton(onClick = {
+                            draft = savedKey
+                            savedJustNow = false
+                            editing = true
+                        }) { Text("编辑") }
                     }
                 }
             }
@@ -103,4 +170,15 @@ fun MapSearchSettingsScreen(container: AppContainer, onBack: () -> Unit) {
             }
         }
     }
+}
+
+/**
+ * Key 打码：只留后 4 位便于核对是不是刚填的那一个，中间一律用圆点。
+ *
+ * @param key 原始 Key
+ * @return 打码后的展示串
+ */
+private fun maskKey(key: String): String {
+    if (key.length <= 4) return "•".repeat(key.length)
+    return "•".repeat(8) + key.takeLast(4)
 }

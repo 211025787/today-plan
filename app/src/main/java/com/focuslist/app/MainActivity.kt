@@ -70,6 +70,8 @@ import com.focuslist.app.ui.settings.SettingsRoutes
 import com.focuslist.app.ui.settings.SettingsScreen
 import com.focuslist.app.ui.stats.AchievementsScreen
 import com.focuslist.app.ui.stats.MonthReviewScreen
+import com.focuslist.app.ui.stats.PlanReviewScreen
+import com.focuslist.app.ui.stats.PlanStatsScreen
 import com.focuslist.app.ui.stats.StatsScreen
 import com.focuslist.app.ui.theme.FocusListTheme
 import com.focuslist.app.ui.travel.TravelScreen
@@ -317,6 +319,13 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 }
                 composable(SettingsRoutes.BACKUP) {
                     BackupSettingsScreen(container = container, onBack = { navController.popBackStack() })
+                }
+                // 日历计划维度的统计：数据源是 plan_logs，不是番茄专注记录
+                composable(SettingsRoutes.PLAN_STATS) {
+                    PlanStatsScreen(container = container, onBack = { navController.popBackStack() })
+                }
+                composable(SettingsRoutes.PLAN_REVIEW) {
+                    PlanReviewScreen(container = container, onBack = { navController.popBackStack() })
                 }
                 // 专注统计页：今日/周/月/累计 + 年度总览与年度热力图
                 composable(SettingsRoutes.STATS) {
