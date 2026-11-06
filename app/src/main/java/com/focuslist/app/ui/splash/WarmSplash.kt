@@ -104,7 +104,7 @@ fun WarmSplash(
     LaunchedEffect(quote, skipped) {
         if (skipped) return@LaunchedEffect
         launch {
-            // 「暖历」两字：180ms 后开始，用 1200ms 浮现。
+            // 「暖历」两字：180ms 后开始，用 1200ms 浮现（1380ms 结束）。
             // 缓动用 LinearOutSlowInEasing（线性起、减速收）：匀速淡入的结尾是「戛然而止」，
             // 会被读成一卡；这个曲线起手不突兀、收尾柔和。
             delay(180)
@@ -272,6 +272,13 @@ private fun HandChar(
             }
             .drawWithContent {
                 val local = (progress() - index).coerceIn(0f, 1f)
+                // 没轮到的字一跳而过；已经写完的字用普通绘制。
+                // 只有正在写的那一两个字才走 clipRect——否则 30 个字每帧都要裁剪一次。
+                if (local <= 0f) return@drawWithContent
+                if (local >= 1f) {
+                    drawContent()
+                    return@drawWithContent
+                }
                 clipRect(
                     left = 0f,
                     top = 0f,

@@ -186,9 +186,9 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(Unit) {
                         if (!skipSplash) {
                             withFrameNanos { }
-                            // 1400ms 之后再组合主界面：「暖历」的淡入是 180~1380ms，
-                            // 期间若同时组合 NavHost + 日历 + 卡片板，主线程抢帧会让文字淡入一顿一顿的。
-                            delay(1400)
+                            // 1420ms 之后再组合主界面：此时「暖历」已淡入完（1380ms），
+                            // 名言要到 1850ms 才落笔，中间这段空窗正好塞下 NavHost + 日历 + 卡片板的组合。
+                            delay(1420)
                             warmUpApp = true
                         }
                     }
