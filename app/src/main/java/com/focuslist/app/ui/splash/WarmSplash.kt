@@ -1,7 +1,6 @@
 package com.focuslist.app.ui.splash
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -84,10 +83,10 @@ fun WarmSplash(
     val accent = if (dark) Color(0xFFFFB984) else WarmAccent
     val density = LocalDensity.current
 
-    // 首帧图标与系统启动画面里那枚 80dp 图标重合（60dp × 1.35 ≈ 81dp），
-    // 再用 tween 匀速收拢到 60dp 后全程固定：从大缩小、落定即不动，
-    // 不会像弹簧那样「突然变大」。用 tween 而不是 spring 就是为这份平稳感。
-    val iconScale = remember { Animatable(1.35f) }
+    // 首帧图标与系统启动画面里那枚 72dp 图标重合（60dp × 1.22 ≈ 73dp），
+    // 然后用 1100ms 匀速收拢到 60dp，幅度只有 13dp、速度很慢，
+    // 读起来是「缓缓落位」而不是「一进去猛地小了一圈」；落定后全程固定。
+    val iconScale = remember { Animatable(1.22f) }
     // 品牌名首帧给一半不透明度，很快补到全亮；不再从完全透明开始等 220ms
     val brandAlpha = remember { Animatable(0.5f) }
     // 笔尖进度：单位是「字」，名言写完接着写署名
@@ -102,14 +101,16 @@ fun WarmSplash(
     LaunchedEffect(quote, skipped) {
         if (skipped) return@LaunchedEffect
         launch {
-            iconScale.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+            // 先让首帧的大图标稳住 120ms，再开始收拢，交接不会「一出现就在动」
+            delay(120)
+            iconScale.animateTo(1f, tween(1100, easing = LinearEasing))
         }
         launch {
             delay(80)
             brandAlpha.animateTo(1f, tween(300))
         }
-        // 图标收拢落定（420ms）之后再落笔，节奏刚好接上
-        delay(430)
+        // 等收拢基本落定（120 + 1100ms）再落笔，图标不动了才开始写字
+        delay(1150)
         pen.animateTo(total.toFloat(), tween(total * perCharMs, easing = LinearEasing))
         delay(420)
         onFinished()
@@ -145,7 +146,7 @@ fun WarmSplash(
                 .padding(bottom = 48.dp)
         ) {
             // 应用图标：最终 60dp 方块 / 22dp 圆角（比之前的 44dp 大一圈，形状更圆润）。
-            // 首帧被 iconScale 放大 1.35 倍，与系统帧那枚 80dp 图标重合后收拢回来。
+            // 首帧被 iconScale 放大 1.22 倍，与系统帧那枚 72dp 图标重合后缓慢收拢回来。
             Box(
                 modifier = Modifier
                     .size(60.dp)
@@ -163,8 +164,8 @@ fun WarmSplash(
                     contentDescription = "暖历",
                     contentScale = ContentScale.FillBounds,
                     // 与 splash_brand 里日轮的占比对齐：108dp 画布的 42dp 主体
-                    // 落进 60dp 方块再放大 1.3 倍 ≈ 30dp；首帧随整体 ×1.35 ≈ 41dp，
-                    // 正好和系统帧画的 40dp 日轮重合
+                    // 落进 60dp 方块再放大 1.3 倍 ≈ 30dp；首帧随整体 ×1.22 ≈ 37dp，
+                    // 正好和系统帧画的 36dp 日轮重合
                     modifier = Modifier.fillMaxSize().scale(1.3f)
                 )
             }
