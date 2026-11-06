@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -112,7 +114,9 @@ fun WarmSplash(
         onFinished()
     }
 
-    Box(
+    // 用 BoxWithConstraints 拿屏高：图标位置要和系统启动帧**算得一模一样**，
+    // 否则切换瞬间图标会从屏幕正中跳到偏上（真机验证过）。
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(background)
@@ -122,7 +126,7 @@ fun WarmSplash(
                         colors = listOf(accent.copy(alpha = 0.16f), Color.Transparent)
                     ),
                     radius = with(density) { 300.dp.toPx() },
-                    center = Offset(size.width / 2f, size.height * 0.34f)
+                    center = Offset(size.width / 2f, size.height * 0.42f)
                 )
             }
             // 轻点跳过，不显示提示文字，免得抢了手写动画的戏
@@ -131,15 +135,20 @@ fun WarmSplash(
                     skipped = true
                     onFinished()
                 })
-            },
-        contentAlignment = Alignment.Center
+            }
     ) {
+        // 与 splash_small_icon 同一套几何：
+        //   画布 108dp × 系统放大 2.18 倍 = 235.44dp，居中于屏幕；
+        //   图标在画布内 y 21..49，中心 35dp。
+        // 换算成屏幕坐标就是下面的 iconTop，两段位置因此完全重合。
+        val splashCanvas = 108.dp * 2.18f
+        val iconTop = (maxHeight - splashCanvas) / 2 + 35.dp * 2.18f - 30.dp
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxWidth()
+                .offset(y = iconTop)
                 .padding(horizontal = 32.dp)
-                .padding(bottom = 48.dp)
         ) {
             // 应用图标：60dp 方块 / 22dp 圆角，从第一帧到开屏结束都不缩放
             Box(
