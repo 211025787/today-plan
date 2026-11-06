@@ -60,7 +60,7 @@ private val InkLight = Color(0xFF2E2723)
 private val InkDark = Color(0xFFF6EDE4)
 
 /**
- * 开屏页：小图标与品牌名第一帧即可见且全程固定 → 随机格言与署名被逐字写下 → 进入主界面。
+ * 开屏页：首帧的大图标用 1600ms 缓缓收拢到 60dp → 品牌名补亮 → 随机格言与署名被逐字写下 → 进入主界面。
  *
  * 手写感由四层叠出来：毛笔字体 + 每字随机微小倾角 + 从左往右的笔迹揭示 +
  * 笔尖墨点跟随。逐字推进而不是整句淡入，才有「正在写」的感觉。
@@ -83,6 +83,9 @@ fun WarmSplash(
     val accent = if (dark) Color(0xFFFFB984) else WarmAccent
     val density = LocalDensity.current
 
+    // 首帧图标是 60dp × 1.22 ≈ 73dp，用 1600ms匀速收拢到 60dp。
+    // 时长刻意放长、缓动用 LinearEasing：读起来是「缓缓落位」，不是猛地缩一下。
+    val iconScale = remember { Animatable(1.22f) }
     // 品牌名首帧给一半不透明度，很快补到全亮；不再从完全透明开始等 220ms
     val brandAlpha = remember { Animatable(0.5f) }
     // 笔尖进度：单位是「字」，名言写完接着写署名
@@ -97,11 +100,16 @@ fun WarmSplash(
     LaunchedEffect(quote, skipped) {
         if (skipped) return@LaunchedEffect
         launch {
+            // 先让首帧的大图标稳一下，再开始收拢，交接不会「一出现就在动」
+            delay(180)
+            iconScale.animateTo(1f, tween(1600, easing = LinearEasing))
+        }
+        launch {
             delay(80)
             brandAlpha.animateTo(1f, tween(300))
         }
-        // 图标 / 品牌名首帧就位，稍等一拍直接落笔写名言
-        delay(430)
+        // 等收拢基本落定（180 + 1600ms）再落笔，图标不动了才开始写字
+        delay(1700)
         pen.animateTo(total.toFloat(), tween(total * perCharMs, easing = LinearEasing))
         delay(420)
         onFinished()
@@ -136,11 +144,15 @@ fun WarmSplash(
                 .padding(horizontal = 32.dp)
                 .padding(bottom = 48.dp)
         ) {
-            // 应用图标：60dp 方块 / 22dp 圆角，第一帧起就这个大小，全程不缩放。
-            // 系统启动帧已不再画图标，不需要任何「从大缩小」的接运动画。
+            // 应用图标：60dp 方块 / 22dp 圆角；首帧被 iconScale 放大 1.22 倍，
+            // 与系统启动帧那枚大图标衔接后，用 1600ms 缓缓收拢回来。
             Box(
                 modifier = Modifier
                     .size(60.dp)
+                    .graphicsLayer {
+                        scaleX = iconScale.value
+                        scaleY = iconScale.value
+                    }
                     .clip(RoundedCornerShape(22.dp))
                     // 与桌面图标同一套底色：近黑纯底把「日轮」符号托起来
                     .background(Color(0xFF1C1714)),
