@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -30,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -46,6 +48,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.focuslist.app.data.prefs.TimerSettings
+import com.focuslist.app.ui.splash.WarmSplash
+import com.focuslist.app.util.WarmQuotes
 import com.focuslist.app.timer.TimerPhase
 import com.focuslist.app.timer.TimerStateHolder
 import com.focuslist.app.ui.common.BottomFadeEdge
@@ -151,7 +155,31 @@ class MainActivity : ComponentActivity() {
             val app = application as FocusListApp
             val settings by app.container.settingsStore.settings.collectAsState(initial = TimerSettings())
             FocusListTheme(themeMode = settings.themeMode, themeColorHex = settings.themeColor) {
-                AppScaffold(container = app.container, startRoute = startRoute)
+                // 每次冷启动抽一条开屏格言；从通知 / 小组件直达时跳过开屏，不耽误正事
+                val warmQuote = remember { WarmQuotes.random() }
+                val skipSplash = intent?.action == ACTION_OPEN_HABITS ||
+                    intent?.action == "com.focuslist.app.action.OPEN_TIMER"
+                var splashVisible by remember { mutableStateOf(!skipSplash) }
+                val darkTheme = when (settings.themeMode) {
+                    "LIGHT" -> false
+                    "DARK" -> true
+                    else -> isSystemInDarkTheme()
+                }
+                Crossfade(
+                    targetState = splashVisible,
+                    animationSpec = tween(320),
+                    label = "splashToApp"
+                ) { showSplash ->
+                    if (showSplash) {
+                        WarmSplash(
+                            quote = warmQuote,
+                            darkTheme = darkTheme,
+                            onFinished = { splashVisible = false }
+                        )
+                    } else {
+                        AppScaffold(container = app.container, startRoute = startRoute)
+                    }
+                }
             }
         }
     }

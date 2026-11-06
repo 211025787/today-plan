@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  启动图标前景：白色日历卡片 + 三条今日清单（圆点 + 条目）+ 右下角完成角标。
-  造型呼应应用名「今日规划」：今天要做什么，一目了然。
-  所有元素收在自适应图标安全区内，避免被圆形遮罩裁切。
+  启动图标前景（「暖历」）：白色日历卡片 + 暖色顶带 + 由浅到深被填满的日期格 + 右上角暖阳。
+  暖阳与格子共同回答名字里的两个字：暖（阳光）、历（日历），也对应应用里
+  「每天投一点，格子一点点亮起来」的核心动作。
+  所有元素收在自适应图标安全区（中心 54,54 半径 33）内，避免被圆形遮罩裁切。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -13,49 +14,35 @@
     <!-- 卡片顶部的两个装订环 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M35,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z" />
+        android:pathData="M41,22a3.2,3.2 0 0 1 6.4,0v10a3.2,3.2 0 0 1 -6.4,0z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M67,20a3,3 0 0 1 6,0v8a3,3 0 0 1 -6,0z" />
+        android:pathData="M60.6,22a3.2,3.2 0 0 1 6.4,0v10a3.2,3.2 0 0 1 -6.4,0z" />
 
-    <!-- 日历卡片 -->
+    <!-- 日历卡片：x 28..80 / y 30..80，圆角 10 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M35,30h38a11,11 0 0 1 11,11v32a11,11 0 0 1 -11,11h-38a11,11 0 0 1 -11,-11v-32a11,11 0 0 1 11,-11z" />
+        android:pathData="M38,30h32a10,10 0 0 1 10,10v30a10,10 0 0 1 -10,10h-32a10,10 0 0 1 -10,-10v-30a10,10 0 0 1 10,-10z" />
 
-    <!-- 三条清单：状态点 -->
+    <!-- 顶部暖色横带，像铺在日历上的一层阳光 -->
     <path
-        android:fillColor="#4C6FFF"
-        android:pathData="M37,45.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z" />
-    <path
-        android:fillColor="#4C6FFF"
-        android:pathData="M37,57.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z" />
-    <path
-        android:fillColor="#4C6FFF"
-        android:pathData="M37,69.4a2.6,2.6 0 1 1 0,5.2a2.6,2.6 0 1 1 0,-5.2z" />
+        android:fillColor="#FF9F5A"
+        android:pathData="M28,40h52v8h-52z" />
 
-    <!-- 三条清单：条目横线（长度不同，暗示不同任务） -->
+    <!-- 日期格：浅色是待填，暖橙是已经投入过的日子 -->
     <path
-        android:fillColor="#AFBBEE"
-        android:pathData="M45,46h22a2,2 0 0 1 0,4h-22a2,2 0 0 1 0,-4z" />
+        android:fillColor="#FFE3C6"
+        android:pathData="M36,55h10v8h-10z M50,67h10v8h-10z M64,55h10v8h-10z" />
     <path
-        android:fillColor="#AFBBEE"
-        android:pathData="M45,58h15a2,2 0 0 1 0,4h-15a2,2 0 0 1 0,-4z" />
-    <path
-        android:fillColor="#AFBBEE"
-        android:pathData="M45,70h19a2,2 0 0 1 0,4h-19a2,2 0 0 1 0,-4z" />
+        android:fillColor="#FF9F5A"
+        android:pathData="M50,55h10v8h-10z M36,67h10v8h-10z M64,67h10v8h-10z" />
 
-    <!-- 完成角标：白色描边圈 + 琥珀底 + 白色对勾 -->
+    <!-- 右上角暖阳：白描边让它在白卡片和暖色底上都分得清 -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M76,63a13,13 0 1 1 0,26a13,13 0 1 1 0,-26z" />
-    <path
-        android:fillColor="#FFB84D"
-        android:pathData="M76,65.5a10.5,10.5 0 1 1 0,21a10.5,10.5 0 1 1 0,-21z" />
+        android:fillColor="#FFD36B"
+        android:pathData="M77,22a8.5,8.5 0 1 1 0,17a8.5,8.5 0 1 1 0,-17z" />
     <path
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M71.2,76.3l3.4,3.4l6.3,-7" />
+        android:strokeWidth="1.6"
+        android:pathData="M77,22a8.5,8.5 0 1 1 0,17a8.5,8.5 0 1 1 0,-17z" />
 </vector>

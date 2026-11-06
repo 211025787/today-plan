@@ -10,13 +10,13 @@ import java.util.Locale
 object BackupNames {
 
     /** 备份文件名前缀 */
-    private const val PREFIX = "今日规划-备份-"
+    private const val PREFIX = "暖历-备份-"
 
     /** 备份文件扩展名 */
     const val EXTENSION = ".json"
 
     /**
-     * 生成建议的备份文件名，形如「今日规划-备份-20261031-231500.json」。
+     * 生成建议的备份文件名，形如「暖历-备份-20261031-231500.json」。
      *
      * @param timeMillis 导出时刻（毫秒）
      * @return 文件名（含扩展名）

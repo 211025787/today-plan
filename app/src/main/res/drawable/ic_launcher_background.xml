@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 启动图标背景：靛蓝 → 紫罗兰 渐变，象征一天的计划与专注氛围 -->
+<!-- 启动图标背景：暖黄 → 蜜桃 渐变，呼应「暖历」的温度感 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -14,8 +14,8 @@
                 android:startY="0"
                 android:endX="108"
                 android:endY="108">
-                <item android:offset="0" android:color="#FF4C6FFF" />
-                <item android:offset="1" android:color="#FF7A4BE8" />
+                <item android:offset="0" android:color="#FFFFC978" />
+                <item android:offset="1" android:color="#FFFF8A66" />
             </gradient>
         </aapt:attr>
     </path>

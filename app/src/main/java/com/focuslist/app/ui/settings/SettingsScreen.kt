@@ -142,7 +142,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().padding(16.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("今日规划", style = MaterialTheme.typography.titleMedium)
+                        Text("暖历", style = MaterialTheme.typography.titleMedium)
                         Text(
                             text = if (versionName.isNotEmpty()) "v$versionName · 数据仅保存在本机" else "数据仅保存在本机",
                             style = MaterialTheme.typography.labelSmall,

@@ -136,7 +136,7 @@ class IcsTest {
         assertTrue(description.contains("每天写一点"))
         assertTrue(description.contains("共 30 天"))
         assertTrue(description.contains("每天目标 30 分钟"))
-        assertTrue(description.contains("今日规划"))
+        assertTrue(description.contains("暖历"))
     }
 
     @Test

@@ -116,7 +116,7 @@ object Ics {
             if (trip.stops.isNotEmpty()) {
                 append("路线：").append(trip.stops.joinToString(" → ")).append("\n")
             }
-            append("由「今日规划」导出。")
+            append("由「暖历」导出。")
         }
         val lines = mutableListOf<String>()
         lines += "BEGIN:VCALENDAR"
@@ -178,7 +178,7 @@ object Ics {
         if (plan.dailyGoalMinutes > 0) {
             builder.append("，每天目标 ").append(plan.dailyGoalMinutes).append(" 分钟")
         }
-        builder.append("。由「今日规划」导出。")
+        builder.append("。由「暖历」导出。")
         return builder.toString()
     }
 

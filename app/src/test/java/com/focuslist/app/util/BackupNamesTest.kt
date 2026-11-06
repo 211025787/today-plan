@@ -13,10 +13,10 @@ class BackupNamesTest {
     @Test
     fun suggestFileName_hasPrefixTimestampAndJsonExtension() {
         val name = BackupNames.suggestFileName(0L)
-        assertTrue(name.startsWith("今日规划-备份-"))
+        assertTrue(name.startsWith("暖历-备份-"))
         assertTrue(name.endsWith(BackupNames.EXTENSION))
         // 形如 ...-19700101-080000.json：日期与时间各一段
-        val stamp = name.removePrefix("今日规划-备份-").removeSuffix(BackupNames.EXTENSION)
+        val stamp = name.removePrefix("暖历-备份-").removeSuffix(BackupNames.EXTENSION)
         assertEquals(15, stamp.length)
         assertTrue(stamp[8] == '-')
     }
@@ -30,7 +30,7 @@ class BackupNamesTest {
 
     @Test
     fun looksLikeBackup_onlyAcceptsJson() {
-        assertTrue(BackupNames.looksLikeBackup("今日规划-备份-20261031-231500.json"))
+        assertTrue(BackupNames.looksLikeBackup("暖历-备份-20261031-231500.json"))
         assertTrue(BackupNames.looksLikeBackup("backup.JSON"))
         assertFalse(BackupNames.looksLikeBackup("backup.txt"))
         assertFalse(BackupNames.looksLikeBackup(""))
