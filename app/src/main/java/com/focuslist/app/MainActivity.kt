@@ -186,9 +186,10 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(Unit) {
                         if (!skipSplash) {
                             withFrameNanos { }
-                            // 1420ms 之后再组合主界面：此时「暖历」已淡入完（1380ms），
-                            // 名言要到 1850ms 才落笔，中间这段空窗正好塞下 NavHost + 日历 + 卡片板的组合。
-                            delay(1420)
+                            // 首帧之后 60ms 就开始组合主界面：这时画面上只有一枚静止的图标，
+                            // 组合 NavHost + 日历 + 卡片板即使掉帧也看不出来。
+                            // 文字要到 350ms 才淡入、名言 1650ms 才落笔，都不会被抢帧。
+                            delay(60)
                             warmUpApp = true
                         }
                     }

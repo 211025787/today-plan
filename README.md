@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.1.15-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.1.16-4772FA" alt="version">
 </p>
 
 **暖历**是一个以离线为主的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来；新增的「行程」页还能把下一趟旅行直接画在地图上。所有计划、记录与行程都只保存在本机；只有旅游规划里的地图底图与真实道路路线需要联网获取，不会上传任何个人数据。
@@ -16,7 +16,7 @@
 ## 开屏：暖历 · 一句话手写
 
 - **每次冷启动随机**抽一条格言（`WarmQuotes`，12 条），**第一帧就是小图标 + 品牌名**：图标固定 **60dp** 全程不缩放，品牌名 80ms 内补到全亮，稍等 430ms 后正文与署名被逐字「写」出来 → 淡出进主界面；轻点任意处可跳过，从通知 / 小组件直达时不显示开屏；
-- **图标全程不动，只有「暖历」两字缓缓浮现**：真机截图实测，Android 12+ 会按自己的尺寸**放大** `windowSplashScreenAnimatedIcon`（本机约 **2.2 倍**），所以 `@drawable/splash_small_icon` 里画 **28dp** 的方块，放大后约 **61dp**，正好等于开屏页里那枚 60dp 图标——从点开到开屏结束，**图标尺寸一次都不变**；并且这枚图标在 drawable 里**故意画在偏上**（y 2..30 而不是画布中心），因为开屏页是「图标 + 品牌名 + 名言」整体居中、图标实际落在屏幕约 40% 高度，居中画的话系统帧会在正中、紧接着往上跳一下。真正的入场过渡发生在「没有文字 → 有文字」这一步：品牌名从完全透明用 **1200ms `tween(LinearOutSlowInEasing)`** 缓缓浮现（常见的淡入只有 200~300ms，这里刻意慢了四倍多；线性起步不突兀、减速收尾不戛然而止，匀速淡入会被读成一卡），名言再等浮现结束、并让主界面在 1420~1720ms 的<br>空窗里完成后台组合之后（1850ms）才开始逐字手写。中途试过「系统帧放大图标 + 应用内收拢」的方案，会被读成「图标在慢慢变小」，已否决——**图标不动、文字浮现**才是正确分工。另一半是**首帧减负**：首帧只组合开屏页，`withFrameNanos` + `delay(1420)` 之后（等「暖历」淡入结束）才在后台组合 `AppScaffold`，并把名言落笔推到 1850ms，让组合与两段动画**互不重叠**——否则抢主线程帧会把淡入/手写拖成一顿一顿；同时逐字绘制里「没轮到的字跳过、写完的字走普通绘制」，只有正在写的一两个字才走 `clipRect`，足够它组合完并加载好数据，淡出时仍是完整日历。API 26–30 另在 `values/themes.xml` 与 `values-night/themes.xml` 里把 `windowBackground` 设成同一底色。
+- **图标全程不动，只有「暖历」两字缓缓浮现**：真机截图实测，Android 12+ 会按自己的尺寸**放大** `windowSplashScreenAnimatedIcon`（本机约 **2.2 倍**），所以 `@drawable/splash_small_icon` 里画 **28dp** 的方块，放大后约 **61dp**，正好等于开屏页里那枚 60dp 图标——从点开到开屏结束，**图标尺寸一次都不变**；并且这枚图标在 drawable 里**故意画在偏上**（y 2..30 而不是画布中心），因为开屏页是「图标 + 品牌名 + 名言」整体居中、图标实际落在屏幕约 40% 高度，居中画的话系统帧会在正中、紧接着往上跳一下。真正的入场过渡发生在「没有文字 → 有文字」这一步：品牌名从完全透明用 **1200ms `tween(LinearOutSlowInEasing)`** 缓缓浮现（常见的淡入只有 200~300ms，这里刻意慢了四倍多；线性起步不突兀、减速收尾不戛然而止，匀速淡入会被读成一卡），名言在文字浮现完（1550ms）后只隔 100ms 就开始逐字手写（1650ms）。中途试过「系统帧放大图标 + 应用内收拢」的方案，会被读成「图标在慢慢变小」，已否决——**图标不动、文字浮现**才是正确分工。另一半是**首帧减负**：首帧只组合开屏页，**主界面组合放在最前面**：`withFrameNanos` + `delay(60)` 就开始组合 `AppScaffold`，此时画面上只有一枚静止图标，掉帧看不出来；文字 350ms 才淡入、名言 1650ms 才落笔，都不会被抢帧（早前把组合排在文字与名言之间，导致「字出来了、下面空 470ms」的等待）；同时逐字绘制里「没轮到的字跳过、写完的字走普通绘制」，只有正在写的一两个字才走 `clipRect`，足够它组合完并加载好数据，淡出时仍是完整日历。API 26–30 另在 `values/themes.xml` 与 `values-night/themes.xml` 里把 `windowBackground` 设成同一底色。
 - **开屏期间主界面已在加载**：`AppScaffold` 从第一帧就组合，开屏只是盖在它上面的一层 `AnimatedVisibility`（`fadeOut(280)` 淡出）。开屏播放的两三秒里 Room / DataStore 已经把日历数据备好、骨架屏也在盖子底下淡出完了，开屏一消失露出的就是**完整日历**，不会再经过空白页 / 骨架屏。主题设置改由 `FocusListApp.settingsFlow`（`stateIn(Eagerly)`）在 Application 启动就预读，固定深色用户也不会先闪一帧浅色；
 - 手写感由四层叠出：**毛笔手写字体** + 每字固定的微小倾角 + 从左往右的笔迹揭示（`clipRect`）+ 笔尖墨点跟随；约 46ms 一个字，写完自动收尾；
 - 字体用 **Ma Shan Zheng 毛笔楷书**（SIL OFL 1.1，许可证见 `docs/OFL-MaShanZheng.txt`），经 `pyftsubset` 按开屏文案子集化后只有 81KB，不会把 APK 撑大；
