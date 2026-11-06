@@ -2,8 +2,6 @@ package com.focuslist.app.ui.splash
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -62,7 +60,7 @@ private val InkLight = Color(0xFF2E2723)
 private val InkDark = Color(0xFFF6EDE4)
 
 /**
- * 开屏页：图标（首帧即可见）弹到位 → 品牌名补亮 → 随机格言与署名被「一笔一划快速写下来」→ 进入主界面。
+ * 开屏页：图标首帧即可见且全程固定尺寸 → 品牌名补亮 → 随机格言与署名被「一笔一划快速写下来」→ 进入主界面。
  *
  * 手写感由四层叠出来：毛笔字体 + 每字随机微小倾角 + 从左往右的笔迹揭示 +
  * 笔尖墨点跟随。逐字推进而不是整句淡入，才有「正在写」的感觉。
@@ -85,9 +83,8 @@ fun WarmSplash(
     val accent = if (dark) Color(0xFFFFB984) else WarmAccent
     val density = LocalDensity.current
 
-    // 第一帧就必须看得见：系统启动画面已经画了一个同尺寸的小图标，
-    // 这里从 0.44 倍（≈46dp）弹到 104dp，中间不出现任何空白帧。
-    val iconScale = remember { Animatable(0.44f) }
+    // 图标全程固定 44dp：和系统启动画面里那枚 splash_brand 一样大、一样圆角，
+    // 两段画面接上后尺寸完全不变，不做任何弹入 / 放大动画。
     // 品牌名首帧给一半不透明度，很快补到全亮；不再从完全透明开始等 220ms
     val brandAlpha = remember { Animatable(0.5f) }
     // 笔尖进度：单位是「字」，名言写完接着写署名
@@ -102,16 +99,10 @@ fun WarmSplash(
     LaunchedEffect(quote, skipped) {
         if (skipped) return@LaunchedEffect
         launch {
-            iconScale.animateTo(
-                1f,
-                spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
-            )
-        }
-        launch {
             delay(80)
             brandAlpha.animateTo(1f, tween(300))
         }
-        // 图标落定再落笔
+        // 稍等一拍再落笔，让第一眼的图标 / 品牌名先稳住
         delay(430)
         pen.animateTo(total.toFloat(), tween(total * perCharMs, easing = LinearEasing))
         delay(420)
@@ -147,15 +138,12 @@ fun WarmSplash(
                 .padding(horizontal = 32.dp)
                 .padding(bottom = 48.dp)
         ) {
-            // 应用图标：暖色圆角底 + 日历前景，和桌面图标同一套图形
+            // 应用图标：与系统启动画面 splash_brand 完全同款、同尺寸（44dp / 圆角 12dp），
+            // 近黑纯底把「日轮」符号托起来；不做缩放动画
             Box(
                 modifier = Modifier
-                    .size(104.dp)
-                    .graphicsLayer {
-                        scaleX = iconScale.value
-                        scaleY = iconScale.value
-                    }
-                    .clip(RoundedCornerShape(28.dp))
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     // 与桌面图标同一套底色：近黑纯底把「日轮」符号托起来
                     .background(Color(0xFF1C1714)),
                 contentAlignment = Alignment.Center
@@ -164,7 +152,8 @@ fun WarmSplash(
                     painter = painterResource(R.drawable.ic_launcher_foreground),
                     contentDescription = "暖历",
                     contentScale = ContentScale.FillBounds,
-                    // 桌面启动器会把 108dp 图层裁到中心 66dp，开屏这里手动放大等效
+                    // 与 splash_brand 里日轮的占比对齐：108dp 画布的 42dp 主体
+                    // 落进 44dp 方块后放大 1.3 倍 ≈ 22dp，和系统帧画的那枚一样大
                     modifier = Modifier.fillMaxSize().scale(1.3f)
                 )
             }

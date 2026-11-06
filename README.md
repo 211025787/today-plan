@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.1.03-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.1.04-4772FA" alt="version">
 </p>
 
 **暖历**是一个以离线为主的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来；新增的「行程」页还能把下一趟旅行直接画在地图上。所有计划、记录与行程都只保存在本机；只有旅游规划里的地图底图与真实道路路线需要联网获取，不会上传任何个人数据。
@@ -15,8 +15,8 @@
 
 ## 开屏：暖历 · 一句话手写
 
-- **每次冷启动随机**抽一条格言（`WarmQuotes`，12 条），**第一帧就有图标 + 品牌名**，图标从 0.44 倍弹到位、品牌名 80ms 内补到全亮，正文与署名再被逐字「写」出来 → 淡出进主界面；轻点任意处可跳过，从通知 / 小组件直达时不显示开屏；
-- **点开就有内容，不再先白一下**：Android 12+ 的系统启动画面（`values-v31/themes.xml` / `values-night-v31`）用 `@drawable/splash_brand` 画一枚与应用开屏同款的 **44dp 小日轮图标**（不是放大的大图标），底色与开屏一致的暖白 / 近黑、动画时长归零；应用首帧的图标正好从 ≈46dp 弹到 104dp，两段尺寸无缝衔接。API 26–30 另在 `values/themes.xml` 与新建的 `values-night/themes.xml` 里把 `windowBackground` 设成同一底色，堵掉系统默认的纯白窗口底；
+- **每次冷启动随机**抽一条格言（`WarmQuotes`，12 条），**第一帧就有图标 + 品牌名**，图标全程固定 44dp 不缩放、品牌名 80ms 内补到全亮，正文与署名再被逐字「写」出来 → 淡出进主界面；轻点任意处可跳过，从通知 / 小组件直达时不显示开屏；
+- **点开就有内容，不再先白一下**：Android 12+ 的系统启动画面（`values-v31/themes.xml` / `values-night-v31`）用 `@drawable/splash_brand` 画一枚与应用开屏同款的 **44dp 小日轮图标**（不是放大的大图标），底色与开屏一致的暖白 / 近黑、动画时长归零；应用内的图标同样是 44dp 方块 / 12dp 圆角且全程不缩放，两段尺寸完全一致。API 26–30 另在 `values/themes.xml` 与新建的 `values-night/themes.xml` 里把 `windowBackground` 设成同一底色，堵掉系统默认的纯白窗口底；
 - **开屏期间主界面已在加载**：`AppScaffold` 从第一帧就组合，开屏只是盖在它上面的一层 `AnimatedVisibility`（`fadeOut(280)` 淡出）。开屏播放的两三秒里 Room / DataStore 已经把日历数据备好、骨架屏也在盖子底下淡出完了，开屏一消失露出的就是**完整日历**，不会再经过空白页 / 骨架屏。主题设置改由 `FocusListApp.settingsFlow`（`stateIn(Eagerly)`）在 Application 启动就预读，固定深色用户也不会先闪一帧浅色；
 - 手写感由四层叠出：**毛笔手写字体** + 每字固定的微小倾角 + 从左往右的笔迹揭示（`clipRect`）+ 笔尖墨点跟随；约 46ms 一个字，写完自动收尾；
 - 字体用 **Ma Shan Zheng 毛笔楷书**（SIL OFL 1.1，许可证见 `docs/OFL-MaShanZheng.txt`），经 `pyftsubset` 按开屏文案子集化后只有 81KB，不会把 APK 撑大；
