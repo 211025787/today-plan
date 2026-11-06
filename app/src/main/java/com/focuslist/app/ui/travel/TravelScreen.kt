@@ -5,17 +5,12 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -63,17 +58,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -91,7 +84,6 @@ import com.focuslist.app.data.travel.TravelRouteClient
 import com.focuslist.app.ui.common.BottomFadeEdge
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.common.TopFadeEdge
-import com.focuslist.app.ui.home.CalendarHomeScreen
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.Gcj02
 import com.focuslist.app.util.Ics
@@ -103,7 +95,6 @@ import com.focuslist.app.util.TravelMode
 import com.focuslist.app.util.TravelPlace
 import com.focuslist.app.util.TravelSummaries
 import com.focuslist.app.util.TravelTemplates
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -193,32 +184,13 @@ fun TravelScreen(
         editingTrip = null
         picking = false
     }
-
-    // 预测式返回：地图主页从边缘往里滑，整页按 progress 跟手退让；
-    // 松手完成手势 = 真的返回，中途放弃则弹回原位。
-    val backProgress = remember { Animatable(0f) }
-    // 只在「是否处于返回手势中」变化时重组一次，不跟着进度每帧重组
-    val backActive by remember { derivedStateOf { backProgress.value > 0.001f } }
-    val backSpring = remember {
-        spring<Float>(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-            visibilityThreshold = 0.001f
-        )
-    }
-    val backScope = rememberCoroutineScope()
+    // 系统侧滑 / 返回键：只接收「完成」这一次指令，进度全部忽略，页面一点都不跟手。
+    // 注册预测式回调是为了告诉系统「这个返回由应用接管」，避免系统再补一层窗口级
+    // 跟手预览；手势中途放弃则协程被取消，onBack 不会执行。
+    // 收到指令后由 NavHost 播放 popExitTransition，整屏一次性渐进淡出。
     PredictiveBackHandler(enabled = !overlaysOpen) { progress ->
-        try {
-            progress.collect { event ->
-                // 1:1 跟手：系统给多少进度，页面就退出多少比例
-                backProgress.snapTo(event.progress.coerceIn(0f, 1f))
-            }
-            onBack()
-        } catch (e: CancellationException) {
-            // 手势取消：本协程已被取消，弹回必须另起作用域
-            backScope.launch { backProgress.animateTo(0f, backSpring) }
-            throw e
-        }
+        progress.collect { /* 只吞进度，不做任何位移 */ }
+        onBack()
     }
 
     val stopIds = plan.stops.map { it.id }
@@ -258,232 +230,193 @@ fun TravelScreen(
         }
     }
 
-    // 根 Box：不透明底 + 三层。底层是「真实的上一页」，中间是会右移的地图页，
-    // 最上层是手势期吞触摸。三层是同一棵布局树里的兄弟，绘制顺序确定，
-    // 不依赖 NavHost 透出、不依赖截屏，左边一定看得到内容。
+    // 旅游地图页只是一个普通的全屏页面：进出过渡由 NavHost 的转场负责，
+    // 自身不做跟手位移、不画「上一页」，也不依赖任何下层透出。
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {}
     ) {
-        // 底层：与主页共用同一个 HomeViewModel 的只读日历页。
-        // selectedDay / 月份 / 计划数据都是用户离开时的真实状态，
-        // 从卡片页进来就是卡片页，从月历进来就是月历。
-        CalendarHomeScreen(container = container, readOnly = true)
+        TravelMap(
+            plan = plan,
+            color = tripColor,
+            state = mapState,
+            tiles = tileStore,
+            picking = picking,
+            bottomInset = 206.dp,
+            onStopClick = { stop -> sheet = TravelSheet.Stop(StopTarget.Existing(stop.id), false) },
+            onLegClick = { index ->
+                val destination = plan.stops.getOrNull(index + 1)
+                if (destination != null) {
+                    sheet = TravelSheet.Stop(StopTarget.Existing(destination.id), true)
+                }
+            },
+            onPickPoint = { latLon ->
+                picking = false
+                sheet = TravelSheet.Stop(StopTarget.MapPoint(latLon.lat, latLon.lon), false)
+            },
+            modifier = Modifier.fillMaxSize()
+        )
 
-        Box(
+        // 渐变遮罩：只覆盖地图与路线内容，按钮/顶栏/行程条在渐变之后绘制，浮于渐变之上保持可见
+        BottomFadeEdge(modifier = Modifier.align(Alignment.BottomCenter))
+        TopFadeEdge(modifier = Modifier.align(Alignment.TopCenter))
+
+        // 顶部：标题 + 地图库 / 添加 + 搜索条
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                // 不透明底：完全盖住下层日历页；整块跟着手势右移后，左边才露出真实的上一页
-                .background(MaterialTheme.colorScheme.background)
-                // 覆盖层吞掉空白处的点击，避免穿透到底下真实的日历页
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {}
-                .graphicsLayer {
-                    // 先把整页内容裁到自身边界（地图瓦片会画到界外），再整块向右平移，
-                    // 这样既不会把界外的地图带进屏幕，左边也能干净地露出上一页
-                    clip = true
-                    translationX = size.width * backProgress.value
-                }
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(horizontal = 12.dp)
+                .padding(top = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            TravelMap(
-                plan = plan,
-                color = tripColor,
-                state = mapState,
-                tiles = tileStore,
-                picking = picking,
-                bottomInset = 206.dp,
-                onStopClick = { stop -> sheet = TravelSheet.Stop(StopTarget.Existing(stop.id), false) },
-                onLegClick = { index ->
-                    val destination = plan.stops.getOrNull(index + 1)
-                    if (destination != null) {
-                        sheet = TravelSheet.Stop(StopTarget.Existing(destination.id), true)
-                    }
-                },
-                onPickPoint = { latLon ->
-                    picking = false
-                    sheet = TravelSheet.Stop(StopTarget.MapPoint(latLon.lat, latLon.lon), false)
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // 渐变遮罩：只覆盖地图与路线内容，按钮/顶栏/行程条在渐变之后绘制，浮于渐变之上保持可见
-            BottomFadeEdge(modifier = Modifier.align(Alignment.BottomCenter))
-            TopFadeEdge(modifier = Modifier.align(Alignment.TopCenter))
-
-            // 顶部：标题 + 地图库 / 添加 + 搜索条
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TripHeaderCard(
-                        trip = plan.trip,
-                        meta = meta,
-                        color = tripColor,
-                        modifier = Modifier.weight(1f),
-                        onClick = { sheet = TravelSheet.Library }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    GlassCircleButton(
-                        icon = Icons.Default.List,
-                        description = "我的行程",
-                        onClick = { sheet = TravelSheet.Library },
-                        size = 42.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(tripColor)
-                            .clickable {
-                                if (plan.hasTrip) {
-                                    sheet = TravelSheet.Search
-                                } else {
-                                    sheet = TravelSheet.Library
-                                }
-                            }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "添加地点",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
-                SearchPill(
-                    hasTrip = plan.hasTrip,
-                    picking = picking,
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TripHeaderCard(
+                    trip = plan.trip,
+                    meta = meta,
                     color = tripColor,
-                    onClick = {
-                        if (picking) {
-                            picking = false
-                        } else if (plan.hasTrip) {
-                            sheet = TravelSheet.Search
-                        } else {
-                            sheet = TravelSheet.Library
-                        }
-                    },
-                    onPickOnMap = {
-                        if (plan.hasTrip) picking = !picking else sheet = TravelSheet.Library
-                    }
+                    modifier = Modifier.weight(1f),
+                    onClick = { sheet = TravelSheet.Library }
                 )
-                AnimatedVisibility(visible = picking, enter = fadeIn(), exit = fadeOut()) {
-                    Text(
-                        text = "点按地图上任意位置，把它加为下一站",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
-                }
-            }
-
-            // 地图右侧的缩放 / 总览（空态时隐藏，避免压住居中的引导卡片）
-            if (plan.hasStops) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    GlassCircleButton(Icons.Default.Add, "放大") { mapState.zoomBy(1.6f) }
-                    GlassCircleButton(Icons.Default.Remove, "缩小") { mapState.zoomBy(1f / 1.6f) }
-                    GlassCircleButton(Icons.Default.Public, "显示全部地点") {
-                        mapState.fit(
-                            points = plan.stops.map { Gcj02.fromWgs(it.lat, it.lon) },
-                            topPx = with(density) { 184.dp.toPx() },
-                            bottomPx = with(density) { 248.dp.toPx() },
-                            sidePx = with(density) { 92.dp.toPx() }
-                        )
-                    }
-                }
-            }
-
-
-            // 底部横向行程条：地点与交通交替，点任意一段去编辑
-            if (plan.hasTrip) {
+                Spacer(modifier = Modifier.width(8.dp))
+                GlassCircleButton(
+                    icon = Icons.Default.List,
+                    description = "我的行程",
+                    onClick = { sheet = TravelSheet.Library },
+                    size = 42.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 Box(
+                    contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 32.dp)
-                ) {
-                    ItineraryStrip(
-                        plan = plan,
-                        color = tripColor,
-                        meta = meta,
-                        onOpenPlan = { sheet = TravelSheet.Plan },
-                        onStopClick = { stop -> sheet = TravelSheet.Stop(StopTarget.Existing(stop.id), false) },
-                        onLegClick = { index ->
-                            val destination = plan.stops.getOrNull(index + 1)
-                            if (destination != null) {
-                                sheet = TravelSheet.Stop(StopTarget.Existing(destination.id), true)
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(tripColor)
+                        .clickable {
+                            if (plan.hasTrip) {
+                                sheet = TravelSheet.Search
+                            } else {
+                                sheet = TravelSheet.Library
                             }
-                        },
-                        onAdd = { sheet = TravelSheet.Search }
-                    )
-                }
-            }
-
-            // 空态：没有行程 / 行程里还没有地点（首次读取完成后再显示，避免闪一下）
-            if (ready && (!plan.hasTrip || plan.stops.isEmpty())) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = 158.dp, bottom = 200.dp)
-                        .padding(horizontal = 24.dp),
-                    contentAlignment = Alignment.Center
+                        }
                 ) {
-                    EmptyOverlay(
-                        hasTrip = plan.hasTrip,
-                        tripTitle = plan.trip?.title.orEmpty(),
-                        color = tripColor,
-                        onCreateTrip = { creatingTrip = true },
-                        onOpenLibrary = { sheet = TravelSheet.Library },
-                        onSearch = { sheet = TravelSheet.Search },
-                        onPickOnMap = { picking = true },
-                        onUseTemplate = { template ->
-                            viewModel.createFromTemplate(template)
-                            sheet = null
-                        },
-                        modifier = Modifier
-                            .widthIn(max = 380.dp)
-                            .fillMaxWidth()
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "添加地点",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
-
+            SearchPill(
+                hasTrip = plan.hasTrip,
+                picking = picking,
+                color = tripColor,
+                onClick = {
+                    if (picking) {
+                        picking = false
+                    } else if (plan.hasTrip) {
+                        sheet = TravelSheet.Search
+                    } else {
+                        sheet = TravelSheet.Library
+                    }
+                },
+                onPickOnMap = {
+                    if (plan.hasTrip) picking = !picking else sheet = TravelSheet.Library
+                }
+            )
+            AnimatedVisibility(visible = picking, enter = fadeIn(), exit = fadeOut()) {
+                Text(
+                    text = "点按地图上任意位置，把它加为下一站",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
         }
 
-        // 手势进行中吞掉整屏触摸（含左侧露出的日历页），
-        // 否则系统返回手势会把地图带着拖走
-        if (backActive) {
+        // 地图右侧的缩放 / 总览（空态时隐藏，避免压住居中的引导卡片）
+        if (plan.hasStops) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                GlassCircleButton(Icons.Default.Add, "放大") { mapState.zoomBy(1.6f) }
+                GlassCircleButton(Icons.Default.Remove, "缩小") { mapState.zoomBy(1f / 1.6f) }
+                GlassCircleButton(Icons.Default.Public, "显示全部地点") {
+                    mapState.fit(
+                        points = plan.stops.map { Gcj02.fromWgs(it.lat, it.lon) },
+                        topPx = with(density) { 184.dp.toPx() },
+                        bottomPx = with(density) { 248.dp.toPx() },
+                        sidePx = with(density) { 92.dp.toPx() }
+                    )
+                }
+            }
+        }
+
+
+        // 底部横向行程条：地点与交通交替，点任意一段去编辑
+        if (plan.hasTrip) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 32.dp)
+            ) {
+                ItineraryStrip(
+                    plan = plan,
+                    color = tripColor,
+                    meta = meta,
+                    onOpenPlan = { sheet = TravelSheet.Plan },
+                    onStopClick = { stop -> sheet = TravelSheet.Stop(StopTarget.Existing(stop.id), false) },
+                    onLegClick = { index ->
+                        val destination = plan.stops.getOrNull(index + 1)
+                        if (destination != null) {
+                            sheet = TravelSheet.Stop(StopTarget.Existing(destination.id), true)
+                        }
+                    },
+                    onAdd = { sheet = TravelSheet.Search }
+                )
+            }
+        }
+
+        // 空态：没有行程 / 行程里还没有地点（首次读取完成后再显示，避免闪一下）
+        if (ready && (!plan.hasTrip || plan.stops.isEmpty())) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            awaitFirstDown().consume()
-                            do {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() }
-                            } while (event.changes.any { it.pressed })
-                        }
-                    }
-            )
+                    .padding(top = 158.dp, bottom = 200.dp)
+                    .padding(horizontal = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                EmptyOverlay(
+                    hasTrip = plan.hasTrip,
+                    tripTitle = plan.trip?.title.orEmpty(),
+                    color = tripColor,
+                    onCreateTrip = { creatingTrip = true },
+                    onOpenLibrary = { sheet = TravelSheet.Library },
+                    onSearch = { sheet = TravelSheet.Search },
+                    onPickOnMap = { picking = true },
+                    onUseTemplate = { template ->
+                        viewModel.createFromTemplate(template)
+                        sheet = null
+                    },
+                    modifier = Modifier
+                        .widthIn(max = 380.dp)
+                        .fillMaxWidth()
+                )
+            }
         }
     }
 

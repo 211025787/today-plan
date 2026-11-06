@@ -13,6 +13,8 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
@@ -57,7 +59,6 @@ import com.focuslist.app.ui.common.DayDetailState
 import com.focuslist.app.ui.common.DockItem
 import com.focuslist.app.ui.common.GlassBackground
 import com.focuslist.app.ui.common.GlassDockBar
-import com.focuslist.app.ui.common.TravelOverlayState
 import com.focuslist.app.ui.focus.FocusScreen
 import com.focuslist.app.ui.habits.HabitsScreen
 import com.focuslist.app.ui.home.CalendarHomeScreen
@@ -108,7 +109,17 @@ enum class Destinations(val route: String, val label: String, val icon: ImageVec
     MINE("mine", "我的", Icons.Default.Person)
 }
 
-/** 旅游规划页路由参数名 */
+/** 旅游规划页路由与参数名 */
+private const val TRAVEL_ROUTE = "travel?tripId={tripId}"
+private const val TRAVEL_ARG_TRIP_ID = "tripId"
+
+/** 旅游页进出：整屏交叉淡化 + 极轻微缩放，不做方向性平移，也不做跟手返回 */
+private val travelFadeIn = fadeIn(tween(durationMillis = 280))
+private val travelFadeOut = fadeOut(tween(durationMillis = 240))
+private val travelEnter = travelFadeIn + scaleIn(tween(durationMillis = 300), initialScale = 0.96f)
+private val travelExit = travelFadeOut + scaleOut(tween(durationMillis = 260), targetScale = 0.98f)
+private val travelPopEnter = travelFadeIn + scaleIn(tween(durationMillis = 300), initialScale = 0.98f)
+private val travelPopExit = travelFadeOut + scaleOut(tween(durationMillis = 260), targetScale = 0.96f)
 
 /** 主 Tab 路由集合：仅这些路由显示 Dock 悬浮栏 */
 /** 通知点击直达习惯页 */
@@ -217,11 +228,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onDestroy() {
-        TravelOverlayState.close()
-        super.onDestroy()
-    }
-
     override fun onStop() {
         super.onStop()
         // 兜底：退到后台把全部未落库段写库（运行中的不清表继续跑），再持久化防杀
@@ -251,8 +257,6 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    // 旅游页覆盖层：非空时叠在 NavHost 之上，下面的日历页保持组合、状态不丢
-    val travelTripId by TravelOverlayState.tripId.collectAsState()
 
     // 专注中才隐藏 Dock，且只在真正的"计时页"生效：
     // - 专注页：番茄钟运行中
@@ -304,18 +308,43 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 // 旅游页有自己的不透明底，会把它完整盖住，两层不会重影。
                 modifier = Modifier.fillMaxSize()
             ) {
-                // 首页：打开即日历主页；备注统一走全屏页面
-                composable(Destinations.HOME.route) {
+                // 首页：打开即日历主页；备注统一走全屏页面。
+                // 与旅游页之间做交叉淡化：主页淡出/淡入，地图页淡入/淡出，整屏一起过渡，
+                // 不做方向性平移，也不需要「露出左边上一页」。
+                composable(
+                    Destinations.HOME.route,
+                    exitTransition = { travelFadeOut },
+                    popEnterTransition = { travelFadeIn }
+                ) {
                     CalendarHomeScreen(
                         container = container,
                         onOpenNote = { id, date ->
                             navController.navigate("note_editor?noteId=$id&date=$date")
                         },
-                        // 旅游页是覆盖层：打开时底下的日历页（含卡片页）保持原样，
-                        // 侧滑返回露出的就是真实的上一页
-                        onOpenTravel = { tripId -> TravelOverlayState.open(tripId) },
+                        // 旅游页是独立导航目的地：进出由 NavHost 的交叉淡化转场接管
+                        onOpenTravel = { tripId -> navController.navigate("travel?tripId=$tripId") },
                         // 主页顶栏：日历计划统计
                         onOpenPlanStats = { navController.navigate(SettingsRoutes.PLAN_STATS) }
+                    )
+                }
+                // 旅游规划地图页：进出都是一次完整的渐进过渡，收到返回指令后播放完动画再退出
+                composable(
+                    route = TRAVEL_ROUTE,
+                    arguments = listOf(
+                        navArgument(TRAVEL_ARG_TRIP_ID) {
+                            type = NavType.LongType
+                            defaultValue = -1L
+                        }
+                    ),
+                    enterTransition = { travelEnter },
+                    exitTransition = { travelExit },
+                    popEnterTransition = { travelPopEnter },
+                    popExitTransition = { travelPopExit }
+                ) { entry ->
+                    TravelScreen(
+                        container = container,
+                        focusTripId = entry.arguments?.getLong(TRAVEL_ARG_TRIP_ID) ?: -1L,
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable(Destinations.FOCUS.route) {
@@ -413,19 +442,8 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 }
             }
 
-            // 旅游规划覆盖层：盖在 NavHost 之上。TravelScreen 内部自己就带一份
-            // 只读的真实日历页作为底层（与主页共用同一个 HomeViewModel），
-            // 地图页右移时左边露出的就是它，不依赖 NavHost 透出、也不依赖截屏。
-            if (travelTripId != null) {
-                TravelScreen(
-                    container = container,
-                    focusTripId = travelTripId ?: -1L,
-                    onBack = { TravelOverlayState.close() }
-                )
-            }
-
             // 底部渐变遮罩：从 Dock 栏顶部渐变到系统导航条，内容底部淡出融入背景（仅主 Tab 显示，与 Dock 同步）
-            if (currentRoute in mainRoutes && dockVisible && travelTripId == null) {
+            if (currentRoute in mainRoutes && dockVisible) {
                 BottomFadeEdge(
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
@@ -433,7 +451,7 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
 
             // 悬浮 Dock：仅主 Tab 页面显示，底部居中；专注中自动收起
             AnimatedVisibility(
-                visible = currentRoute in mainRoutes && dockVisible && travelTripId == null,
+                visible = currentRoute in mainRoutes && dockVisible,
                 enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { it / 3 },
                 exit = fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 3 },
                 modifier = Modifier.align(Alignment.BottomCenter)

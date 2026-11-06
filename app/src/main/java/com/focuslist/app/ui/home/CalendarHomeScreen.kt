@@ -124,7 +124,6 @@ import com.focuslist.app.data.local.entity.TripEntity
 import com.focuslist.app.ui.common.AntiBurnInGlow
 import com.focuslist.app.ui.common.DayDetailState
 import com.focuslist.app.ui.common.ExpandableFab
-import com.focuslist.app.ui.common.TravelOverlayState
 import com.focuslist.app.ui.common.FabMenuItem
 import com.focuslist.app.ui.common.antiBurnInDrift
 import com.focuslist.app.ui.note.DayNotePreviewCard
@@ -225,12 +224,10 @@ fun CalendarHomeScreen(
     container: AppContainer,
     onOpenNote: (Long, Long) -> Unit = { _, _ -> },
     onOpenTravel: (Long) -> Unit = {},
-    onOpenPlanStats: () -> Unit = {},
-    readOnly: Boolean = false
+    onOpenPlanStats: () -> Unit = {}
 ) {
-    // 旅游页覆盖层里的「上一页」也是这个 composable，但它是只读的。
-    // 两层共用 Activity 作用域的同一个 ViewModel，所以选中日、收展进度、
-    // 月份、计划数据全是用户离开时的真实状态，不需要截屏也不需要另造一份数据。
+    // ViewModel 显式绑到 Activity 作用域：切 Tab、进出旅游页都不会销毁它，
+    // 选中的那一天 / 月份 / 卡片页收展状态在返回后原样保留。
     val context = androidx.compose.ui.platform.LocalContext.current
     val appContext = context.applicationContext
     val sharedOwner: androidx.lifecycle.ViewModelStoreOwner =
@@ -308,19 +305,17 @@ fun CalendarHomeScreen(
 
     // 同步「当日卡片页」展开状态：主界面据此判断是否隐藏 Dock（月视图不隐藏）
     LaunchedEffect(state.selectedDay) {
-        if (!readOnly) DayDetailState.set(state.selectedDay != null)
+        DayDetailState.set(state.selectedDay != null)
     }
     DisposableEffect(Unit) {
-        onDispose { if (!readOnly) DayDetailState.set(false) }
+        onDispose { DayDetailState.set(false) }
     }
 
     // 卡片页（已选中某天）时接管系统返回，并接上 Android 的「预测式返回」：
     // 从屏幕边缘往里滑，progress 0→1 直接映射成收展比例，日历和卡片跟着手指实时走；
     // 松手完成手势 = 真的按了返回，中途放弃则弹回卡片页。
     val backScope = androidx.compose.runtime.rememberCoroutineScope()
-    // 旅游覆盖层打开时让出返回手势，否则两层会同时响应
-    val travelTripId by TravelOverlayState.tripId.collectAsState()
-    PredictiveBackHandler(enabled = state.selectedDay != null && travelTripId == null && !readOnly) { progress ->
+    PredictiveBackHandler(enabled = state.selectedDay != null) { progress ->
         try {
             progress.collect { event ->
                 // 手势一动就把日历装回来，否则它会被当成「已卸载」而看不到跟手效果
@@ -341,7 +336,7 @@ fun CalendarHomeScreen(
     }
 
     // 搜索态拦截返回键：先退出搜索
-    androidx.activity.compose.BackHandler(enabled = searchActive && travelTripId == null && !readOnly) {
+    androidx.activity.compose.BackHandler(enabled = searchActive) {
         searchActive = false
         viewModel.clearQuery()
     }
@@ -423,8 +418,7 @@ fun CalendarHomeScreen(
     // 吸附完成后把目标月同步给 ViewModel（触发当月计时记录查询）
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            // 只读实例不能反过来改共享 ViewModel 的月份，否则会把主页面翻回当月
-            if (!readOnly) viewModel.setMonthOffset(page - PAGER_INITIAL_PAGE)
+            viewModel.setMonthOffset(page - PAGER_INITIAL_PAGE)
         }
     }
 

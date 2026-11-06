@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.1.01-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.1.02-4772FA" alt="version">
 </p>
 
 **暖历**是一个以离线为主的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来；新增的「行程」页还能把下一趟旅行直接画在地图上。所有计划、记录与行程都只保存在本机；只有旅游规划里的地图底图与真实道路路线需要联网获取，不会上传任何个人数据。
@@ -105,7 +105,7 @@ Dock 新增第五个入口「**行程**」：全屏地图 + 顶部搜索 + 底�
 - **多条行程 + 模板**：行程库可新建、改名、换封面色、删除；内置「川西小环线 / 江南水乡 / 云南慢行 / 关西漫步」四条模板，点一下生成带地点的完整行程，再按自己的节奏改；
 - **坐标对齐**：底图用高德瓦片（GCJ-02），内置地点与 OSRM 轨迹是 WGS-84，绘制前自动纠偏，境内不会整体偏 500 米；境外坐标原样使用；
 - **离线也不散架**：底图没加载时显示纸面网格与「底图需联网」提示，行程与路线仍可编辑；联网后进入行程会自动补真实路线并缓存进数据库，之后断网也能看到上次的折线。
-- **边缘滑动跟手返回，露出的是真实上一页**：旅游页不再是独立导航目的地，而是由 `TravelOverlayState` 控制的**覆盖层**，叠在 NavHost 之上。`progress` 1:1 映射成整页水平右移的距离，宽高完全不变，不缩放、不淡出、不圆角；滑多少就向右移多少，左边同步露出上一页；滑到最大时整页移出，松手即返回，中途放弃弹回原位。为「左边到底画什么」试过四条路，最终定下来的结构是：**`TravelScreen` 的根 `Box` 自己就是三层**——底层 `CalendarHomeScreen(readOnly = true)`，中间是会右移的不透明地图页，最上层是手势期吞触摸。三层是同一棵布局树里的兄弟，绘制顺序确定，不依赖 NavHost 那层"自然透出"，也不依赖截屏。关键是**底层不是复制品**：`CalendarHomeScreen` 的 `HomeViewModel` 显式绑到 **Activity 作用域的 ViewModelStoreOwner**，于是主页与只读层共用同一个实例——`selectedDay`、月份、计划数据、加载状态全都是用户离开那一刻的真实值，第一帧就能画出来，从卡片页进来就是那一天的卡片页、从月历进来就是月历，既不会有骨架屏也不会空白。`readOnly` 只关掉会互相打架的副作用：不改共享 `monthOffset`、不动 `DayDetailState`、不注册返回处理器。踩过的坑按时间排：① 静态同构预览（`PreviousCalendarPreview`）能显示但是假的，被要求换成真实页；② 抓屏 `view.draw(Canvas(bitmap))` 对 Compose RenderNode 不可靠，抓到的常是透明底；③ 覆盖层里另造一份 `CalendarHomeScreen(previewMode = true)` 用的是**新 ViewModel 实例**，数据未到 + 骨架屏被禁用 = 一片空；④ 干脆让 NavHost 直接透出，实测左边仍是浅灰 #F2F2F7（应用底色，说明 Compose 在画、页面内容没画）——所以「依赖下层透出」这条路本身不可靠，才改成自带底层。当前页 `graphicsLayer { clip = true }` 把地图瓦片裁到页面边界，平移时不会把界外内容带进屏幕；**手势进行中在根层吞掉整屏触摸**（含左侧露出的日历），防止系统返回手势同时把地图拖走或误触。覆盖层打开时主页的返回处理器让位（`travelTripId == null` 守卫）、Dock 与底部渐变自动隐藏；进度在 `graphicsLayer` 里延迟读取，手势每帧只改图层、不重组整张地图；有弹层或选点态时返回键先收起最上层。
+- **进出地图页是整屏渐进过渡，不跟手、也不露出上一页**：旅游页是 NavHost 里的一个**独立导航目的地**（`travel?tripId={tripId}`），进出动画由导航转场统一负责：主页 `fadeOut` / 地图页 `fadeIn + scaleIn(0.96)` 交叉淡化进入；收到返回指令时反过来，地图页 `fadeOut + scaleOut(0.96)`、主页 `fadeIn`，约 240–300ms 一次性播放完。全程整屏一起过渡，不做方向性平移、不缩放成卡片、不需要「从左边露出上一页」，也就不存在下层能不能透出来的问题。返回由一个只吞进度的 `PredictiveBackHandler` 接管：手势期间页面完全不动、进度全部忽略，也不让系统补窗口级跟手预览；松手完成后才 `popBackStack()` 播一次完整的渐进退出，中途放弃则不返回。有弹层或选点态时返回键先收起最上层。`HomeViewModel` 绑定在 **Activity 作用域**（`Context.findActivity()` 递归解包 `ContextWrapper`），所以进出旅游页、切 Tab 都不销毁它——从卡片页点进行程再返回，选中的那一天、月份、卡片摆放原样保留。主页自己的**预测式跟手返回**（`BACK_FOLLOW = 0.5f`）不受影响，只在卡片页生效。踩过的坑记一笔：为「左边露出真实上一页」先后试过静态同构预览、`view.draw(Canvas(bitmap))` 抓屏、覆盖层里另造一份 `CalendarHomeScreen`、让 NavHost 直接透出，四条路都卡在「下层只有应用底色 `#F2F2F7`、页面内容画不出来」；既然这个效果本身不是必需的，最终改成完全不需要下层的整屏转场，问题从根上消失。Dock 与底部渐变靠 `currentRoute in mainRoutes` 自动隐藏，不需要额外的覆盖层状态。
 
 <p align="center">
   <img src="docs/images/screen-travel.png" width="320" alt="旅游规划：江南水乡">
