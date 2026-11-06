@@ -1,9 +1,6 @@
 package com.focuslist.app
 
 import android.Manifest
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.view.View
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -18,7 +15,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 
@@ -37,11 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -248,19 +242,6 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * 把当前窗口内容抓成一张位图（主线程、当前帧），用于侧滑返回时显示真实上一页。
- *
- * @param view 根 View
- * @return 位图；尺寸异常或绘制失败时返回 null
- */
-private fun captureScreen(view: View): Bitmap? = runCatching {
-    if (view.width <= 0 || view.height <= 0) return null
-    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-    view.draw(Canvas(bitmap))
-    bitmap
-}.getOrNull()
-
-/**
  * 应用骨架：光斑玻璃背景 + 悬浮 Dock 导航 + 路由（无抽屉）。
  *
  * @param container 依赖容器
@@ -268,8 +249,6 @@ private fun captureScreen(view: View): Bitmap? = runCatching {
  */
 @Composable
 fun AppScaffold(container: AppContainer, startRoute: String) {
-    // 抓「进入旅游页之前」的真实画面用；放在页面作用域里，导航 lambda 能直接捕获
-    val rootView = LocalView.current
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -321,7 +300,11 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
             NavHost(
                 navController = navController,
                 startDestination = startRoute,
-                modifier = Modifier.fillMaxSize()
+                // 覆盖层打开时让 NavHost 那一层不绘制：避免和底下只读日历页重影，
+                // 组合与 ViewModel 都保留，关掉覆盖层后原样恢复
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(if (travelTripId != null) 0f else 1f)
             ) {
                 // 首页：打开即日历主页；备注统一走全屏页面
                 composable(Destinations.HOME.route) {
@@ -332,10 +315,7 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                         },
                         // 旅游页是覆盖层：打开时底下的日历页（含卡片页）保持原样，
                         // 侧滑返回露出的就是真实的上一页
-                        onOpenTravel = { tripId ->
-                            // 离开前抓一帧真实画面：侧滑返回时左边露出的就是它
-                            TravelOverlayState.open(tripId, captureScreen(rootView))
-                        },
+                        onOpenTravel = { tripId -> TravelOverlayState.open(tripId) },
                         // 主页顶栏：日历计划统计
                         onOpenPlanStats = { navController.navigate(SettingsRoutes.PLAN_STATS) }
                     )
@@ -438,16 +418,14 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
             // 旅游规划覆盖层：盖在 NavHost 之上，底下仍是真实的日历页 / 日卡片页
             if (travelTripId != null) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // 底层：进入前的真实屏幕画面。被不透明的旅游页完全盖住，
-                    // 只有当前页右移时才从左边露出来，绝不可能是白屏。
-                    TravelOverlayState.previousPage?.let { snapshot ->
-                        Image(
-                            bitmap = snapshot.asImageBitmap(),
-                            contentDescription = null,
-                            contentScale = ContentScale.FillBounds,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+                    // 底层：一份真实渲染的只读日历页。它自己订阅 Room / DataStore、
+                    // 自己画月历或那一天的日卡片页（含卡片摆放），不依赖截屏或透出，
+                    // 侧滑时被不透明的旅游页盖住，右移后从左边干净地露出来。
+                    CalendarHomeScreen(
+                        container = container,
+                        previewMode = true,
+                        presetSelectedDay = TravelOverlayState.previousSelectedDay
+                    )
                     TravelScreen(
                         container = container,
                         focusTripId = travelTripId ?: -1L,
