@@ -21,12 +21,6 @@ object TravelOverlayState {
     val tripId: StateFlow<Long?> = mutableTripId.asStateFlow()
 
     /**
-     * 进入旅游页之前日历页选中的那一天（null = 停在月历）。
-     * 覆盖层里的只读日历页用它恢复到卡片页，露出的才是真实的那一天。
-     */
-    var previousSelectedDay: Long? = null
-
-    /**
      * 打开旅游页覆盖层。
      *
      * @param id 要聚焦的行程 ID；<=0 表示沿用上次活跃行程

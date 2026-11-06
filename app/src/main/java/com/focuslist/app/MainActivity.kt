@@ -33,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -300,11 +299,10 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
             NavHost(
                 navController = navController,
                 startDestination = startRoute,
-                // 覆盖层打开时让 NavHost 那一层不绘制：避免和底下只读日历页重影，
-                // 组合与 ViewModel 都保留，关掉覆盖层后原样恢复
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(if (travelTripId != null) 0f else 1f)
+                // 旅游覆盖层打开时这里**保持原样绘制**：它才是「真实的上一页」。
+                // 侧滑时地图页整块右移，左边露出的就是这份正在显示的日历页 / 日卡片页
+                // （home 目的地从未被销毁，卡片页的展开状态也一并保留）。
+                modifier = Modifier.fillMaxSize()
             ) {
                 // 首页：打开即日历主页；备注统一走全屏页面
                 composable(Destinations.HOME.route) {
@@ -415,23 +413,15 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 }
             }
 
-            // 旅游规划覆盖层：盖在 NavHost 之上，底下仍是真实的日历页 / 日卡片页
+            // 旅游规划覆盖层：只是盖在 NavHost 之上的一层不透明页面。
+            // 它不负责准备"上一页"——上一页就是 NavHost 里那份从没被销毁的
+            // 日历页 / 日卡片页，侧滑时这张地图整块右移，左边自然露出真实内容。
             if (travelTripId != null) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    // 底层：一份真实渲染的只读日历页。它自己订阅 Room / DataStore、
-                    // 自己画月历或那一天的日卡片页（含卡片摆放），不依赖截屏或透出，
-                    // 侧滑时被不透明的旅游页盖住，右移后从左边干净地露出来。
-                    CalendarHomeScreen(
-                        container = container,
-                        previewMode = true,
-                        presetSelectedDay = TravelOverlayState.previousSelectedDay
-                    )
-                    TravelScreen(
-                        container = container,
-                        focusTripId = travelTripId ?: -1L,
-                        onBack = { TravelOverlayState.close() }
-                    )
-                }
+                TravelScreen(
+                    container = container,
+                    focusTripId = travelTripId ?: -1L,
+                    onBack = { TravelOverlayState.close() }
+                )
             }
 
             // 底部渐变遮罩：从 Dock 栏顶部渐变到系统导航条，内容底部淡出融入背景（仅主 Tab 显示，与 Dock 同步）

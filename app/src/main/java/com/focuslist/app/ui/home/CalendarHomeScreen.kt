@@ -225,9 +225,7 @@ fun CalendarHomeScreen(
     container: AppContainer,
     onOpenNote: (Long, Long) -> Unit = { _, _ -> },
     onOpenTravel: (Long) -> Unit = {},
-    onOpenPlanStats: () -> Unit = {},
-    previewMode: Boolean = false,
-    presetSelectedDay: Long? = null
+    onOpenPlanStats: () -> Unit = {}
 ) {
     // LocalContext 需在 Composable 作用域先取出，再传入 ViewModel 工厂
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
@@ -244,9 +242,7 @@ fun CalendarHomeScreen(
     // 日历 ⇄ 日卡片页的收展进度：0 = 日历满屏，1 = 卡片满屏。
     // 平时用弹簧动画跑（进入 / 点「返回日历」）；全面屏手势返回时由手指直接驱动，
     // 见下面的 PredictiveBackHandler——滑多少，动画就走多少。
-    // previewMode 是覆盖层底下那份只读日历页：直接落到目标状态，不跑进场动画
-    val initiallyInCard = state.selectedDay != null || (previewMode && presetSelectedDay != null)
-    val cardFraction = remember { Animatable(if (initiallyInCard) 1f else 0f) }
+    val cardFraction = remember { Animatable(if (state.selectedDay != null) 1f else 0f) }
     val cardSpring = remember {
         spring<Float>(
             dampingRatio = Spring.DampingRatioNoBouncy,
@@ -256,14 +252,10 @@ fun CalendarHomeScreen(
         )
     }
     // 两块内容在动画跑完之前都得留着画，跑完再从组合里摘掉（省得日历在卡片页白跑动画）
-    var calendarMounted by remember { mutableStateOf(!initiallyInCard) }
-    var cardMounted by remember { mutableStateOf(initiallyInCard) }
+    var calendarMounted by remember { mutableStateOf(state.selectedDay == null) }
+    var cardMounted by remember { mutableStateOf(state.selectedDay != null) }
     // 退出动画期间 selectedDay 已是 null，还要用最后这一天把卡片画完
-    var lastSelectedDay by remember { mutableStateOf<Long?>(presetSelectedDay) }
-    // 只读实例直接选中目标日期，让卡片页内容一开始就齐全
-    LaunchedEffect(Unit) {
-        if (previewMode && presetSelectedDay != null) viewModel.selectDay(presetSelectedDay)
-    }
+    var lastSelectedDay by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(state.selectedDay) {
         val day = state.selectedDay
         if (day != null) {
@@ -308,14 +300,10 @@ fun CalendarHomeScreen(
 
     // 同步「当日卡片页」展开状态：主界面据此判断是否隐藏 Dock（月视图不隐藏）
     LaunchedEffect(state.selectedDay) {
-        // 只读实例不能碰全局状态，否则会篡改主页面的 Dock 显隐
-        if (!previewMode) {
-            DayDetailState.set(state.selectedDay != null)
-            TravelOverlayState.previousSelectedDay = state.selectedDay
-        }
+        DayDetailState.set(state.selectedDay != null)
     }
     DisposableEffect(Unit) {
-        onDispose { if (!previewMode) DayDetailState.set(false) }
+        onDispose { DayDetailState.set(false) }
     }
 
     // 卡片页（已选中某天）时接管系统返回，并接上 Android 的「预测式返回」：
@@ -324,7 +312,7 @@ fun CalendarHomeScreen(
     val backScope = androidx.compose.runtime.rememberCoroutineScope()
     // 旅游覆盖层打开时让出返回手势，否则两层会同时响应
     val travelTripId by TravelOverlayState.tripId.collectAsState()
-    PredictiveBackHandler(enabled = state.selectedDay != null && travelTripId == null && !previewMode) { progress ->
+    PredictiveBackHandler(enabled = state.selectedDay != null && travelTripId == null) { progress ->
         try {
             progress.collect { event ->
                 // 手势一动就把日历装回来，否则它会被当成「已卸载」而看不到跟手效果
@@ -345,7 +333,7 @@ fun CalendarHomeScreen(
     }
 
     // 搜索态拦截返回键：先退出搜索
-    androidx.activity.compose.BackHandler(enabled = searchActive && travelTripId == null && !previewMode) {
+    androidx.activity.compose.BackHandler(enabled = searchActive && travelTripId == null) {
         searchActive = false
         viewModel.clearQuery()
     }
@@ -897,7 +885,7 @@ fun CalendarHomeScreen(
 
     // 首帧数据还没到达：用骨架屏盖住空白日历，加载完淡出
     AnimatedVisibility(
-        visible = !state.loaded && !previewMode,
+        visible = !state.loaded,
         exit = fadeOut(animationSpec = tween(durationMillis = 300))
     ) {
         CalendarSkeleton()
