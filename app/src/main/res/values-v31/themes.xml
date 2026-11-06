@@ -14,7 +14,8 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
 
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_no_icon</item>
+        <item name="android:windowBackground">#FFFFF7EF</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_brand</item>
         <item name="android:windowSplashScreenAnimationDuration">0</item>
         <item name="android:windowSplashScreenBackground">#FFFFF7EF</item>
     </style>

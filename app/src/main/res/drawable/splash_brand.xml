@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ 系统启动画面的图标：与应用内 WarmSplash 第一帧同一个「日轮」小图标。
+
+  系统会把这个 108dp 画布按启动图标规范居中显示、可见区约中心 66dp，
+  所以画一个 44dp 的圆角方块（外接圆约 62dp），四角不会被裁掉。
+  WarmSplash 的 iconScale 初值正好是 0.44（104dp × 0.44 ≈ 46dp），
+  系统帧 → 应用首帧尺寸几乎一致，再弹到 104dp，看不到大小跳变，
+  也就不再有「点开先一片白、过一会儿才冒出图标」的空窗。
+
+  方块底色与深色开屏一致，另加一圈极淡描边：浅色暖白底上靠深色块识别，
+  深色近黑底上靠描边 + 日轮识别，两种主题下都不会消失。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 圆角方块：32..76，圆角 12 -->
+    <path
+        android:fillColor="#FF1C1714"
+        android:pathData="M44,32h20a12,12 0 0 1 12,12v20a12,12 0 0 1 -12,12h-20a12,12 0 0 1 -12,-12v-20a12,12 0 0 1 12,-12z" />
+    <path
+        android:strokeColor="#40FFF7EF"
+        android:strokeWidth="1"
+        android:fillColor="#00000000"
+        android:pathData="M44,32h20a12,12 0 0 1 12,12v20a12,12 0 0 1 -12,12h-20a12,12 0 0 1 -12,-12v-20a12,12 0 0 1 12,-12z" />
+
+    <!-- 日轮外框：43..65，笔画 2.6 -->
+    <path
+        android:strokeColor="#FFF7EF"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M48,43h12a5,5 0 0 1 5,5v12a5,5 0 0 1 -5,5h-12a5,5 0 0 1 -5,-5v-12a5,5 0 0 1 5,-5z" />
+
+    <!-- 今天的太阳 -->
+    <path
+        android:fillColor="#FF9F5A"
+        android:pathData="M54,50a4,4 0 1 1 0,8a4,4 0 1 1 0,-8z" />
+</vector>

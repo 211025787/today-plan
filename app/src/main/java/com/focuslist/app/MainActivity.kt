@@ -9,8 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -49,7 +49,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.ui.splash.WarmSplash
 import com.focuslist.app.util.WarmQuotes
 import com.focuslist.app.timer.TimerPhase
@@ -164,7 +163,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val app = application as FocusListApp
-            val settings by app.container.settingsStore.settings.collectAsState(initial = TimerSettings())
+            val settings by app.settingsFlow.collectAsState()
             FocusListTheme(themeMode = settings.themeMode, themeColorHex = settings.themeColor) {
                 // 每次冷启动抽一条开屏格言；从通知 / 小组件直达时跳过开屏，不耽误正事
                 val warmQuote = remember { WarmQuotes.random() }
@@ -176,19 +175,23 @@ class MainActivity : ComponentActivity() {
                     "DARK" -> true
                     else -> isSystemInDarkTheme()
                 }
-                Crossfade(
-                    targetState = splashVisible,
-                    animationSpec = tween(320),
-                    label = "splashToApp"
-                ) { showSplash ->
-                    if (showSplash) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // 主界面从第一帧就组合：开屏播放的两三秒里 Room / DataStore
+                    // 已经把日历数据备好，开屏淡出后露出的就是完整内容，
+                    // 不会先闪一层骨架屏或空白页。
+                    AppScaffold(container = app.container, startRoute = startRoute)
+
+                    AnimatedVisibility(
+                        visible = splashVisible,
+                        enter = EnterTransition.None,
+                        exit = fadeOut(tween(280)),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
                         WarmSplash(
                             quote = warmQuote,
                             darkTheme = darkTheme,
                             onFinished = { splashVisible = false }
                         )
-                    } else {
-                        AppScaffold(container = app.container, startRoute = startRoute)
                     }
                 }
             }

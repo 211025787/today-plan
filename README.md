@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.1.02-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.1.03-4772FA" alt="version">
 </p>
 
 **暖历**是一个以离线为主的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来；新增的「行程」页还能把下一趟旅行直接画在地图上。所有计划、记录与行程都只保存在本机；只有旅游规划里的地图底图与真实道路路线需要联网获取，不会上传任何个人数据。
@@ -15,8 +15,9 @@
 
 ## 开屏：暖历 · 一句话手写
 
-- **每次冷启动随机**抽一条格言（`WarmQuotes`，12 条），小图标弹入 → 品牌名淡入 → 正文与署名被逐字「写」出来 → 淡出进主界面；轻点任意处可跳过，从通知 / 小组件直达时不显示开屏；
-- **不会先闪一个系统大图标**：Android 12+ 的系统启动画面在 `values-v31/themes.xml`（深色用 `values-night-v31`）里把 `windowSplashScreenAnimatedIcon` 换成全透明占位、动画时长归零、底色设成与开屏一致的暖白 / 近黑，系统那一帧只剩一层纯色，直接就是小图标 + 名言；
+- **每次冷启动随机**抽一条格言（`WarmQuotes`，12 条），**第一帧就有图标 + 品牌名**，图标从 0.44 倍弹到位、品牌名 80ms 内补到全亮，正文与署名再被逐字「写」出来 → 淡出进主界面；轻点任意处可跳过，从通知 / 小组件直达时不显示开屏；
+- **点开就有内容，不再先白一下**：Android 12+ 的系统启动画面（`values-v31/themes.xml` / `values-night-v31`）用 `@drawable/splash_brand` 画一枚与应用开屏同款的 **44dp 小日轮图标**（不是放大的大图标），底色与开屏一致的暖白 / 近黑、动画时长归零；应用首帧的图标正好从 ≈46dp 弹到 104dp，两段尺寸无缝衔接。API 26–30 另在 `values/themes.xml` 与新建的 `values-night/themes.xml` 里把 `windowBackground` 设成同一底色，堵掉系统默认的纯白窗口底；
+- **开屏期间主界面已在加载**：`AppScaffold` 从第一帧就组合，开屏只是盖在它上面的一层 `AnimatedVisibility`（`fadeOut(280)` 淡出）。开屏播放的两三秒里 Room / DataStore 已经把日历数据备好、骨架屏也在盖子底下淡出完了，开屏一消失露出的就是**完整日历**，不会再经过空白页 / 骨架屏。主题设置改由 `FocusListApp.settingsFlow`（`stateIn(Eagerly)`）在 Application 启动就预读，固定深色用户也不会先闪一帧浅色；
 - 手写感由四层叠出：**毛笔手写字体** + 每字固定的微小倾角 + 从左往右的笔迹揭示（`clipRect`）+ 笔尖墨点跟随；约 46ms 一个字，写完自动收尾；
 - 字体用 **Ma Shan Zheng 毛笔楷书**（SIL OFL 1.1，许可证见 `docs/OFL-MaShanZheng.txt`），经 `pyftsubset` 按开屏文案子集化后只有 81KB，不会把 APK 撑大；
 - 进度读在 `graphicsLayer` / `drawWithContent` 里（延迟读取），动画每帧只失效图层、不重组整句，30 多个字也不掉帧；
@@ -82,7 +83,7 @@ ffmpeg -y -framerate 25 -i .tmp_docs/frames/f%05d.jpg -i .tmp_docs/promo.wav \
 - 格子高度自适应屏幕，底部自动避开系统导航条与悬浮 Dock。
 - **右上角功能菜单**：渐变圆形按钮（Apps 网格图标，非加号），点击向下展开玻璃胶囊菜单，含 ⚡ 一句话建计划、📋 添加计划、📝 备注、🧳 添加旅游规划、🗑️ 删除计划五个入口；菜单接近不透明保证可读，整行均可点击；
 - **文字永远可读**：进度填充调淡到 28% 不透明度，标题与完成率数字统一深色——任何计划色下都读得清，也不再出现黑白混杂。
-- **不再闪空白**：冷启动首帧数据没到时显示与真实布局同构的**骨架屏**（标题 / 建议条 / 星期表头 / 6 行格子，缓慢呼吸），数据到达后淡出；
+- **不再闪空白**：冷启动首帧数据没到时显示与真实布局同构的**骨架屏**（现在多数情况在开屏覆盖层底下就播完了，用户看不到）（标题 / 建议条 / 星期表头 / 6 行格子，缓慢呼吸），数据到达后淡出；
 - **进出卡片页是对称的，而且跟手**：点某一天，日历纵向收起、卡片页从下方顶上来；返回时日历展开、卡片被原样挤回去（进出走同一条曲线）。接了 Android 的**预测式返回**：从屏幕边缘往里滑时，`PredictiveBackHandler` 的 progress 直接映射成收展比例（`BACK_FOLLOW = 0.5f`，即滑到系统允许的最大距离时动画走一半），松手完成手势就是返回，中途放弃则弹回卡片页；两块内容都按整屏高测量、只裁掉看不见的部分，所以过程中不会把日历「压扁」。
 - **性能**：收展比例在测量/绘制阶段读取（`Modifier.layout` + `graphicsLayer`），手势每帧只重跑布局和绘制，不触发重组。
 - **卡片自由摆放**：长按卡片拖到任意位置，松手吸附到最近空格；右下角是一个更大的白色圆角角标，**按住直接拖**，拖动中卡片宽高实时跟手，松手才吸附到 `1×1 / 1×2 / 2×1 / 2×2 / 1×3 / 3×1` 六种规格；缩放时若旁边有卡会临时盖住，松手后该卡置顶（重开也保持），长按可挪开。位置与大小写入数据库，之后不会再自动重排。卡片内容按实际宽高自适应，计时按钮和缩放手柄都有独立留白，不会压住文字。

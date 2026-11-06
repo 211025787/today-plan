@@ -62,7 +62,7 @@ private val InkLight = Color(0xFF2E2723)
 private val InkDark = Color(0xFFF6EDE4)
 
 /**
- * 开屏页：图标入场 → 品牌名淡入 → 随机格言与署名被「一笔一划快速写下来」→ 进入主界面。
+ * 开屏页：图标（首帧即可见）弹到位 → 品牌名补亮 → 随机格言与署名被「一笔一划快速写下来」→ 进入主界面。
  *
  * 手写感由四层叠出来：毛笔字体 + 每字随机微小倾角 + 从左往右的笔迹揭示 +
  * 笔尖墨点跟随。逐字推进而不是整句淡入，才有「正在写」的感觉。
@@ -85,9 +85,11 @@ fun WarmSplash(
     val accent = if (dark) Color(0xFFFFB984) else WarmAccent
     val density = LocalDensity.current
 
-    val iconScale = remember { Animatable(0.62f) }
-    val iconAlpha = remember { Animatable(0f) }
-    val brandAlpha = remember { Animatable(0f) }
+    // 第一帧就必须看得见：系统启动画面已经画了一个同尺寸的小图标，
+    // 这里从 0.44 倍（≈46dp）弹到 104dp，中间不出现任何空白帧。
+    val iconScale = remember { Animatable(0.44f) }
+    // 品牌名首帧给一半不透明度，很快补到全亮；不再从完全透明开始等 220ms
+    val brandAlpha = remember { Animatable(0.5f) }
     // 笔尖进度：单位是「字」，名言写完接着写署名
     val pen = remember { Animatable(0f) }
     val textLength = quote.text.length
@@ -105,10 +107,9 @@ fun WarmSplash(
                 spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
             )
         }
-        launch { iconAlpha.animateTo(1f, tween(420)) }
         launch {
-            delay(220)
-            brandAlpha.animateTo(1f, tween(360))
+            delay(80)
+            brandAlpha.animateTo(1f, tween(300))
         }
         // 图标落定再落笔
         delay(430)
@@ -153,7 +154,6 @@ fun WarmSplash(
                     .graphicsLayer {
                         scaleX = iconScale.value
                         scaleY = iconScale.value
-                        alpha = iconAlpha.value
                     }
                     .clip(RoundedCornerShape(28.dp))
                     // 与桌面图标同一套底色：近黑纯底把「日轮」符号托起来

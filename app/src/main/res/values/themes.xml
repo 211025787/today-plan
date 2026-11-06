@@ -2,6 +2,7 @@
 <resources>
     <!-- 启动主题：配合 Compose 动态取色 -->
     <style name="Theme.FocusList" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFFFF7EF</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

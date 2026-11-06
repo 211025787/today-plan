@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 26-30 深色模式的窗口底色：与 WarmSplash 深色底一致，
+  避免系统还没画出 Compose 第一帧时先闪一层纯白。
+  API 31+ 由 values-night-v31/themes.xml 整体接管。
+-->
+<resources>
+    <style name="Theme.FocusList" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FF1C1714</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

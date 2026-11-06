@@ -7,6 +7,7 @@ import android.os.Bundle
 import com.focuslist.app.data.backup.BackupManager
 import com.focuslist.app.data.local.AppDatabase
 import com.focuslist.app.data.prefs.SettingsStore
+import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.data.repo.CategoryRepository
 import com.focuslist.app.data.repo.FocusRepository
 import com.focuslist.app.data.repo.HabitRepository
@@ -21,6 +22,9 @@ import com.focuslist.app.util.AppForeground
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -73,12 +77,23 @@ class FocusListApp : Application() {
     lateinit var container: AppContainer
         private set
 
+    /**
+     * 主题等设置的热流。Application 一启动就 Eagerly 收集 DataStore，
+     * 这样 Activity 组合第一帧大概率已拿到用户真实的主题/主题色，
+     * 不会先用默认浅色画一帧、设置到达后再整体跳变（看起来像闪白）。
+     */
+    lateinit var settingsFlow: StateFlow<TimerSettings>
+        private set
+
     /** 应用级协程作用域：用于首启初始化等长生命周期任务 */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        settingsFlow = container.settingsStore.settings.stateIn(
+            appScope, SharingStarted.Eagerly, TimerSettings()
+        )
         // 提前创建通知渠道，保证 Android 8+ 提醒可送达
         Notifier(this).ensureChannels()
         // 预加载提示音（SoundPool 异步加载，启动时预热避免首次播放无声）
