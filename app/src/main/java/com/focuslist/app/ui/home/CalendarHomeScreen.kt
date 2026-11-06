@@ -223,7 +223,8 @@ private fun monthStartForOffset(offset: Int): Long {
 fun CalendarHomeScreen(
     container: AppContainer,
     onOpenNote: (Long, Long) -> Unit = { _, _ -> },
-    onOpenTravel: (Long) -> Unit = {}
+    onOpenTravel: (Long) -> Unit = {},
+    onOpenPlanStats: () -> Unit = {}
 ) {
     // LocalContext 需在 Composable 作用域先取出，再传入 ViewModel 工厂
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
@@ -453,6 +454,11 @@ fun CalendarHomeScreen(
                             Icon(Icons.Default.Close, contentDescription = "退出搜索")
                         }
                     } else if (state.selectedDay == null) {
+                        // 计划统计入口：日历里的计划投入总览（数据源是 plan_logs，不是番茄记录）
+                        IconButton(onClick = onOpenPlanStats) {
+                            Icon(Icons.Default.Insights, contentDescription = "计划统计")
+                        }
+
                         // 搜索入口（仅日历展开时提供）
                         IconButton(onClick = {
                             manageMode = false

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -36,13 +35,15 @@ import com.focuslist.app.data.prefs.TravelPrefs
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.ThemeColors
 import com.focuslist.app.util.BackupHealth
-import com.focuslist.app.util.PlanStats
 
 /**
  * 「我的」页：只放入口，具体设置在各自的子页面里。
  *
  * 每一项都是一行「图标 + 名称 + 当前状态摘要」，一眼能看出现在是什么配置，
  * 点进去再改——设置项变多以后不会再挤成一大张卡片。
+ *
+ * 统计入口刻意不放在这里：日历计划统计在日历主页顶栏，专注统计在专注页顶栏，
+ * 各自贴着自己要统计的数据源，不用在一堆偏好项里翻。
  *
  * @param container 依赖容器
  * @param onOpen 打开子页面回调，参数为 [SettingsRoutes] 中的路由
@@ -57,8 +58,6 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsState()
     val templates by viewModel.planTemplates.collectAsState()
     val lastBackupAt by viewModel.lastBackupAt.collectAsState()
-    // 只订阅「今天」的计划日志，给计划总览入口一行实时摘要
-    val todayLogs by container.planRepository.observeTodayLogs().collectAsState(initial = emptyList())
     val context = LocalContext.current
     // 版本号从包信息读取，避免手写
     val versionName = remember {
@@ -114,8 +113,6 @@ fun SettingsScreen(
         "未配置 Key，仅用内置目的地与地图点选"
     }
     val backupSummary = "${BackupHealth.statusText(lastBackupAt)} · ${BackupHealth.level(lastBackupAt).label}"
-    val planTodayMinutes = (todayLogs.sumOf { it.accumulatedSec.coerceAtLeast(0L) } / 60L).toInt()
-    val planSummary = "今日 ${PlanStats.durationText(planTodayMinutes)} · 按日历里的计划计时"
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -165,35 +162,14 @@ fun SettingsScreen(
             SettingsEntryCard("🗺", "地图与搜索", mapSummary) { onOpen(SettingsRoutes.MAP_SEARCH) }
             SettingsEntryCard("💾", "数据备份", backupSummary) { onOpen(SettingsRoutes.BACKUP) }
 
-            // 日历计划维度：数据源是 plan_logs，和下面的番茄专注统计完全分开
-            SettingsSectionLabel("日历计划")
-            SettingsEntryCard("📊", "计划总览", planSummary) { onOpen(SettingsRoutes.PLAN_STATS) }
-            SettingsEntryCard("🗂", "计划节奏", "6 周时间轴 · 到期计划的结业与续期") {
-                onOpen(SettingsRoutes.PLAN_REVIEW)
-            }
-
-            SettingsSectionLabel("专注（番茄）")
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                    SettingsActionRow(
-                        title = "专注统计",
-                        subtitle = "番茄专注时长、连续天数与年度热力图",
-                        onClick = { onOpen(SettingsRoutes.STATS) }
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    SettingsActionRow(
-                        title = "月度回顾",
-                        subtitle = "按番茄专注时长着色，和上月同期比一比",
-                        onClick = { onOpen(SettingsRoutes.MONTH_REVIEW) }
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    SettingsActionRow(
-                        title = "成就殿堂",
-                        subtitle = "12 枚专注徽章，解锁记录随备份一起保存",
-                        onClick = { onOpen(SettingsRoutes.ACHIEVEMENTS) }
-                    )
-                }
-            }
+            // 统计入口不放在设置里：计划统计在日历主页顶栏，专注统计在专注页顶栏。
+            // 这样打开即见，也不用在一堆偏好项里找数据。
+            Text(
+                text = "统计在哪？日历主页右上角看计划总览，专注页右上角看专注统计。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 6.dp, top = 4.dp)
+            )
 
             SettingsSectionLabel("关于")
             GlassCard(modifier = Modifier.fillMaxWidth()) {

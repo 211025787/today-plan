@@ -31,9 +31,10 @@ import androidx.compose.ui.unit.dp
 import com.focuslist.app.ui.common.GlassCard
 
 /**
- * 「我的」页跳转的所有子页面路由。
+ * 应用内功能页路由（设置子页 + 统计页 / 成就页）。
  *
- * 集中在一处，避免同一个字符串在设置页与导航图里各写一遍（写错只会白屏，编译期发现不了）。
+ * 集中在一处，避免同一个字符串在页面与导航图里各写一遍（写错只会白屏，编译期发现不了）。
+ * 虽然归属 settings 包，但统计类入口已经从设置页挪到主页 / 专注页顶栏，路由表仍共用这一份。
  */
 object SettingsRoutes {
     const val STATS = "stats"

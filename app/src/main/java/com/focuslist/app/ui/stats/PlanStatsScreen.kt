@@ -30,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.focuslist.app.AppContainer
 import com.focuslist.app.data.repo.PlanRepository
 import com.focuslist.app.ui.common.GlassCard
+import com.focuslist.app.ui.settings.SettingsActionRow
 import com.focuslist.app.ui.settings.SettingsDetailScreen
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
@@ -96,9 +97,14 @@ class PlanStatsViewModel(
  *
  * @param container 依赖容器
  * @param onBack 返回回调
+ * @param onOpenReview 打开「计划节奏」（时间轴 / 结业的计划）回调
  */
 @Composable
-fun PlanStatsScreen(container: AppContainer, onBack: () -> Unit) {
+fun PlanStatsScreen(
+    container: AppContainer,
+    onBack: () -> Unit,
+    onOpenReview: () -> Unit = {}
+) {
     val viewModel: PlanStatsViewModel = viewModel {
         PlanStatsViewModel(container.planRepository, container.settingsStore)
     }
@@ -258,6 +264,17 @@ fun PlanStatsScreen(container: AppContainer, onBack: () -> Unit) {
                         PlanInvestRow(item, max)
                     }
                 }
+            }
+        }
+
+        // 次级入口：设置页不再放统计分组，时间轴与结业从这里进，避免变成孤岛
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                SettingsActionRow(
+                    title = "计划节奏",
+                    subtitle = "6 周时间轴、到期计划的结业与续期",
+                    onClick = onOpenReview
+                )
             }
         }
     }

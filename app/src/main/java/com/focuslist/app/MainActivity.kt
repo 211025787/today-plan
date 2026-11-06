@@ -303,10 +303,18 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                         },
                         onOpenTravel = { tripId ->
                             navController.navigate("travel?tripId=$tripId")
-                        }
+                        },
+                        // 主页顶栏：日历计划统计
+                        onOpenPlanStats = { navController.navigate(SettingsRoutes.PLAN_STATS) }
                     )
                 }
-                composable(Destinations.FOCUS.route) { FocusScreen(container) }
+                composable(Destinations.FOCUS.route) {
+                    // 专注页顶栏：专注统计
+                    FocusScreen(
+                        container = container,
+                        onOpenStats = { navController.navigate(SettingsRoutes.STATS) }
+                    )
+                }
                 composable(Destinations.HABITS.route) { HabitsScreen(container) }
                 // 旅游规划：从首页 FAB 进入，不在 Dock；tripId=-1 进旅游主页，>0 直接编辑该行程
                 composable(
@@ -350,7 +358,11 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 }
                 // 日历计划维度的统计：数据源是 plan_logs，不是番茄专注记录
                 composable(SettingsRoutes.PLAN_STATS) {
-                    PlanStatsScreen(container = container, onBack = { navController.popBackStack() })
+                    PlanStatsScreen(
+                        container = container,
+                        onBack = { navController.popBackStack() },
+                        onOpenReview = { navController.navigate(SettingsRoutes.PLAN_REVIEW) }
+                    )
                 }
                 composable(SettingsRoutes.PLAN_REVIEW) {
                     PlanReviewScreen(container = container, onBack = { navController.popBackStack() })

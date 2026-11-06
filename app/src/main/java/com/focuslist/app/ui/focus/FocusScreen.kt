@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,10 +77,11 @@ import kotlinx.coroutines.launch
  * 专注页：番茄钟大圆环、白噪音、任务绑定、今日统计摘要，对齐滴答清单"专注"模块。
  *
  * @param container 依赖容器
+ * @param onOpenStats 打开专注统计页回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FocusScreen(container: AppContainer) {
+fun FocusScreen(container: AppContainer, onOpenStats: () -> Unit = {}) {
     val context = LocalContext.current
     // 订阅全局计时状态，服务在后台运行时界面也能实时刷新
     val timer by TimerStateHolder.state.collectAsState()
@@ -121,6 +123,10 @@ fun FocusScreen(container: AppContainer) {
             TopAppBar(
                 title = { Text("专注", style = MaterialTheme.typography.headlineMedium) },
                 actions = {
+                    // 专注统计：番茄时长、年度热力图、成就与月度回顾都从这里进
+                    IconButton(onClick = onOpenStats) {
+                        Icon(Icons.Default.Insights, contentDescription = "专注统计")
+                    }
                     // 专注设置：番茄参数、铃声/震动、自动化
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "专注设置")
