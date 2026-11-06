@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.0.93-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.94-4772FA" alt="version">
 </p>
 
 **暖历**是一个以离线为主的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来；新增的「行程」页还能把下一趟旅行直接画在地图上。所有计划、记录与行程都只保存在本机；只有旅游规划里的地图底图与真实道路路线需要联网获取，不会上传任何个人数据。
@@ -104,6 +104,7 @@ Dock 新增第五个入口「**行程**」：全屏地图 + 顶部搜索 + 底�
 - **多条行程 + 模板**：行程库可新建、改名、换封面色、删除；内置「川西小环线 / 江南水乡 / 云南慢行 / 关西漫步」四条模板，点一下生成带地点的完整行程，再按自己的节奏改；
 - **坐标对齐**：底图用高德瓦片（GCJ-02），内置地点与 OSRM 轨迹是 WGS-84，绘制前自动纠偏，境内不会整体偏 500 米；境外坐标原样使用；
 - **离线也不散架**：底图没加载时显示纸面网格与「底图需联网」提示，行程与路线仍可编辑；联网后进入行程会自动补真实路线并缓存进数据库，之后断网也能看到上次的折线。
+- **边缘滑动跟手返回**：地图主页接了 Android **预测式返回**，`progress` 1:1 映射成整页的退让比例——页面朝手势那一侧平移、缩到 92%、圆角淡出，滑多少就退多少；松手完成手势即返回上一页，中途放弃弹回原位。左 / 右边缘用 `BackEventCompat.swipeEdge` 判断方向。进度在 `graphicsLayer` 里延迟读取，手势每帧只改图层、不重组整张地图；有弹层或选点态时返回键先收起最上层，不会一下退出地图页。
 
 <p align="center">
   <img src="docs/images/screen-travel.png" width="320" alt="旅游规划：江南水乡">

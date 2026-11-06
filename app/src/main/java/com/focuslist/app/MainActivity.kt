@@ -328,7 +328,8 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 ) { entry ->
                     TravelScreen(
                         container = container,
-                        focusTripId = entry.arguments?.getLong(TRAVEL_ARG_TRIP_ID) ?: -1L
+                        focusTripId = entry.arguments?.getLong(TRAVEL_ARG_TRIP_ID) ?: -1L,
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable(Destinations.MINE.route) {

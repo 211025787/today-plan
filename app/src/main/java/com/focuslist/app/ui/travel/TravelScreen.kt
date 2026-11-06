@@ -1,9 +1,14 @@
 package com.focuslist.app.ui.travel
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
@@ -63,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -93,6 +99,7 @@ import com.focuslist.app.util.TravelMode
 import com.focuslist.app.util.TravelPlace
 import com.focuslist.app.util.TravelSummaries
 import com.focuslist.app.util.TravelTemplates
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -107,9 +114,17 @@ import kotlinx.coroutines.launch
  *
  * @param container 依赖容器
  * @param focusTripId 从首页 FAB 进入时指定的行程 ID；<=0 表示不指定，沿用上次活跃行程
+ * @param onBack 返回上一页回调（边缘滑动手势松手 / 系统返回键时调用）
  */
+/** 返回手势时地图页缩成的圆角卡片形状 */
+private val BackPreviewShape = RoundedCornerShape(24.dp)
+
 @Composable
-fun TravelScreen(container: AppContainer, focusTripId: Long = -1L) {
+fun TravelScreen(
+    container: AppContainer,
+    focusTripId: Long = -1L,
+    onBack: () -> Unit = {}
+) {
     val context = LocalContext.current
     val prefs = remember { TravelPrefs(context) }
     val routeClient = remember {
@@ -169,7 +184,42 @@ fun TravelScreen(container: AppContainer, focusTripId: Long = -1L) {
         }
     }
 
-    BackHandler(enabled = picking) { picking = false }
+    // 有弹层 / 选点态时，返回键先收起最上层，不要一下退出整个地图页
+    val overlaysOpen = sheet != null || creatingTrip || editingTrip != null || picking
+    BackHandler(enabled = overlaysOpen) {
+        sheet = null
+        creatingTrip = false
+        editingTrip = null
+        picking = false
+    }
+
+    // 预测式返回：地图主页从边缘往里滑，整页按 progress 跟手退让；
+    // 松手完成手势 = 真的返回，中途放弃则弹回原位。
+    val backProgress = remember { Animatable(0f) }
+    val backSpring = remember {
+        spring<Float>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+            visibilityThreshold = 0.001f
+        )
+    }
+    val backScope = rememberCoroutineScope()
+    // 从左边缘滑就往右退，从右边缘滑就往左退，两边都跟手
+    var swipeFromRight by remember { mutableStateOf(false) }
+    PredictiveBackHandler(enabled = !overlaysOpen) { progress ->
+        try {
+            progress.collect { event ->
+                swipeFromRight = event.swipeEdge == BackEventCompat.EDGE_RIGHT
+                // 1:1 跟手：系统给多少进度，页面就退出多少比例
+                backProgress.snapTo(event.progress.coerceIn(0f, 1f))
+            }
+            onBack()
+        } catch (e: CancellationException) {
+            // 手势取消：本协程已被取消，弹回必须另起作用域
+            backScope.launch { backProgress.animateTo(0f, backSpring) }
+            throw e
+        }
+    }
 
     val stopIds = plan.stops.map { it.id }
     LaunchedEffect(plan.trip?.id, stopIds, mapState.viewSize) {
@@ -208,7 +258,22 @@ fun TravelScreen(container: AppContainer, focusTripId: Long = -1L) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                // 在图层阶段读进度：手势每帧只改图层，不重组整张地图
+                val p = backProgress.value
+                val direction = if (swipeFromRight) -1f else 1f
+                translationX = size.width * 0.30f * p * direction
+                scaleX = 1f - 0.08f * p
+                scaleY = 1f - 0.08f * p
+                alpha = 1f - 0.18f * p
+                clip = p > 0f
+                shape = BackPreviewShape
+                shadowElevation = 12f * p
+            }
+    ) {
         TravelMap(
             plan = plan,
             color = tripColor,
