@@ -1,5 +1,7 @@
 package com.focuslist.app.ui.common
 
+import android.graphics.Bitmap
+
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,16 +23,27 @@ object TravelOverlayState {
     val tripId: StateFlow<Long?> = mutableTripId.asStateFlow()
 
     /**
+     * 进入旅游页**之前**那一帧的真实屏幕画面。
+     *
+     * 侧滑返回时当前页整体右移，左边露出的就是这张图；它不是画的占位图，
+     * 而是刚才用户真正看到的那张日历页 / 卡片页（含 Dock、卡片摆放与配色）。
+     * 关掉覆盖层后清引用交给 GC（不主动 recycle：可能还有一帧正在绘制它）。
+     */
+    var previousPage: Bitmap? = null
+
+    /**
      * 打开旅游页覆盖层。
      *
      * @param id 要聚焦的行程 ID；<=0 表示沿用上次活跃行程
      */
-    fun open(id: Long) {
+    fun open(id: Long, snapshot: Bitmap?) {
+        previousPage = snapshot
         mutableTripId.value = id
     }
 
     /** 关闭覆盖层，露出下面的真实日历页 */
     fun close() {
         mutableTripId.value = null
+        previousPage = null
     }
 }

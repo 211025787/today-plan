@@ -14,6 +14,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -62,6 +64,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -193,6 +196,8 @@ fun TravelScreen(
     // 预测式返回：地图主页从边缘往里滑，整页按 progress 跟手退让；
     // 松手完成手势 = 真的返回，中途放弃则弹回原位。
     val backProgress = remember { Animatable(0f) }
+    // 只在「是否处于返回手势中」变化时重组一次，不跟着进度每帧重组
+    val backActive by remember { derivedStateOf { backProgress.value > 0.001f } }
     val backSpring = remember {
         spring<Float>(
             dampingRatio = Spring.DampingRatioNoBouncy,
@@ -263,7 +268,9 @@ fun TravelScreen(
                 indication = null
             ) {}
             .graphicsLayer {
-                // 宽高完全不变，只向右平移；左边露出的就是 NavHost 里真实的日历页 / 卡片页
+                // 先把整页内容裁到自身边界（地图瓦片会画到界外），再整块向右平移，
+                // 这样既不会把界外的地图带进屏幕，左边也能干净地露出上一页
+                clip = true
                 translationX = size.width * backProgress.value
             }
     ) {
@@ -443,6 +450,24 @@ fun TravelScreen(
                         .fillMaxWidth()
                 )
             }
+        }
+
+        // 系统返回手势的触摸会同时落到地图上；手势期间吞掉全部事件，
+        // 否则地图会被手指带着拖动，把界外内容「翻」出来
+        if (backActive) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown().consume()
+                            do {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() }
+                            } while (event.changes.any { it.pressed })
+                        }
+                    }
+            )
         }
     }
 
