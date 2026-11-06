@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Android 12+ 系统启动画面的图标：与应用内 WarmSplash 第一帧同一个「日轮」小图标。
+  Android 12+ 系统启动画面的图标：「首帧大图标」，与应用开屏里那枚图标同款、同比例。
 
-  系统会把这个 108dp 画布按启动图标规范居中显示、可见区约中心 66dp，
-  所以画一个 44dp 的圆角方块（外接圆约 62dp），四角不会被裁掉。
-  WarmSplash 里的图标也是同一个 44dp 方块 / 12dp 圆角、全程固定不缩放，
-  系统帧 → 应用首帧尺寸完全一致，看不到任何大小跳变，
-  也就不再有「点开先一片白、图标又突然变大」的空窗。
+  两段交接的几何关系（这是不再有大小跳变的关键）：
+    - 应用开屏图标最终是 60dp 方块 / 16dp 圆角，内部日轮约 30dp；
+    - 应用首帧把它整体放大 1.35 倍 → 约 81dp 方块 / 29.7dp 圆角 / 41dp 日轮；
+    - 所以这里在 108dp 画布中心画 80dp 方块 / 30dp 圆角 / 40dp 日轮，
+      与应用首帧几乎逐像素重合；随后应用内用 420ms tween 把它收拢到 60dp，
+      看起来就是「启动图标优雅地缩小落到开屏上」，而不是突然变大 / 变小。
 
   方块底色与深色开屏一致，另加一圈极淡描边：浅色暖白底上靠深色块识别，
   深色近黑底上靠描边 + 日轮识别，两种主题下都不会消失。
@@ -17,27 +18,27 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 圆角方块：32..76，圆角 12 -->
+    <!-- 圆角方块：14..94（80dp），圆角 30（柔和 squircle，接近圆形遮罩也不露形差） -->
     <path
         android:fillColor="#FF1C1714"
-        android:pathData="M44,32h20a12,12 0 0 1 12,12v20a12,12 0 0 1 -12,12h-20a12,12 0 0 1 -12,-12v-20a12,12 0 0 1 12,-12z" />
+        android:pathData="M44,14h20a30,30 0 0 1 30,30v20a30,30 0 0 1 -30,30h-20a30,30 0 0 1 -30,-30v-20a30,30 0 0 1 30,-30z" />
     <path
         android:strokeColor="#40FFF7EF"
-        android:strokeWidth="1"
+        android:strokeWidth="1.5"
         android:fillColor="#00000000"
-        android:pathData="M44,32h20a12,12 0 0 1 12,12v20a12,12 0 0 1 -12,12h-20a12,12 0 0 1 -12,-12v-20a12,12 0 0 1 12,-12z" />
+        android:pathData="M44,14h20a30,30 0 0 1 30,30v20a30,30 0 0 1 -30,30h-20a30,30 0 0 1 -30,-30v-20a30,30 0 0 1 30,-30z" />
 
-    <!-- 日轮外框：43..65，笔画 2.6 -->
+    <!-- 日轮外框：34..74（40dp），笔画 5.6 -->
     <path
         android:strokeColor="#FFF7EF"
-        android:strokeWidth="2.6"
+        android:strokeWidth="5.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
         android:fillColor="#00000000"
-        android:pathData="M48,43h12a5,5 0 0 1 5,5v12a5,5 0 0 1 -5,5h-12a5,5 0 0 1 -5,-5v-12a5,5 0 0 1 5,-5z" />
+        android:pathData="M43,34h22a9,9 0 0 1 9,9v22a9,9 0 0 1 -9,9h-22a9,9 0 0 1 -9,-9v-22a9,9 0 0 1 9,-9z" />
 
     <!-- 今天的太阳 -->
     <path
         android:fillColor="#FF9F5A"
-        android:pathData="M54,50a4,4 0 1 1 0,8a4,4 0 1 1 0,-8z" />
+        android:pathData="M54,45.4a8.6,8.6 0 1 1 0,17.2a8.6,8.6 0 1 1 0,-17.2z" />
 </vector>

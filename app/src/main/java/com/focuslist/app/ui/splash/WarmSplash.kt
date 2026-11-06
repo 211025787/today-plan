@@ -1,6 +1,7 @@
 package com.focuslist.app.ui.splash
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -60,7 +61,7 @@ private val InkLight = Color(0xFF2E2723)
 private val InkDark = Color(0xFFF6EDE4)
 
 /**
- * 开屏页：图标首帧即可见且全程固定尺寸 → 品牌名补亮 → 随机格言与署名被「一笔一划快速写下来」→ 进入主界面。
+ * 开屏页：首帧的大图标平滑缩小落到 60dp 并从此固定 → 品牌名补亮 → 随机格言与署名被逐字写下 → 进入主界面。
  *
  * 手写感由四层叠出来：毛笔字体 + 每字随机微小倾角 + 从左往右的笔迹揭示 +
  * 笔尖墨点跟随。逐字推进而不是整句淡入，才有「正在写」的感觉。
@@ -83,8 +84,10 @@ fun WarmSplash(
     val accent = if (dark) Color(0xFFFFB984) else WarmAccent
     val density = LocalDensity.current
 
-    // 图标全程固定 44dp：和系统启动画面里那枚 splash_brand 一样大、一样圆角，
-    // 两段画面接上后尺寸完全不变，不做任何弹入 / 放大动画。
+    // 首帧图标与系统启动画面里那枚 80dp 图标重合（60dp × 1.35 ≈ 81dp），
+    // 再用 tween 匀速收拢到 60dp 后全程固定：从大缩小、落定即不动，
+    // 不会像弹簧那样「突然变大」。用 tween 而不是 spring 就是为这份平稳感。
+    val iconScale = remember { Animatable(1.35f) }
     // 品牌名首帧给一半不透明度，很快补到全亮；不再从完全透明开始等 220ms
     val brandAlpha = remember { Animatable(0.5f) }
     // 笔尖进度：单位是「字」，名言写完接着写署名
@@ -99,10 +102,13 @@ fun WarmSplash(
     LaunchedEffect(quote, skipped) {
         if (skipped) return@LaunchedEffect
         launch {
+            iconScale.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+        }
+        launch {
             delay(80)
             brandAlpha.animateTo(1f, tween(300))
         }
-        // 稍等一拍再落笔，让第一眼的图标 / 品牌名先稳住
+        // 图标收拢落定（420ms）之后再落笔，节奏刚好接上
         delay(430)
         pen.animateTo(total.toFloat(), tween(total * perCharMs, easing = LinearEasing))
         delay(420)
@@ -138,12 +144,16 @@ fun WarmSplash(
                 .padding(horizontal = 32.dp)
                 .padding(bottom = 48.dp)
         ) {
-            // 应用图标：与系统启动画面 splash_brand 完全同款、同尺寸（44dp / 圆角 12dp），
-            // 近黑纯底把「日轮」符号托起来；不做缩放动画
+            // 应用图标：最终 60dp 方块 / 22dp 圆角（比之前的 44dp 大一圈，形状更圆润）。
+            // 首帧被 iconScale 放大 1.35 倍，与系统帧那枚 80dp 图标重合后收拢回来。
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(60.dp)
+                    .graphicsLayer {
+                        scaleX = iconScale.value
+                        scaleY = iconScale.value
+                    }
+                    .clip(RoundedCornerShape(22.dp))
                     // 与桌面图标同一套底色：近黑纯底把「日轮」符号托起来
                     .background(Color(0xFF1C1714)),
                 contentAlignment = Alignment.Center
@@ -153,7 +163,8 @@ fun WarmSplash(
                     contentDescription = "暖历",
                     contentScale = ContentScale.FillBounds,
                     // 与 splash_brand 里日轮的占比对齐：108dp 画布的 42dp 主体
-                    // 落进 44dp 方块后放大 1.3 倍 ≈ 22dp，和系统帧画的那枚一样大
+                    // 落进 60dp 方块再放大 1.3 倍 ≈ 30dp；首帧随整体 ×1.35 ≈ 41dp，
+                    // 正好和系统帧画的 40dp 日轮重合
                     modifier = Modifier.fillMaxSize().scale(1.3f)
                 )
             }
