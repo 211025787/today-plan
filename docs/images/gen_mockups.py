@@ -65,14 +65,9 @@ def banner():
     s.append(f'<circle cx="150" cy="60" r="220" fill="{PRIMARY}" opacity="0.35" filter="url(#soft)"/>')
     s.append(f'<circle cx="1020" cy="260" r="240" fill="{VIOLET}" opacity="0.30" filter="url(#soft)"/>')
     # 右侧装饰：新图标造型（日历 + 清单 + 完成角标）
-    s.append('<rect x="860" y="70" width="160" height="160" rx="44" fill="#FF9F5A"/>')
-    s.append('<path d="M900 100a6,6 0 0 1 12,0v20a6,6 0 0 1 -12,0z" fill="#FFFFFF"/>')
-    s.append('<path d="M968 100a6,6 0 0 1 12,0v20a6,6 0 0 1 -12,0z" fill="#FFFFFF"/>')
-    s.append('<path d="M900 122h80a14,14 0 0 1 14,14v62a14,14 0 0 1 -14,14h-80a14,14 0 0 1 -14,-14v-62a14,14 0 0 1 14,-14z" fill="#FFFFFF"/>')
-    s.append('<path d="M886 140h108v14h-108z" fill="#FF9F5A"/>')
-    for x, y, c in [(898,164,'#FFE3C6'),(924,164,'#FF9F5A'),(950,164,'#FFE3C6'),(898,184,'#FF9F5A'),(924,184,'#FFE3C6'),(950,184,'#FF9F5A')]:
-        s.append(f'<rect x="{x}" y="{y}" width="20" height="14" rx="3" fill="{c}"/>')
-    s.append('<circle cx="982" cy="112" r="16" fill="#FFD36B" stroke="#FFFFFF" stroke-width="3"/>')
+    s.append('<rect x="860" y="70" width="160" height="160" rx="44" fill="#1C1714"/>')
+    s.append('<rect x="898" y="112" width="84" height="84" rx="20" fill="none" stroke="#FFF7EF" stroke-width="12"/>')
+    s.append('<circle cx="940" cy="154" r="17" fill="#FF9F5A"/>')
     s.append('<text x="96" y="132" font-size="46" font-weight="600" fill="#FFFFFF">暖历</text>')
     s.append('<text x="98" y="176" font-size="19" fill="#C9C7E8">日历计划 × 秒表投入 × 专注复盘，把日子一格格攒暖</text>')
     s.append(f'<rect x="98" y="204" width="126" height="34" rx="17" fill="#FFFFFF" fill-opacity="0.12"/>')

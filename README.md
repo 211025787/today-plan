@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.0.91-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.0.92-4772FA" alt="version">
 </p>
 
 **暖历**是一个以离线为主的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来；新增的「行程」页还能把下一趟旅行直接画在地图上。所有计划、记录与行程都只保存在本机；只有旅游规划里的地图底图与真实道路路线需要联网获取，不会上传任何个人数据。
@@ -550,7 +550,7 @@ HTML 报告在 `app/build/reports/tests/testDebugUnitTest/index.html`。
 ## 说明
 
 - 提示音为程序化合成（正弦波 + 包络），不含第三方录音素材；横幅、界面预览图由 `docs/images/gen_mockups.py` 生成；
-- 启动图标为矢量自适应图标（暖黄→蜜桃渐变底 + 白日历 + 由浅到深被填满的日期格 + 右上角暖阳），呼应「暖历」；前景整体用 `<group scaleX/Y=0.8>` 缩到 80%，桌面 48dp 下四周留一圈呼吸空间，不会顶着遮罩边缘；
+- 启动图标为矢量自适应图标「**日轮**」：近黑纯色底 + 一个暖白粗线圆角框（一页日历 /「日」字外框）+ 中间一颗暖橙实心圆（今天的太阳）。按 GPT / X 那类图标的范式做的——纯色高对比、单个几何符号、大留白，不画界面缩略图、不用渐变、不塞细节；符号主体 42dp，在 66dp 可见区里约占六成，48dp 桌面尺寸下靠剪影识别；
 - 更换图标后若桌面仍显示旧图标，多为启动器缓存，卸载重装或重启桌面即可；
 - 应用名「暖历」只改 `strings.xml` 的 `app_name`、备份文件名前缀与 .ics 导出文案；`applicationId` / 包名仍是 `com.focuslist.app`，老版本覆盖安装、本机数据与桌面小组件都不受影响；
 - 项目为个人自用工具，暂未开源许可证约定，如需引用请先联系作者。

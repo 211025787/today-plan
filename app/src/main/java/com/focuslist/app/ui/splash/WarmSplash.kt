@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -155,16 +156,16 @@ fun WarmSplash(
                         alpha = iconAlpha.value
                     }
                     .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        Brush.linearGradient(listOf(Color(0xFFFFC978), Color(0xFFFF8A66)))
-                    ),
+                    // 与桌面图标同一套底色：近黑纯底把「日轮」符号托起来
+                    .background(Color(0xFF1C1714)),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     painter = painterResource(R.drawable.ic_launcher_foreground),
                     contentDescription = "暖历",
                     contentScale = ContentScale.FillBounds,
-                    modifier = Modifier.fillMaxSize()
+                    // 桌面启动器会把 108dp 图层裁到中心 66dp，开屏这里手动放大等效
+                    modifier = Modifier.fillMaxSize().scale(1.3f)
                 )
             }
 
