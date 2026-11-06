@@ -57,6 +57,7 @@ import com.focuslist.app.ui.common.DayDetailState
 import com.focuslist.app.ui.common.DockItem
 import com.focuslist.app.ui.common.GlassBackground
 import com.focuslist.app.ui.common.GlassDockBar
+import com.focuslist.app.ui.common.TravelOverlayState
 import com.focuslist.app.ui.focus.FocusScreen
 import com.focuslist.app.ui.habits.HabitsScreen
 import com.focuslist.app.ui.home.CalendarHomeScreen
@@ -108,7 +109,6 @@ enum class Destinations(val route: String, val label: String, val icon: ImageVec
 }
 
 /** 旅游规划页路由参数名 */
-const val TRAVEL_ARG_TRIP_ID = "tripId"
 
 /** 主 Tab 路由集合：仅这些路由显示 Dock 悬浮栏 */
 /** 通知点击直达习惯页 */
@@ -246,6 +246,8 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    // 旅游页覆盖层：非空时叠在 NavHost 之上，下面的日历页保持组合、状态不丢
+    val travelTripId by TravelOverlayState.tripId.collectAsState()
 
     // 专注中才隐藏 Dock，且只在真正的"计时页"生效：
     // - 专注页：番茄钟运行中
@@ -301,11 +303,9 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                         onOpenNote = { id, date ->
                             navController.navigate("note_editor?noteId=$id&date=$date")
                         },
-                        onOpenTravel = { tripId ->
-                            // 记下进入前是不是停在日卡片页：返回手势左边露出的「上一页」要照着它画
-                            val fromCard = DayDetailState.open.value
-                            navController.navigate("travel?tripId=$tripId&fromCard=$fromCard")
-                        },
+                        // 旅游页是覆盖层：打开时底下的日历页（含卡片页）保持原样，
+                        // 侧滑返回露出的就是真实的上一页
+                        onOpenTravel = { tripId -> TravelOverlayState.open(tripId) },
                         // 主页顶栏：日历计划统计
                         onOpenPlanStats = { navController.navigate(SettingsRoutes.PLAN_STATS) }
                     )
@@ -318,27 +318,6 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                     )
                 }
                 composable(Destinations.HABITS.route) { HabitsScreen(container) }
-                // 旅游规划：从首页 FAB 进入，不在 Dock；tripId=-1 进旅游主页，>0 直接编辑该行程
-                composable(
-                    route = "travel?tripId={$TRAVEL_ARG_TRIP_ID}&fromCard={fromCard}",
-                    arguments = listOf(
-                        navArgument(TRAVEL_ARG_TRIP_ID) {
-                            type = NavType.LongType
-                            defaultValue = -1L
-                        },
-                        navArgument("fromCard") {
-                            type = NavType.BoolType
-                            defaultValue = false
-                        }
-                    )
-                ) { entry ->
-                    TravelScreen(
-                        container = container,
-                        focusTripId = entry.arguments?.getLong(TRAVEL_ARG_TRIP_ID) ?: -1L,
-                        fromDayCard = entry.arguments?.getBoolean("fromCard") ?: false,
-                        onBack = { navController.popBackStack() }
-                    )
-                }
                 composable(Destinations.MINE.route) {
                     SettingsScreen(
                         container = container,
@@ -426,8 +405,17 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 }
             }
 
+            // 旅游规划覆盖层：盖在 NavHost 之上，底下仍是真实的日历页 / 日卡片页
+            if (travelTripId != null) {
+                TravelScreen(
+                    container = container,
+                    focusTripId = travelTripId ?: -1L,
+                    onBack = { TravelOverlayState.close() }
+                )
+            }
+
             // 底部渐变遮罩：从 Dock 栏顶部渐变到系统导航条，内容底部淡出融入背景（仅主 Tab 显示，与 Dock 同步）
-            if (currentRoute in mainRoutes && dockVisible) {
+            if (currentRoute in mainRoutes && dockVisible && travelTripId == null) {
                 BottomFadeEdge(
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
@@ -435,7 +423,7 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
 
             // 悬浮 Dock：仅主 Tab 页面显示，底部居中；专注中自动收起
             AnimatedVisibility(
-                visible = currentRoute in mainRoutes && dockVisible,
+                visible = currentRoute in mainRoutes && dockVisible && travelTripId == null,
                 enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { it / 3 },
                 exit = fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 3 },
                 modifier = Modifier.align(Alignment.BottomCenter)

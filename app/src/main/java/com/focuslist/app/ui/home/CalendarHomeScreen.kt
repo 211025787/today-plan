@@ -124,6 +124,7 @@ import com.focuslist.app.data.local.entity.TripEntity
 import com.focuslist.app.ui.common.AntiBurnInGlow
 import com.focuslist.app.ui.common.DayDetailState
 import com.focuslist.app.ui.common.ExpandableFab
+import com.focuslist.app.ui.common.TravelOverlayState
 import com.focuslist.app.ui.common.FabMenuItem
 import com.focuslist.app.ui.common.antiBurnInDrift
 import com.focuslist.app.ui.note.DayNotePreviewCard
@@ -309,7 +310,9 @@ fun CalendarHomeScreen(
     // 从屏幕边缘往里滑，progress 0→1 直接映射成收展比例，日历和卡片跟着手指实时走；
     // 松手完成手势 = 真的按了返回，中途放弃则弹回卡片页。
     val backScope = androidx.compose.runtime.rememberCoroutineScope()
-    PredictiveBackHandler(enabled = state.selectedDay != null) { progress ->
+    // 旅游覆盖层打开时让出返回手势，否则两层会同时响应
+    val travelTripId by TravelOverlayState.tripId.collectAsState()
+    PredictiveBackHandler(enabled = state.selectedDay != null && travelTripId == null) { progress ->
         try {
             progress.collect { event ->
                 // 手势一动就把日历装回来，否则它会被当成「已卸载」而看不到跟手效果
@@ -330,7 +333,7 @@ fun CalendarHomeScreen(
     }
 
     // 搜索态拦截返回键：先退出搜索
-    androidx.activity.compose.BackHandler(enabled = searchActive) {
+    androidx.activity.compose.BackHandler(enabled = searchActive && travelTripId == null) {
         searchActive = false
         viewModel.clearQuery()
     }
