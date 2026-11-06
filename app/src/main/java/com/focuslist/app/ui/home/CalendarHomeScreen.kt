@@ -225,11 +225,19 @@ fun CalendarHomeScreen(
     container: AppContainer,
     onOpenNote: (Long, Long) -> Unit = { _, _ -> },
     onOpenTravel: (Long) -> Unit = {},
-    onOpenPlanStats: () -> Unit = {}
+    onOpenPlanStats: () -> Unit = {},
+    readOnly: Boolean = false
 ) {
-    // LocalContext 需在 Composable 作用域先取出，再传入 ViewModel 工厂
-    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
-    val viewModel: HomeViewModel = viewModel {
+    // 旅游页覆盖层里的「上一页」也是这个 composable，但它是只读的。
+    // 两层共用 Activity 作用域的同一个 ViewModel，所以选中日、收展进度、
+    // 月份、计划数据全是用户离开时的真实状态，不需要截屏也不需要另造一份数据。
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val appContext = context.applicationContext
+    val sharedOwner: androidx.lifecycle.ViewModelStoreOwner =
+        context.findActivity()
+            ?: androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current
+            ?: error("CalendarHomeScreen 需要 ViewModelStoreOwner")
+    val viewModel: HomeViewModel = viewModel(viewModelStoreOwner = sharedOwner) {
         HomeViewModel(container.planRepository, container.noteRepository, container.tripRepository, appContext)
     }
     val state by viewModel.uiState.collectAsState()
@@ -300,10 +308,10 @@ fun CalendarHomeScreen(
 
     // 同步「当日卡片页」展开状态：主界面据此判断是否隐藏 Dock（月视图不隐藏）
     LaunchedEffect(state.selectedDay) {
-        DayDetailState.set(state.selectedDay != null)
+        if (!readOnly) DayDetailState.set(state.selectedDay != null)
     }
     DisposableEffect(Unit) {
-        onDispose { DayDetailState.set(false) }
+        onDispose { if (!readOnly) DayDetailState.set(false) }
     }
 
     // 卡片页（已选中某天）时接管系统返回，并接上 Android 的「预测式返回」：
@@ -312,7 +320,7 @@ fun CalendarHomeScreen(
     val backScope = androidx.compose.runtime.rememberCoroutineScope()
     // 旅游覆盖层打开时让出返回手势，否则两层会同时响应
     val travelTripId by TravelOverlayState.tripId.collectAsState()
-    PredictiveBackHandler(enabled = state.selectedDay != null && travelTripId == null) { progress ->
+    PredictiveBackHandler(enabled = state.selectedDay != null && travelTripId == null && !readOnly) { progress ->
         try {
             progress.collect { event ->
                 // 手势一动就把日历装回来，否则它会被当成「已卸载」而看不到跟手效果
@@ -333,7 +341,7 @@ fun CalendarHomeScreen(
     }
 
     // 搜索态拦截返回键：先退出搜索
-    androidx.activity.compose.BackHandler(enabled = searchActive && travelTripId == null) {
+    androidx.activity.compose.BackHandler(enabled = searchActive && travelTripId == null && !readOnly) {
         searchActive = false
         viewModel.clearQuery()
     }
@@ -415,7 +423,8 @@ fun CalendarHomeScreen(
     // 吸附完成后把目标月同步给 ViewModel（触发当月计时记录查询）
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            viewModel.setMonthOffset(page - PAGER_INITIAL_PAGE)
+            // 只读实例不能反过来改共享 ViewModel 的月份，否则会把主页面翻回当月
+            if (!readOnly) viewModel.setMonthOffset(page - PAGER_INITIAL_PAGE)
         }
     }
 
@@ -2607,4 +2616,19 @@ private fun CalendarSkeleton() {
             )
         }
     }
+}
+
+/**
+ * 从 [Context] 里递归解出宿主 Activity。
+ * Compose 的 `LocalContext` 有时是 `ContextThemeWrapper` / `ContextWrapper`，
+ * 直接 `as? ComponentActivity` 会失败；主页与旅游页里的只读日历页必须解到同一个
+ * Activity 作为 ViewModelStoreOwner，才能共用同一个 HomeViewModel 实例。
+ */
+private fun android.content.Context.findActivity(): androidx.activity.ComponentActivity? {
+    var current: android.content.Context? = this
+    while (current != null) {
+        if (current is androidx.activity.ComponentActivity) return current
+        current = (current as? android.content.ContextWrapper)?.baseContext
+    }
+    return null
 }

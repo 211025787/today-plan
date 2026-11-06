@@ -299,9 +299,9 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
             NavHost(
                 navController = navController,
                 startDestination = startRoute,
-                // 旅游覆盖层打开时这里**保持原样绘制**：它才是「真实的上一页」。
-                // 侧滑时地图页整块右移，左边露出的就是这份正在显示的日历页 / 日卡片页
-                // （home 目的地从未被销毁，卡片页的展开状态也一并保留）。
+                // 保持正常绘制/组合：home 目的地不能在这里被销毁，旅游页里那份
+                // 只读日历页要和它共用同一个 Activity 作用域的 ViewModel。
+                // 旅游页有自己的不透明底，会把它完整盖住，两层不会重影。
                 modifier = Modifier.fillMaxSize()
             ) {
                 // 首页：打开即日历主页；备注统一走全屏页面
@@ -413,9 +413,9 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                 }
             }
 
-            // 旅游规划覆盖层：只是盖在 NavHost 之上的一层不透明页面。
-            // 它不负责准备"上一页"——上一页就是 NavHost 里那份从没被销毁的
-            // 日历页 / 日卡片页，侧滑时这张地图整块右移，左边自然露出真实内容。
+            // 旅游规划覆盖层：盖在 NavHost 之上。TravelScreen 内部自己就带一份
+            // 只读的真实日历页作为底层（与主页共用同一个 HomeViewModel），
+            // 地图页右移时左边露出的就是它，不依赖 NavHost 透出、也不依赖截屏。
             if (travelTripId != null) {
                 TravelScreen(
                     container = container,
