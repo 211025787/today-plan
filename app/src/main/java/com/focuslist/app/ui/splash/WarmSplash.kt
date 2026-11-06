@@ -2,6 +2,7 @@ package com.focuslist.app.ui.splash
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -103,9 +104,11 @@ fun WarmSplash(
     LaunchedEffect(quote, skipped) {
         if (skipped) return@LaunchedEffect
         launch {
-            // 「暖历」两字：180ms 后开始，用 1200ms 匀速浮现
+            // 「暖历」两字：180ms 后开始，用 1200ms 浮现。
+            // 缓动用 LinearOutSlowInEasing（线性起、减速收）：匀速淡入的结尾是「戛然而止」，
+            // 会被读成一卡；这个曲线起手不突兀、收尾柔和。
             delay(180)
-            brandAlpha.animateTo(1f, tween(1200, easing = LinearEasing))
+            brandAlpha.animateTo(1f, tween(1200, easing = LinearOutSlowInEasing))
         }
         // 等文字浮现完再落笔，画面不会同时有「字变亮」和「字在写」两件事
         delay(1500)
@@ -142,7 +145,9 @@ fun WarmSplash(
         //   图标在画布内 y 21..49，中心 35dp。
         // 换算成屏幕坐标就是下面的 iconTop，两段位置因此完全重合。
         val splashCanvas = 108.dp * 2.18f
-        val iconTop = (maxHeight - splashCanvas) / 2 + 35.dp * 2.18f - 30.dp
+        // -26.dp：整组内容比「与启动帧完全重合」的位置再往上挪一点，视觉重心更舒服；
+        // 代价是与启动帧还剩 2~3% 屏高的位置差（用户明确选择偏上优先）。
+        val iconTop = (maxHeight - splashCanvas) / 2 + 35.dp * 2.18f - 30.dp - 26.dp
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
