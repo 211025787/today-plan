@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ 系统启动画面的图标：一枚**按放大倍率反推过尺寸**的小图标。
+
+  关键事实（真机截图实测）：系统不会按 drawable 里写的 dp 显示 windowSplashScreenAnimatedIcon，
+  而是把它按自己的图标尺寸放大——本机实测约 2.2 倍（72dp 的方块被画成了约 157dp）。
+  所以这里只画 28dp：
+      28dp × 2.2 ≈ 61dp  ≈  WarmSplash 里那枚 60dp 图标的实际大小
+  这样系统帧与应用开屏页的图标尺寸几乎相同（误差 1dp 级），既不出现「大图标」，
+  也不会「突然变大 / 变小」；而系统帧不再是纯色空白，点开第一眼就有内容。
+
+  形状与配色跟应用内那枚完全同源：近黑 squircle 底（圆角按 22/60 等比）+ 奶白日轮线框 + 暖橙太阳。
+  若换到放大倍率差异较大的机型上发现尺寸偏差，只需改这里方块的边长（应用内不用动）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 圆角方块：40..68（28dp），圆角 10 -->
+    <path
+        android:fillColor="#FF1C1714"
+        android:pathData="M50,40h8a10,10 0 0 1 10,10v8a10,10 0 0 1 -10,10h-8a10,10 0 0 1 -10,-10v-8a10,10 0 0 1 10,-10z" />
+
+    <!-- 日轮外框：47..61（14dp），笔画 2 -->
+    <path
+        android:strokeColor="#FFF7EF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M50.5,47h7a3.5,3.5 0 0 1 3.5,3.5v7a3.5,3.5 0 0 1 -3.5,3.5h-7a3.5,3.5 0 0 1 -3.5,-3.5v-7a3.5,3.5 0 0 1 3.5,-3.5z" />
+
+    <!-- 今天的太阳 -->
+    <path
+        android:fillColor="#FF9F5A"
+        android:pathData="M54,51a3,3 0 1 1 0,6a3,3 0 1 1 0,-6z" />
+</vector>

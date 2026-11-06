@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Star
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -176,10 +177,22 @@ class MainActivity : ComponentActivity() {
                     else -> isSystemInDarkTheme()
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // 主界面从第一帧就组合：开屏播放的两三秒里 Room / DataStore
-                    // 已经把日历数据备好，开屏淡出后露出的就是完整内容，
-                    // 不会先闪一层骨架屏或空白页。
-                    AppScaffold(container = app.container, startRoute = startRoute)
+                    // 首帧只画开屏页。主界面（NavHost + 日历翻页器 + 卡片板 + 骨架屏）
+                    // 一起挤进首帧的话，窗口里只有底色、要等更久才出画面，
+                    // 看起来就是「点开先白一下」。
+                    // 这里等开屏页画出第一帧、动画已经起步之后再在后台组合主界面：
+                    // 开屏还要演两秒多，足够它组合完并加载好数据，淡出时仍是完整日历。
+                    var warmUpApp by remember { mutableStateOf(skipSplash) }
+                    LaunchedEffect(Unit) {
+                        if (!skipSplash) {
+                            withFrameNanos { }
+                            delay(240)
+                            warmUpApp = true
+                        }
+                    }
+                    if (warmUpApp) {
+                        AppScaffold(container = app.container, startRoute = startRoute)
+                    }
 
                     AnimatedVisibility(
                         visible = splashVisible,

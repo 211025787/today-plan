@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  API 31+ 专用：系统启动画面不画任何图标，只留一层与 WarmSplash 相同的暖白底。
+  API 31+ 专用：系统启动画面只画一枚很小的日轮图标，底色与 WarmSplash 的暖白一致。
 
-  系统会按自己的尺寸放大 windowSplashScreenAnimatedIcon，真机上比应用内图标大两倍多，
-  怎么调 drawable 的 dp 都对不上，点开就会「先一个大图标、再突然变成小图标」。
-  干脆退回透明占位：底色一致，应用第一帧直接就是开屏页（小图标 + 暖历 + 手写名言），
-  两段之间没有可察觉的切换。
+  两条实测结论决定了这里的写法：
+  1. 系统会按自己的尺寸放大 windowSplashScreenAnimatedIcon（本机约 2.2 倍），
+     drawable 里写多少 dp 都不会原样显示 —— 所以尺寸要按倍率反推；
+  2. 完全不画图标（透明占位）会留下几百毫秒纯色，看起来就是「点开先白一下」。
+
+  splash_small_icon 画的是 28dp 方块，放大后 ≈ 61dp，正好接上应用开屏里那枚 60dp 图标，
+  第一眼就有内容、又不会出现「大图标」或尺寸跳变。
 
   注意：同名 style 在不同限定符下是整体替换，不会合并属性，
   所以 values/themes.xml 里的三个属性必须原样保留在这里。
@@ -17,7 +20,7 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
 
         <item name="android:windowBackground">#FFFFF7EF</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_no_icon</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_small_icon</item>
         <item name="android:windowSplashScreenAnimationDuration">0</item>
         <item name="android:windowSplashScreenBackground">#FFFFF7EF</item>
     </style>
