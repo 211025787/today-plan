@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.1.08-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.1.09-4772FA" alt="version">
 </p>
 
 **暖历**是一个以离线为主的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来；新增的「行程」页还能把下一趟旅行直接画在地图上。所有计划、记录与行程都只保存在本机；只有旅游规划里的地图底图与真实道路路线需要联网获取，不会上传任何个人数据。
@@ -16,7 +16,7 @@
 ## 开屏：暖历 · 一句话手写
 
 - **每次冷启动随机**抽一条格言（`WarmQuotes`，12 条），**第一帧就是小图标 + 品牌名**：图标固定 **60dp** 全程不缩放，品牌名 80ms 内补到全亮，稍等 430ms 后正文与署名被逐字「写」出来 → 淡出进主界面；轻点任意处可跳过，从通知 / 小组件直达时不显示开屏；
-- **系统启动帧：一枚「按倍率反推」的小图标 + 首帧减负**：真机截图实测，Android 12+ 会按自己的尺寸**放大** `windowSplashScreenAnimatedIcon`（本机约 **2.2 倍**，72dp 的方块被画成约 157dp），所以「把 drawable 画成多少 dp」这条路走不通，前几版反复出现的大图标 / 突然变大变小都是这个原因。现在 `@drawable/splash_small_icon` 只画 **28dp** 方块，放大后 ≈ **61dp**，正好接上 `WarmSplash` 里那枚 60dp 图标（误差 1dp 级），第一眼就有内容、没有大图标、也没有尺寸跳变，`WarmSplash` 因此不需要任何收拢动画。另一半原因是**首帧太重**：主界面（NavHost + 日历翻页器 + 卡片板 + 骨架屏）和开屏页一起挤进首帧时，窗口里只有底色要等更久才出画面，看起来就是「点开先白一下」。现在首帧只组合开屏页，`withFrameNanos` + `delay(240)` 之后再在后台组合 `AppScaffold`，开屏还要演两秒多，足够它组合完并加载好数据，淡出时仍是完整日历。API 26–30 另在 `values/themes.xml` 与 `values-night/themes.xml` 里把 `windowBackground` 设成同一底色，堵掉系统默认的纯白窗口底。
+- **系统启动帧直接画成开屏页的样子**：真机截图实测，Android 12+ 会按自己的尺寸**放大** `windowSplashScreenAnimatedIcon`（本机约 **2.2 倍**，72dp 的方块被画成约 157dp），所以「drawable 里写多少 dp」这条路走不通；而只画一枚小图标时其余区域仍是纯色，点开还是「先白一下」。现在 `@drawable/splash_brand_full` 把**整套构图**（日轮图标 + 「暖历」二字）按「应用内尺寸 ÷ 2.2」画进 108dp 画布：图标 27.5dp、字号 13.8dp、间距 8.3dp，系统放大后正好还原成 60dp 图标 + 30sp 字 + 18dp 间距，与应用首帧逐项重合；整组**贴画布顶部**（而不是居中），因为开屏页的「图标 + 品牌名」本来就在屏幕中心偏上约 40%，贴顶后两段纵向位置差只剩十几 dp。「暖历」不是文字而是**矢量路径**——用 JDK 的 AWT（`Font.createFont` + `GlyphVector.getOutline` + `PathIterator`）从 Ma Shan Zheng 子集里取出字形轮廓，再按目标坐标描进 vector，放大不失真、也不依赖字体资源。另一半是**首帧减负**：首帧只组合开屏页，`withFrameNanos` + `delay(240)` 之后才在后台组合 `AppScaffold`，开屏还要演两秒多，足够它组合完并加载好数据，淡出时仍是完整日历。API 26–30 另在 `values/themes.xml` 与 `values-night/themes.xml` 里把 `windowBackground` 设成同一底色。
 - **开屏期间主界面已在加载**：`AppScaffold` 从第一帧就组合，开屏只是盖在它上面的一层 `AnimatedVisibility`（`fadeOut(280)` 淡出）。开屏播放的两三秒里 Room / DataStore 已经把日历数据备好、骨架屏也在盖子底下淡出完了，开屏一消失露出的就是**完整日历**，不会再经过空白页 / 骨架屏。主题设置改由 `FocusListApp.settingsFlow`（`stateIn(Eagerly)`）在 Application 启动就预读，固定深色用户也不会先闪一帧浅色；
 - 手写感由四层叠出：**毛笔手写字体** + 每字固定的微小倾角 + 从左往右的笔迹揭示（`clipRect`）+ 笔尖墨点跟随；约 46ms 一个字，写完自动收尾；
 - 字体用 **Ma Shan Zheng 毛笔楷书**（SIL OFL 1.1，许可证见 `docs/OFL-MaShanZheng.txt`），经 `pyftsubset` 按开屏文案子集化后只有 81KB，不会把 APK 撑大；
