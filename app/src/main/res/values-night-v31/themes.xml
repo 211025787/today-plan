@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 深色模式下 API 31+ 的系统启动画面：同样不显示大图标，底色与 WarmSplash 深色一致 -->
+<!-- 深色模式 API 31+：同样不画系统启动图标，只留与 WarmSplash 一致的近黑底 -->
 <resources>
     <style name="Theme.FocusList" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
@@ -7,7 +7,7 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
 
         <item name="android:windowBackground">#FF1C1714</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_brand</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_no_icon</item>
         <item name="android:windowSplashScreenAnimationDuration">0</item>
         <item name="android:windowSplashScreenBackground">#FF1C1714</item>
     </style>
