@@ -78,7 +78,8 @@ private val InkDark = Color(0xFFF6EDE4)
 fun WarmSplash(
     quote: WarmQuote,
     darkTheme: Boolean,
-    onFinished: () -> Unit
+    onFinished: () -> Unit,
+    onQuoteWritten: () -> Unit = {}
 ) {
     val dark = darkTheme
     val ink = if (dark) InkDark else InkLight
@@ -104,18 +105,17 @@ fun WarmSplash(
     LaunchedEffect(quote, skipped) {
         if (skipped) return@LaunchedEffect
         launch {
-            // 「暖历」两字：350ms 后开始，用 1200ms 浮现（1550ms 结束）。
-            // 前 350ms 留给主界面在后台组合——那时只有静止图标，掉帧不可见。
+            // 「暖历」两字：**图标一出现就开始**浮现，用 1200ms（1200ms 结束）。
             // 缓动用 LinearOutSlowInEasing（线性起、减速收）：匀速淡入的结尾是「戛然而止」，
             // 会被读成一卡；这个曲线起手不突兀、收尾柔和。
-            delay(350)
             brandAlpha.animateTo(1f, tween(1200, easing = LinearOutSlowInEasing))
         }
-        // 1650ms 落笔：文字 1550ms 刚浮现完，只留 100ms 换气，
-        // 不会出现「字出来了、下面却空一大段」的等待。
-        delay(1650)
+        // 1300ms 落笔：文字 1200ms 刚浮现完，只留 100ms 换气。
+        delay(1300)
         pen.animateTo(total.toFloat(), tween(total * perCharMs, easing = LinearEasing))
-        delay(420)
+        // 名言写完、画面静止：现在才去组合主界面，掉帧不会被看见
+        onQuoteWritten()
+        delay(650)
         onFinished()
     }
 

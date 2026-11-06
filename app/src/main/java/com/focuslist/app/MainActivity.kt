@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Star
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -182,17 +181,9 @@ class MainActivity : ComponentActivity() {
                     // 看起来就是「点开先白一下」。
                     // 这里等开屏页画出第一帧、动画已经起步之后再在后台组合主界面：
                     // 开屏还要演两秒多，足够它组合完并加载好数据，淡出时仍是完整日历。
+                    // 主界面由 WarmSplash 在「名言写完、画面静止」时回调触发组合：
+                    // 动画期间一次重活都不做，组合掉帧也不会被看见。
                     var warmUpApp by remember { mutableStateOf(skipSplash) }
-                    LaunchedEffect(Unit) {
-                        if (!skipSplash) {
-                            withFrameNanos { }
-                            // 首帧之后 60ms 就开始组合主界面：这时画面上只有一枚静止的图标，
-                            // 组合 NavHost + 日历 + 卡片板即使掉帧也看不出来。
-                            // 文字要到 350ms 才淡入、名言 1650ms 才落笔，都不会被抢帧。
-                            delay(60)
-                            warmUpApp = true
-                        }
-                    }
                     if (warmUpApp) {
                         AppScaffold(container = app.container, startRoute = startRoute)
                     }
@@ -206,6 +197,7 @@ class MainActivity : ComponentActivity() {
                         WarmSplash(
                             quote = warmQuote,
                             darkTheme = darkTheme,
+                            onQuoteWritten = { warmUpApp = true },
                             onFinished = { splashVisible = false }
                         )
                     }
