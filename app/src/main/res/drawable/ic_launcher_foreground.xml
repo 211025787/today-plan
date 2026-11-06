@@ -11,6 +11,17 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!--
+      整体缩到 80%：桌面图标只有 48dp，日历卡原本占到可见区的近八成，
+      顶着遮罩边缘显得又满又大。缩进后四周留出一圈呼吸空间。
+      用 group 缩放而不是逐个改坐标，所有元素（含描边）一起等比缩小。
+    -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.80"
+        android:scaleY="0.80">
+
     <!-- 卡片顶部的两个装订环 -->
     <path
         android:fillColor="#FFFFFF"
@@ -45,4 +56,5 @@
         android:strokeColor="#FFFFFF"
         android:strokeWidth="1.6"
         android:pathData="M77,22a8.5,8.5 0 1 1 0,17a8.5,8.5 0 1 1 0,-17z" />
+    </group>
 </vector>
