@@ -9,8 +9,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -61,6 +63,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -218,6 +221,8 @@ fun DayCardBoard(
     // 旧卡 / 新卡第一次出现：自动补位并写回，从此位置固定；
     // 超出 1–4 格的脏数据由 normalize 夹回去，这里负责把夹过的结果写回数据库。
     val autoPlaced = remember { mutableSetOf<String>() }
+    // 历史重叠整理是否已经做过（每次进页面只做一次，见下面的说明）
+    var legacyRepaired by remember { mutableStateOf(false) }
     LaunchedEffect(packed) {
         plans.forEachIndexed { index, data ->
             val plan = data.plan
@@ -247,38 +252,44 @@ fun DayCardBoard(
         }
 
         // 老数据修复：早期缩放不检查重叠，可能已经有卡叠在一起。
-        // 按当前顺序逐张"落位"，后到的卡若压到前面的卡就挪到最近空位，一次修好；
-        // 不修的话，这些卡既缩不大（找不到不重叠的规格），也会继续出现"点错卡"。
-        val settled = mutableListOf<CardBox>()
-        plans.forEachIndexed { index, data ->
-            val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
-            val target = if (CardBoard.fitsAt(settled, box)) {
-                box
-            } else {
-                CardBoard.resolveMove(settled, box, box.x, box.y)
+        // 按当前顺序逐张"落位"，后到的卡若压到前面的卡就挪到最近空位，一次修好。
+        //
+        // 只做一次，而且只在进页面后的第一次快照上做：松手时是逐张落库的，
+        // 中间态（A 已挪走、B 还没挪）看起来就是"重叠"，若每次都修，
+        // 就会把用户刚放下的卡再挪走——表现正是"放不了，自己跑到下一行"。
+        val hasCards = plans.isNotEmpty() || trips.isNotEmpty()
+        if (!legacyRepaired && hasCards) {
+            legacyRepaired = true
+            val settled = mutableListOf<CardBox>()
+            plans.forEachIndexed { index, data ->
+                val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
+                val target = if (CardBoard.fitsAt(settled, box)) {
+                    box
+                } else {
+                    CardBoard.resolveMove(settled, box, box.x, box.y)
+                }
+                // 修复标记要带上目标坐标：同一张卡一局里可能被压到好几次
+                if (target != box && autoPlaced.add("fix-p${data.plan.id}@${target.x},${target.y}")) {
+                    onPlanLayout(
+                        data.plan.id, target.cols, target.rows, target.x, target.y, data.plan.cardZ
+                    )
+                }
+                settled.add(target)
             }
-            // 修复标记要带上目标坐标：同一张卡在一局里可能被压到好几次
-            // （缩一次、再缩一次），只按 id 去重会让第二次起再也修不动。
-            if (target != box && autoPlaced.add("fix-p${data.plan.id}@${target.x},${target.y}")) {
-                onPlanLayout(
-                    data.plan.id, target.cols, target.rows, target.x, target.y, data.plan.cardZ
-                )
+            trips.forEachIndexed { index, data ->
+                val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
+                val target = if (CardBoard.fitsAt(settled, box)) {
+                    box
+                } else {
+                    CardBoard.resolveMove(settled, box, box.x, box.y)
+                }
+                if (target != box && autoPlaced.add("fix-t${data.trip.id}@${target.x},${target.y}")) {
+                    onTripLayout(
+                        data.trip.id, target.cols, target.rows, target.x, target.y, data.trip.cardZ
+                    )
+                }
+                settled.add(target)
             }
-            settled.add(target)
-        }
-        trips.forEachIndexed { index, data ->
-            val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
-            val target = if (CardBoard.fitsAt(settled, box)) {
-                box
-            } else {
-                CardBoard.resolveMove(settled, box, box.x, box.y)
-            }
-            if (target != box && autoPlaced.add("fix-t${data.trip.id}@${target.x},${target.y}")) {
-                onTripLayout(
-                    data.trip.id, target.cols, target.rows, target.x, target.y, data.trip.cardZ
-                )
-            }
-            settled.add(target)
         }
 
         // packed 里已经出现同样的坐标，对应的乐观值就可以撤了
@@ -331,26 +342,10 @@ fun DayCardBoard(
         }
     }
 
-    /**
-     * 松手收尾：锚点卡落定后交给 [CardBoard.arrange] 自动整理，
-     * 被它压到的卡会被挪到最近的空位——整块板子永远不会留下重叠。
-     *
-     * 基底用「乐观值优先」的当前画面，而不是数据库里的 [packed]：
-     * 缩放时屏幕上已经被挤走的卡就在这些乐观值里，跟着它整理才能做到
-     * 「松手就是眼前这个画面」，不会先弹回旧位置再挪一次。
-     */
-    fun settle(anchor: CardBox) {
-        val base = packed.map { pending[boxKeyOf(it)] ?: it }
-        val arranged = CardBoard.arrange(base, anchor)
-        val changed = arranged.indices.filter { arranged[it] != base[it] }
-        if (changed.isEmpty()) return
-        val anchorId = boxKeyOf(anchor)
-        // 先写被挤走的卡，最后写锚点卡：锚点拿到最新时间戳，整理完仍在最上层
-        changed.filter { boxKeyOf(arranged[it]) != anchorId }
-            .forEach { commitOne(arranged[it], zOf(arranged[it])) }
-        changed.firstOrNull { boxKeyOf(arranged[it]) == anchorId }
-            ?.let { commitOne(arranged[it], System.currentTimeMillis()) }
-    }
+    // 这一帧真正要画的布局：数据库快照 + 还没追平的乐观值。
+    // 画位置、算画布高度、落库全用它——三份数据各算各的，就会在松手那一帧
+    // 出现"卡片跳一下""画布缩一行把卡片裁掉半截"这类怪事。
+    val effective = packed.map { pending[boxKeyOf(it)] ?: it }
 
     // 松手后的归位补间：dragX/dragY 里存的是「格子位置与手指位置的差」，
     // 用弹簧把它推到 0，卡片的视觉位置就从手指处滑进格子。
@@ -392,20 +387,54 @@ fun DayCardBoard(
     val previewAnchor = moveAnchor ?: resizeAnchor
     // 实时整理：拿当前占位当锚点跑一遍 [CardBoard.arrange]，被压到的卡当场挪到最近空位。
     // 移动、缩放两种手势都走这条路——和手机桌面一样，邻居不用等松手就让开。
-    // 只用于渲染、不落库；松手时 [settle] 用同一套算法和同一个占位，
-    // 所以手指停在哪儿、松手就是哪儿，不会出现「松手才突然挪开」的跳变。
-    val pushed: Map<String, CardBox> = if (previewAnchor == null) {
+    // 这份结果既用于渲染，也**原样**用于落库（见 settle）。
+    val previewArrangement: List<CardBox>? = previewAnchor?.let {
+        CardBoard.arrange(effective, it)
+    }
+    val pushed: Map<String, CardBox> = if (previewArrangement == null || previewAnchor == null) {
         emptyMap()
     } else {
-        val base = packed.map { pending[boxKeyOf(it)] ?: it }
-        val arranged = CardBoard.arrange(base, previewAnchor)
         val anchorId = boxKeyOf(previewAnchor)
         val out = HashMap<String, CardBox>()
-        base.forEachIndexed { index, box ->
+        effective.forEachIndexed { index, box ->
             val id = boxKeyOf(box)
-            if (id != anchorId && arranged[index] != box) out[id] = arranged[index]
+            if (id != anchorId && previewArrangement[index] != box) {
+                out[id] = previewArrangement[index]
+            }
         }
         out
+    }
+
+    /**
+     * 松手收尾：把**屏幕上已经排好的那一版**写进数据库，不再重算。
+     *
+     * 重算看着更"干净"，实际是 bug 源：落库是逐张写，数据库会在中途发射一次
+     * 「A 已挪走、B 还没挪」的中间态，拿它重算就会得到另一个结果——
+     * 表现就是"我明明放在这里，它自己跑到下一行"。
+     * 只有预览不可用（理论上不会发生）时才退回即时计算。
+     *
+     * @param anchor 刚被拖动 / 缩放过的卡片（已带最终位置与规格）
+     */
+    fun settle(anchor: CardBox) {
+        val seen = previewAnchor
+        val arranged = if (
+            previewArrangement != null && seen != null &&
+            boxKeyOf(seen) == boxKeyOf(anchor) &&
+            seen.cols == anchor.cols && seen.rows == anchor.rows &&
+            seen.x == anchor.x && seen.y == anchor.y
+        ) {
+            previewArrangement
+        } else {
+            CardBoard.arrange(effective, anchor)
+        }
+        val changed = arranged.indices.filter { arranged[it] != effective[it] }
+        if (changed.isEmpty()) return
+        val anchorId = boxKeyOf(anchor)
+        // 先写被挤走的卡，最后写锚点卡：锚点拿到最新时间戳，整理完仍在最上层
+        changed.filter { boxKeyOf(arranged[it]) != anchorId }
+            .forEach { commitOne(arranged[it], zOf(arranged[it])) }
+        changed.firstOrNull { boxKeyOf(arranged[it]) == anchorId }
+            ?.let { commitOne(arranged[it], System.currentTimeMillis()) }
     }
 
     fun startMove(box: CardBox) {
@@ -548,7 +577,7 @@ fun DayCardBoard(
     } ?: 0f
     val previewBottomPx = previewAnchor?.let { (it.y + it.rows) * stepPx } ?: 0f
     val boardRows = maxOf(
-        CardBoard.canvasRows(packed),
+        CardBoard.canvasRows(effective),
         ceil(maxOf(dragBottomPx, settleBottomPx, previewBottomPx) / stepPx).toInt(),
         // 被挤出去的卡可能落到更下面，画布得跟着长，否则会贴边被裁掉
         pushed.values.maxOfOrNull { it.y + it.rows } ?: 0,
@@ -1450,23 +1479,28 @@ private fun ResizeGrip(
         modifier = modifier
             // 只覆盖可见角标附近的一小块：56dp 时整张 1×1 卡的右下角都成了手柄，
             // 想点卡片本身反而点不到
-            .size(40.dp)
+            .size(44.dp)
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = {
-                        startNow.value()
-                    },
-                    onDrag = { change, amount ->
+                awaitEachGesture {
+                    // 手指按下就吃掉这个事件：卡身的「长按拖动」收不到干净的 down，
+                    // 就不会在 500ms 后把缩放手势抢走——那正是"长按右下角拖不动"的由来。
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    var started = false
+                    val completed = drag(down.id) { change ->
+                        val delta = change.positionChange()
                         change.consume()
-                        dragNow.value(amount.x, amount.y)
-                    },
-                    onDragEnd = {
-                        endNow.value()
-                    },
-                    onDragCancel = {
-                        cancelNow.value()
+                        // 真移动了才进入缩放态：轻点一下手柄不该闪出网格
+                        if (!started) {
+                            started = true
+                            startNow.value()
+                        }
+                        dragNow.value(delta.x, delta.y)
                     }
-                )
+                    if (started) {
+                        if (completed) endNow.value() else cancelNow.value()
+                    }
+                }
             }
     ) {
         androidx.compose.foundation.Canvas(

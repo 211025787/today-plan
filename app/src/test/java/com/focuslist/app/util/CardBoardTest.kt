@@ -263,6 +263,22 @@ class CardBoardTest {
     }
 
     @Test
+    fun arrange_neverChangesCardSize() {
+        // 整理只挪位置，任何一张卡的宽高都必须原样保留——
+        // 用户看到的"卡片突然变小"如果真发生了，只能来自这里被改坏
+        val cards = listOf(
+            card(1, 2, 2, x = 0, y = 0),
+            card(2, 1, 3, x = 2, y = 0),
+            card(3, 2, 2, x = 0, y = 1)
+        )
+        CardBoard.arrange(cards, anchor = cards[0]).forEachIndexed { index, box ->
+            assertEquals(cards[index].cols, box.cols)
+            assertEquals(cards[index].rows, box.rows)
+            assertEquals(cards[index].key, box.key)
+        }
+    }
+
+    @Test
     fun arrange_isDeterministic() {
         val cards = listOf(
             card(1, 1, 1, x = 0, y = 0),
