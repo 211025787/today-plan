@@ -11,7 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -902,7 +902,11 @@ private fun PlanBoardCard(
                 onMoveStart = onMoveStart,
                 onMove = onMove,
                 onMoveEnd = onMoveEnd,
-                onMoveCancel = onMoveCancel
+                onMoveCancel = onMoveCancel,
+                onResizeStart = onResizeStart,
+                onResize = onResize,
+                onResizeEnd = onResizeEnd,
+                onResizeCancel = onResizeCancel
             )
     ) {
         // 玻璃拟态顶部高光
@@ -946,14 +950,8 @@ private fun PlanBoardCard(
                     modifier = Modifier.size(17.dp)
                 )
             }
-            // 缩放手柄：直接拖动改大小，不再点开弹层
-            ResizeGrip(
-                onStart = onResizeStart,
-                onDrag = onResize,
-                onEnd = onResizeEnd,
-                onCancel = onResizeCancel,
-                modifier = Modifier.align(Alignment.BottomEnd)
-            )
+            // 缩放手柄角标（纯视觉）：右下角 56dp 区域按下即进入缩放拖动
+            ResizeGrip(modifier = Modifier.align(Alignment.BottomEnd))
         } else {
             // 管理态：左上角勾选圈
             Box(
@@ -1300,7 +1298,11 @@ private fun TripBoardCard(
                 onMoveStart = onMoveStart,
                 onMove = onMove,
                 onMoveEnd = onMoveEnd,
-                onMoveCancel = onMoveCancel
+                onMoveCancel = onMoveCancel,
+                onResizeStart = onResizeStart,
+                onResize = onResize,
+                onResizeEnd = onResizeEnd,
+                onResizeCancel = onResizeCancel
             )
     ) {
         Box(
@@ -1409,18 +1411,21 @@ private fun TripBoardCard(
                 }
             }
         }
-        ResizeGrip(
-            onStart = onResizeStart,
-            onDrag = onResize,
-            onEnd = onResizeEnd,
-            onCancel = onResizeCancel,
-            modifier = Modifier.align(Alignment.BottomEnd)
-        )
+        ResizeGrip(modifier = Modifier.align(Alignment.BottomEnd))
     }
 }
 
 /**
- * 卡片主体的长按拖动 + 轻点手势。
+ * 卡片主体的手势总管：轻点 / 长按拖动 / 右下角缩放。
+ *
+ * 按下时先看落点：手指落在右下角「缩放区」（56dp 见方，手柄角标画在那儿）
+ * 就直接进入缩放拖动，不等长按、也不与长按手势抢；落在其它地方照旧走
+ * 「长按 500ms 后拖动」的路子。
+ *
+ * 以前的缩放手柄是卡片右下角一个独立的小 composable，44dp 热区再被圆角
+ * clip 削掉一角，实际可点面积很小；而且它和卡身的长按手势是两套
+ * pointerInput，抢事件的时序稍微不对就「拖不动」。现在只有这一个手势入口，
+ * 命中判断用整张卡的坐标，触发面积够大、路径唯一。
  *
  * 长按后移动超过阈值才开始真正移动；长按后原地松手仍然打开原来的操作菜单。
  * 用 suppressClick 避免长按松手时又触发一次轻点（统计弹层）。
@@ -1434,7 +1439,11 @@ private fun Modifier.cardBodyGestures(
     onMoveStart: () -> Unit,
     onMove: (Float, Float) -> Unit,
     onMoveEnd: () -> Unit,
-    onMoveCancel: () -> Unit
+    onMoveCancel: () -> Unit,
+    onResizeStart: () -> Unit,
+    onResize: (Float, Float) -> Unit,
+    onResizeEnd: () -> Unit,
+    onResizeCancel: () -> Unit
 ): Modifier {
     if (!enabled) {
         return this.clickable(onClick = onClick)
@@ -1442,13 +1451,17 @@ private fun Modifier.cardBodyGestures(
     val scope = rememberCoroutineScope()
     var suppressClick by remember(key) { mutableStateOf(false) }
     var moved by remember(key) { mutableStateOf(false) }
-    // 同 ResizeGrip：手势块只跑一次，回调必须从最新组合里取
+    // 手势块只跑一次，回调必须从最新组合里取
     val clickNow = rememberUpdatedState(onClick)
     val longClickNow = rememberUpdatedState(onLongClick)
     val moveStartNow = rememberUpdatedState(onMoveStart)
     val moveNow = rememberUpdatedState(onMove)
     val moveEndNow = rememberUpdatedState(onMoveEnd)
     val moveCancelNow = rememberUpdatedState(onMoveCancel)
+    val resizeStartNow = rememberUpdatedState(onResizeStart)
+    val resizeNow = rememberUpdatedState(onResize)
+    val resizeEndNow = rememberUpdatedState(onResizeEnd)
+    val resizeCancelNow = rememberUpdatedState(onResizeCancel)
 
     fun suppressBriefly() {
         suppressClick = true
@@ -1463,64 +1476,18 @@ private fun Modifier.cardBodyGestures(
             if (!suppressClick) clickNow.value()
         }
         .pointerInput(key) {
-            detectDragGesturesAfterLongPress(
-                onDragStart = {
-                    moved = false
-                    suppressBriefly()
-                    moveStartNow.value()
-                },
-                onDrag = { change, amount ->
-                    change.consume()
-                    if (abs(amount.x) + abs(amount.y) > 0.5f) moved = true
-                    moveNow.value(amount.x, amount.y)
-                },
-                onDragEnd = {
-                    if (moved) {
-                        moveEndNow.value()
-                    } else {
-                        moveCancelNow.value()
-                        longClickNow.value()
-                    }
-                    suppressBriefly()
-                },
-                onDragCancel = {
-                    moveCancelNow.value()
-                    suppressBriefly()
-                }
-            )
-        }
-}
+            val resizeZone = 56.dp.toPx()
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val inResizeZone =
+                    down.position.x >= size.width - resizeZone &&
+                        down.position.y >= size.height - resizeZone
 
-/**
- * 右下角缩放按钮：拖动直接改大小。
- */
-@Composable
-private fun ResizeGrip(
-    onStart: () -> Unit,
-    onDrag: (Float, Float) -> Unit,
-    onEnd: () -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    // pointerInput(Unit) 只会跑一次，里面捕获的是**首次组合**的这组 lambda。
-    // 不套 rememberUpdatedState 的话，松手时调用的仍是旧画布上的整理逻辑，
-    // 它会以为"什么都没变"从而不落库——重叠就一直留在那儿。
-    val startNow = rememberUpdatedState(onStart)
-    val dragNow = rememberUpdatedState(onDrag)
-    val endNow = rememberUpdatedState(onEnd)
-    val cancelNow = rememberUpdatedState(onCancel)
-    Box(
-        contentAlignment = Alignment.BottomEnd,
-        modifier = modifier
-            // 只覆盖可见角标附近的一小块：56dp 时整张 1×1 卡的右下角都成了手柄，
-            // 想点卡片本身反而点不到
-            .size(44.dp)
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    // 手指按下就吃掉这个事件：卡身的「长按拖动」收不到干净的 down，
-                    // 就不会在 500ms 后把缩放手势抢走——那正是"长按右下角拖不动"的由来。
-                    val down = awaitFirstDown(requireUnconsumed = false)
+                if (inResizeZone) {
+                    // 缩放：按下即吃掉 down，卡身的轻点/长按都不会再被触发；
+                    // 不等长按，手指一动就开始改大小
                     down.consume()
+                    suppressBriefly()
                     var started = false
                     var lifted = false
                     while (true) {
@@ -1530,25 +1497,80 @@ private fun ResizeGrip(
                             lifted = true
                             break
                         }
-                        // 直接用坐标差：positionChange() 在事件被别人消费过之后会返回 0，
-                        // 一旦上游有谁碰过这个事件，手柄就再也拖不动了。
+                        // 用原始坐标差：positionChange() 在事件被别人消费过之后返回 0
                         val dx = change.position.x - change.previousPosition.x
                         val dy = change.position.y - change.previousPosition.y
                         if (dx != 0f || dy != 0f) {
-                            // 真移动了才进入缩放态：轻点一下手柄不该闪出网格
                             if (!started) {
                                 started = true
-                                startNow.value()
+                                resizeStartNow.value()
                             }
                             change.consume()
-                            dragNow.value(dx, dy)
+                            resizeNow.value(dx, dy)
                         }
                     }
                     if (started) {
-                        if (lifted) endNow.value() else cancelNow.value()
+                        if (lifted) resizeEndNow.value() else resizeCancelNow.value()
                     }
+                } else {
+                    // 移动：先等长按；500ms 内松手就是一次普通轻点（交给 clickable）
+                    awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                    moved = false
+                    suppressBriefly()
+                    // 带 touch slop：长按后原地轻颤不算移动，松手仍然弹操作菜单
+                    val slop = viewConfiguration.touchSlop
+                    var started = false
+                    var accX = 0f
+                    var accY = 0f
+                    var lifted = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            lifted = true
+                            break
+                        }
+                        val dx = change.position.x - change.previousPosition.x
+                        val dy = change.position.y - change.previousPosition.y
+                        if (dx == 0f && dy == 0f) continue
+                        change.consume()
+                        if (!started) {
+                            accX += dx
+                            accY += dy
+                            if (abs(accX) + abs(accY) > slop) {
+                                started = true
+                                moved = true
+                                moveStartNow.value()
+                                moveNow.value(accX, accY)
+                            }
+                        } else {
+                            moveNow.value(dx, dy)
+                        }
+                    }
+                    if (started) {
+                        if (lifted) moveEndNow.value() else moveCancelNow.value()
+                    } else {
+                        // 长按后原地松手：打开操作菜单
+                        longClickNow.value()
+                    }
+                    suppressBriefly()
                 }
             }
+        }
+}
+
+/**
+ * 右下角的缩放手柄角标：纯视觉提示。
+ *
+ * 手势本身在 [cardBodyGestures] 里按按下位置路由（右下角 56dp 区域内按下
+ * 直接进缩放），这里只画那个白色角标，不再自己挂 pointerInput——热区小、
+ * 又被圆角 clip 削角，独立手势正是「右下角很难触发」的根源。
+ */
+@Composable
+private fun ResizeGrip(modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.BottomEnd,
+        modifier = modifier.size(44.dp)
     ) {
         androidx.compose.foundation.Canvas(
             modifier = Modifier
