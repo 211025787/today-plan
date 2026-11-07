@@ -149,8 +149,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        requestHighestRefreshRate()
-        requestNotificationPermissionIfNeeded()
 
         // 小组件点击"番茄钟"快捷入口：跳到专注页
         val startRoute = if (intent?.action == ACTION_OPEN_HABITS) {
@@ -160,6 +158,18 @@ class MainActivity : ComponentActivity() {
         } else {
             Destinations.HOME.route
         }
+        val skipSplash = intent?.action == ACTION_OPEN_HABITS ||
+            intent?.action == "com.focuslist.app.action.OPEN_TIMER"
+
+        // 切刷新率要改 window.attributes（会触发一次窗口重排），排在 setContent 前面
+        // 就会把开屏首帧往后推——表现出来正是「图标已经在那儿了，字要过一会儿才浮出来」。
+        // 挪到首帧之后，开屏整屏（连同「暖历」的 1200ms 淡入）提前起步，动画一毫秒不改。
+        window.decorView.post {
+            requestHighestRefreshRate()
+            // 从通知 / 小组件直达时没有开屏，权限弹窗在这里申请；
+            // 正常冷启动等开屏演完再弹（见 onFinished），免得盖在手写动画上。
+            if (skipSplash) requestNotificationPermissionIfNeeded()
+        }
 
         setContent {
             val app = application as FocusListApp
@@ -167,8 +177,6 @@ class MainActivity : ComponentActivity() {
             FocusListTheme(themeMode = settings.themeMode, themeColorHex = settings.themeColor) {
                 // 每次冷启动抽一条开屏格言；从通知 / 小组件直达时跳过开屏，不耽误正事
                 val warmQuote = remember { WarmQuotes.random() }
-                val skipSplash = intent?.action == ACTION_OPEN_HABITS ||
-                    intent?.action == "com.focuslist.app.action.OPEN_TIMER"
                 var splashVisible by remember { mutableStateOf(!skipSplash) }
                 val darkTheme = when (settings.themeMode) {
                     "LIGHT" -> false
@@ -198,7 +206,11 @@ class MainActivity : ComponentActivity() {
                             quote = warmQuote,
                             darkTheme = darkTheme,
                             onQuoteWritten = { warmUpApp = true },
-                            onFinished = { splashVisible = false }
+                            onFinished = {
+                                splashVisible = false
+                                // 开屏演完了才申请通知权限：系统弹窗会压住动画的帧
+                                requestNotificationPermissionIfNeeded()
+                            }
                         )
                     }
                 }

@@ -104,19 +104,22 @@ fun WarmSplash(
     // skipped 变化时取消整段动画协程，轻点跳过后不会在后台继续跑完
     LaunchedEffect(quote, skipped) {
         if (skipped) return@LaunchedEffect
+        // 名言这条线先挂起来等着（写完再回调去组合主界面）；
+        // 让它先 launch、自己排在后面，是为了让淡入成为本协程的第一句话——
+        // 中间不再经过一次协程分发，淡入就能在这一帧的同一批回调里起步，不多等一帧。
         launch {
-            // 「暖历」两字：**图标一出现就开始**浮现，用 1200ms（1200ms 结束）。
-            // 缓动用 LinearOutSlowInEasing（线性起、减速收）：匀速淡入的结尾是「戛然而止」，
-            // 会被读成一卡；这个曲线起手不突兀、收尾柔和。
-            brandAlpha.animateTo(1f, tween(1200, easing = LinearOutSlowInEasing))
+            // 1300ms 落笔：文字 1200ms 刚浮现完，只留 100ms 换气。
+            delay(1300)
+            pen.animateTo(total.toFloat(), tween(total * perCharMs, easing = LinearEasing))
+            // 名言写完、画面静止：现在才去组合主界面，掉帧不会被看见
+            onQuoteWritten()
+            delay(650)
+            onFinished()
         }
-        // 1300ms 落笔：文字 1200ms 刚浮现完，只留 100ms 换气。
-        delay(1300)
-        pen.animateTo(total.toFloat(), tween(total * perCharMs, easing = LinearEasing))
-        // 名言写完、画面静止：现在才去组合主界面，掉帧不会被看见
-        onQuoteWritten()
-        delay(650)
-        onFinished()
+        // 「暖历」两字：**图标一出现就开始**浮现，用 1200ms（1200ms 结束）。
+        // 缓动用 LinearOutSlowInEasing（线性起、减速收）：匀速淡入的结尾是「戛然而止」，
+        // 会被读成一卡；这个曲线起手不突兀、收尾柔和。
+        brandAlpha.animateTo(1f, tween(1200, easing = LinearOutSlowInEasing))
     }
 
     // 用 BoxWithConstraints 拿屏高：图标位置要和系统启动帧**算得一模一样**，

@@ -95,9 +95,15 @@ class FocusListApp : Application() {
             appScope, SharingStarted.Eagerly, TimerSettings()
         )
         // 提前创建通知渠道，保证 Android 8+ 提醒可送达
-        Notifier(this).ensureChannels()
         // 预加载提示音（SoundPool 异步加载，启动时预热避免首次播放无声）
-        ChimePlayer.preload(this)
+        //
+        // 两件都挪到后台线程：ensureChannels 是几次跨进程调用，preload 要打开 5 个
+        // wav 资源，放在主线程上就是在和开屏首帧抢时间。它们都不着急——
+        // 开屏要演两秒多，等首帧画完再干完全来得及。
+        appScope.launch {
+            Notifier(this@FocusListApp).ensureChannels()
+            ChimePlayer.preload(this@FocusListApp)
+        }
         registerForegroundTracking()
         // 首启写入内置清单；旧示例计划「学 Java」统一更名为「学习英语」（幂等）
         appScope.launch {
