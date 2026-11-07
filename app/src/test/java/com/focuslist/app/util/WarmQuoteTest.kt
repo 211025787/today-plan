@@ -20,8 +20,9 @@ class WarmQuoteTest {
 
     @Test
     fun `句子不会长到开屏排不下`() {
+        // 这批语录偏长（最长 53 字），开屏里超过 30 字会自动降一号字，上限按 54 字卡
         WarmQuotes.ALL.forEach { quote ->
-            assertTrue("${quote.text} 太长", quote.text.length <= 24)
+            assertTrue("${quote.text} 太长", quote.text.length <= 54)
             assertTrue("${quote.author} 太长", quote.author.length <= 12)
         }
     }

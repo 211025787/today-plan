@@ -121,7 +121,11 @@ fun WarmSplash(
     val textLength = quote.text.length
     val authorText = "— " + quote.author
     val total = textLength + authorText.length
-    val perCharMs = 46
+    // 落笔节奏：整句控制在 2.2 秒内写完。短句保持 46ms 一个字的从容感，
+    // 长句自动加快（最快 26ms），免得五十多字要站着等四五秒。
+    val perCharMs = (2200f / total).coerceIn(26f, 46f).toInt()
+    // 长句自动降一号字：50 多个字用 27sp 要占 5 行，小屏会顶出屏幕
+    val longQuote = textLength > 30
 
     LaunchedEffect(quote) {
         // 时间轴从 Activity 创建那一刻起算。首帧之前（窗口首帧、字体加载）耗掉的时间
@@ -136,8 +140,9 @@ fun WarmSplash(
         // 自己排在后面，是为了让淡入成为本协程的第一句话——
         // 中间不再经过一次协程分发，淡入就能在这一帧的同一批回调里起步，不多等一帧。
         launch {
-            // 文字收尾后再留 100ms 换气才落笔
-            delay(remainMs + 100L)
+            // 名言起笔比文字落定再提前 0.5 秒：文字收尾前 400ms 就开始写
+            // （此时标题已经浮到九成以上，看不出还没写完）。
+            delay((remainMs - 400L).coerceAtLeast(0L))
             pen.animateTo(total.toFloat(), tween(total * perCharMs, easing = LinearEasing))
             // 名言写完、画面静止：现在才去组合主界面，掉帧不会被看见
             onQuoteWritten()
@@ -226,8 +231,8 @@ fun WarmSplash(
             val progress: () -> Float = { pen.value }
             val quoteStyle = TextStyle(
                 fontFamily = HandFont,
-                fontSize = 27.sp,
-                lineHeight = 42.sp,
+                fontSize = if (longQuote) 23.sp else 27.sp,
+                lineHeight = if (longQuote) 36.sp else 42.sp,
                 color = ink
             )
             FlowRow(

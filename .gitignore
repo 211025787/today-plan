@@ -145,3 +145,4 @@ cython_debug/
 .kotlin/
 developgradle.gradle/
 
+.tmp_font/
