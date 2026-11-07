@@ -1541,7 +1541,7 @@ private fun Modifier.cardBodyGestures(
  * 能画到边沿外面；热区 36dp 里只有靠角的一小块压在卡片上，1×1 小卡的
  * 中间完全留给轻点/长按。画的是一段与卡片圆角**同心、同半径**（零间隙）
  * 的白色四分之一圆弧，描边 6dp，紧贴卡片边沿；下面垫一层极淡的深色描边，
- * 免得纯白弧在浅色背景那一半糊掉。45° 上一个白圆点提示可拖。
+ * 免得纯白弧在浅色背景那一半糊掉。角上只有这一道弧，不再画圆点。
  *
  * 手势自己吃掉 down，不等长按、不与卡身的长按拖动抢；回调全部走
  * `rememberUpdatedState`，避免旧组合里留着过时的整理逻辑。
@@ -1623,10 +1623,6 @@ private fun ResizeGrip(
                 // 比上一版 3dp 加宽一倍
                 style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
             )
-            val diagonal = radius * 0.7071f
-            val dot = Offset(cx + diagonal, cy + diagonal)
-            drawCircle(color = Color.Black.copy(alpha = 0.18f), radius = 6.5.dp.toPx(), center = dot)
-            drawCircle(color = Color.White, radius = 5.dp.toPx(), center = dot)
         }
     }
 }
