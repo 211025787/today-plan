@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose">
   <img src="https://img.shields.io/badge/minSdk-26-3DDC84?logo=android&logoColor=white" alt="minSdk">
-  <img src="https://img.shields.io/badge/version-1.1.21-4772FA" alt="version">
+  <img src="https://img.shields.io/badge/version-1.1.22-4772FA" alt="version">
 </p>
 
 **暖历**是一个以离线为主的 Android 时间管理应用：以日历为入口安排跨日期计划，用秒表记录每天的真实投入，再用番茄钟与备注把「规划 → 执行 → 复盘」串起来；新增的「行程」页还能把下一趟旅行直接画在地图上。所有计划、记录与行程都只保存在本机；只有旅游规划里的地图底图与真实道路路线需要联网获取，不会上传任何个人数据。
@@ -80,6 +80,7 @@ ffmpeg -y -framerate 25 -i .tmp_docs/frames/f%05d.jpg -i .tmp_docs/promo.wav \
 ### 📅 日历（首页）
 
 - **月视图**铺满屏幕，每个日期格最多显示 3 条计划：每条是迷你进度条，越接近当日目标颜色越深，行尾显示完成率数值；
+- **今天一眼可见**：今天的格子铺一层 10% 主色底 + 1.2dp 主色描边，日期数字加粗放大到 12sp——单靠 20dp 的小圆点，在 42 个格子（还都挂着计划条）里太容易漏看；另外翻到别的月份时，标题栏右侧会出现「今天」快捷键（回到当月后自动收起），不用一页页往回划；
 - **左右滑动翻页**，跟手移动 + 惯性吸附，预渲染相邻月减少卡顿；滑动过程中点击不会误触日期格，松手后才响应；
 - **点某一天**进入当日卡片页：渐变方卡、右上角开始/暂停秒表、**点卡片看这个计划的投入统计**、长按菜单（投入统计 / 补录时长 / 存为模板 / 删除）、「管理」多选批量删除；
 - **按日期范围删除**（右上角功能菜单 → 🗑️ 删除计划）：只移除区间内的部分，范围外日期自动保留（覆盖中间时计划会被拆成前后两段）；

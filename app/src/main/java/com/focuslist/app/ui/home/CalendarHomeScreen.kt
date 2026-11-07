@@ -162,6 +162,12 @@ private val dayTitleFormat = SimpleDateFormat("M 月 d 日", Locale.CHINA)
 private val weekHeaders = listOf("一", "二", "三", "四", "五", "六", "日")
 
 /**
+ * 日历格子的圆角。今天的整格底色、描边、点击波纹必须共用同一个形状，
+ * 否则描边会从底色边缘露出 1px 的缝。
+ */
+private val DayCellShape = RoundedCornerShape(10.dp)
+
+/**
  * 翻页器可翻范围：前后各 1200 个月（100 年）。
  * 不能用 Int.MAX_VALUE 充当无限页数——惯性滑动的目标页计算会溢出，轻轻一划就飞出几十万页。
  */
@@ -460,6 +466,21 @@ fun CalendarHomeScreen(
                             Icon(Icons.Default.Close, contentDescription = "退出搜索")
                         }
                     } else if (state.selectedDay == null) {
+                        // 翻到别的月份时给一个「今天」快捷键：不然只能一页页往回划，
+                        // 「找不到今天」多半是翻远了。回到当月后自动收起，不占地方。
+                        if (state.monthOffset != 0) {
+                            Text(
+                                text = "今天",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .clickable { viewModel.setMonthOffset(0) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+
                         // 计划统计入口：日历里的计划投入总览（数据源是 plan_logs，不是番茄记录）
                         IconButton(onClick = onOpenPlanStats) {
                             Icon(Icons.Default.Insights, contentDescription = "计划统计")
@@ -1235,29 +1256,41 @@ private fun DayCellHome(
     modifier: Modifier = Modifier
 ) {
     val dayNum = Calendar.getInstance().apply { timeInMillis = dayStart }.get(Calendar.DAY_OF_MONTH)
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(DayCellShape)
+            // 今天整格铺一层淡主色 + 一圈描边：42 个格子里只靠 20dp 的小圆点太容易漏看，
+            // 整格发亮才能一眼扫到今天（深色主题下这层淡色也不会糊成一块）。
+            .background(if (isToday) scheme.primary.copy(alpha = 0.10f) else Color.Transparent)
+            .then(
+                if (isToday) {
+                    Modifier.border(1.2.dp, scheme.primary.copy(alpha = 0.55f), DayCellShape)
+                } else {
+                    Modifier
+                }
+            )
             .clickable(onClick = onClick)
             .padding(3.dp)
     ) {
         Column {
-            // 日期数字：今天用主色圆底
+            // 日期数字：今天用主色圆底 + 加粗
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(20.dp)
                     .clip(CircleShape)
-                    .background(if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .background(if (isToday) scheme.primary else Color.Transparent)
             ) {
                 Text(
                     text = dayNum.toString(),
-                    fontSize = 11.sp,
+                    fontSize = if (isToday) 12.sp else 11.sp,
+                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
                     color = when {
                         isToday -> Color.White
-                        !inMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                        else -> MaterialTheme.colorScheme.onSurface
+                        !inMonth -> scheme.onSurfaceVariant.copy(alpha = 0.35f)
+                        else -> scheme.onSurface
                     }
                 )
             }
