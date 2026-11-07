@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -141,6 +142,9 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(newBase.createConfigurationContext(config))
     }
 
+    /** 通知权限是否已经申请过（避免重复弹窗） */
+    private var notificationPermissionAsked = false
+
     /** 通知权限申请回调 */
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -196,6 +200,24 @@ class MainActivity : ComponentActivity() {
                         AppScaffold(container = app.container, startRoute = startRoute)
                     }
 
+                    // 退出请求：播完和被跳过都走这里，而且只认第一次——
+                    // 连点两下时第二下不会把还盖着的开屏直接摘掉。
+                    var exitRequested by remember { mutableStateOf(false) }
+                    LaunchedEffect(exitRequested) {
+                        if (!exitRequested) return@LaunchedEffect
+                        if (!warmUpApp) {
+                            // 轻点跳过时主界面还没组合。这时候直接淡出开屏，
+                            // 这 280ms 底下什么都没有，露出来就是一屏纯色。
+                            // 先组合主界面，等它真正画出第一帧（两个帧回调）再淡出。
+                            warmUpApp = true
+                            withFrameNanos { }
+                            withFrameNanos { }
+                        }
+                        splashVisible = false
+                        // 开屏收了才申请通知权限：系统弹窗会压住动画的帧
+                        requestNotificationPermissionIfNeeded()
+                    }
+
                     AnimatedVisibility(
                         visible = splashVisible,
                         enter = EnterTransition.None,
@@ -206,11 +228,7 @@ class MainActivity : ComponentActivity() {
                             quote = warmQuote,
                             darkTheme = darkTheme,
                             onQuoteWritten = { warmUpApp = true },
-                            onFinished = {
-                                splashVisible = false
-                                // 开屏演完了才申请通知权限：系统弹窗会压住动画的帧
-                                requestNotificationPermissionIfNeeded()
-                            }
+                            onFinished = { exitRequested = true }
                         )
                     }
                 }
@@ -240,12 +258,16 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Android 13+ 需要运行时申请通知权限。
+     *
+     * 只弹一次：跳过开屏和正常播完都可能走到这里，重复 launch 会顶掉正在显示的系统弹窗。
      */
     private fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (notificationPermissionAsked) return
             val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
             if (!granted) {
+                notificationPermissionAsked = true
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
