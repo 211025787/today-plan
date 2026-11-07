@@ -32,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -195,7 +194,7 @@ fun DayCardBoard(
     // 松手落库到列表重新发射之间有一小段空窗。这期间如果直接按 packed 画，
     // 卡片会先弹回原位、再跳到新位置——看起来就像"拖了却没放对"。
     // 用一条乐观值顶住，等 packed 里出现同样的坐标再撤掉。
-    var pending by remember { mutableStateOf<Pair<String, CardBox>?>(null) }
+    var pending by remember { mutableStateOf<Map<String, CardBox>>(emptyMap()) }
 
     // 旧卡 / 新卡第一次出现：自动补位并写回，从此位置固定；
     // 已有的非六种规格也一并写回最近的合法档位。
@@ -261,12 +260,13 @@ fun DayCardBoard(
             settled.add(target)
         }
 
-        // packed 里已经出现同样的坐标，乐观值可以撤了
-        pending?.let { (key, want) ->
-            val actual = (planBoxes + tripBoxes).firstOrNull {
-                (if (it.trip) "t${it.key}" else "p${it.key}") == key
+        // packed 里已经出现同样的坐标，对应的乐观值就可以撤了
+        if (pending.isNotEmpty()) {
+            val actual = (planBoxes + tripBoxes).associateBy {
+                if (it.trip) "t${it.key}" else "p${it.key}"
             }
-            if (actual == want) pending = null
+            val left = pending.filter { (key, want) -> actual[key] != want }
+            if (left.size != pending.size) pending = left
         }
     }
 
@@ -276,22 +276,25 @@ fun DayCardBoard(
     var activeStart by remember { mutableStateOf<CardBox?>(null) }
     var dragX by remember { mutableFloatStateOf(0f) }
     var dragY by remember { mutableFloatStateOf(0f) }
-    // 拖动中的落点（格子坐标）：只接受不重叠的格子，卡片按格吸附着走。
-    // 手指划过别人的卡时落点保持在上一格，所以整个拖动过程都不会叠上去。
-    var targetX by remember { mutableIntStateOf(0) }
-    var targetY by remember { mutableIntStateOf(0) }
-    // 缩放中的实时像素宽高：跟手连续变化，但被「到邻居为止」的空间夹住
+    // 缩放中的实时像素宽高：跟手连续变化，松手才吸附到六种规格
     var liveWidthPx by remember { mutableFloatStateOf(0f) }
     var liveHeightPx by remember { mutableFloatStateOf(0f) }
     var startWidthPx by remember { mutableFloatStateOf(0f) }
     var startHeightPx by remember { mutableFloatStateOf(0f) }
-    // 最近操作的卡片置顶：缩放后压在邻居上时，用户仍能完整看到自己刚调整的卡
+    // 最近操作的卡片置顶：整理前先压在邻居上时，用户仍能完整看到自己刚调整的卡
     var foregroundKey by remember { mutableStateOf<String?>(null) }
     val spacingPx = with(density) { spacing.toPx() }
 
+    fun boxKeyOf(box: CardBox): String = if (box.trip) "t${box.key}" else "p${box.key}"
 
-    fun commit(box: CardBox, z: Long) {
-        pending = (if (box.trip) "t${box.key}" else "p${box.key}") to box
+    fun zOf(box: CardBox): Long = if (box.trip) {
+        trips.firstOrNull { it.trip.id == box.key }?.trip?.cardZ ?: 0L
+    } else {
+        plans.firstOrNull { it.plan.id == box.key }?.plan?.cardZ ?: 0L
+    }
+
+    fun commitOne(box: CardBox, z: Long) {
+        pending = pending + (boxKeyOf(box) to box)
         if (box.trip) {
             onTripLayout(box.key, box.cols, box.rows, box.x, box.y, z)
         } else {
@@ -299,14 +302,28 @@ fun DayCardBoard(
         }
     }
 
+    /**
+     * 松手收尾：锚点卡落定后交给 [CardBoard.arrange] 自动整理，
+     * 被它压到的卡会被挪到最近的空位——整块板子永远不会留下重叠。
+     */
+    fun settle(anchor: CardBox) {
+        val arranged = CardBoard.arrange(packed, anchor)
+        val changed = arranged.indices.filter { arranged[it] != packed[it] }
+        if (changed.isEmpty()) return
+        val anchorId = boxKeyOf(anchor)
+        // 先写被挤走的卡，最后写锚点卡：锚点拿到最新时间戳，整理完仍在最上层
+        changed.filter { boxKeyOf(arranged[it]) != anchorId }
+            .forEach { commitOne(arranged[it], zOf(arranged[it])) }
+        changed.firstOrNull { boxKeyOf(arranged[it]) == anchorId }
+            ?.let { commitOne(arranged[it], System.currentTimeMillis()) }
+    }
+
     fun startMove(box: CardBox) {
         if (manageMode) return
-        foregroundKey = if (box.trip) "t${box.key}" else "p${box.key}"
-        activeKey = if (box.trip) "t${box.key}" else "p${box.key}"
+        foregroundKey = boxKeyOf(box)
+        activeKey = boxKeyOf(box)
         gesture = BoardGesture.MOVE
         activeStart = box
-        targetX = box.x
-        targetY = box.y
         dragX = 0f
         dragY = 0f
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -314,8 +331,8 @@ fun DayCardBoard(
 
     fun startResize(box: CardBox) {
         if (manageMode) return
-        foregroundKey = if (box.trip) "t${box.key}" else "p${box.key}"
-        activeKey = if (box.trip) "t${box.key}" else "p${box.key}"
+        foregroundKey = boxKeyOf(box)
+        activeKey = boxKeyOf(box)
         gesture = BoardGesture.RESIZE
         activeStart = box
         dragX = 0f
@@ -331,17 +348,6 @@ fun DayCardBoard(
         if (gesture != BoardGesture.MOVE) return
         dragX += dx
         dragY += dy
-        val start = activeStart ?: return
-        val nx = ((start.x * stepPx + dragX) / stepPx).roundToInt()
-            .coerceIn(0, CardBoard.COLUMNS - start.cols)
-        val ny = ((start.y * stepPx + dragY) / stepPx).roundToInt().coerceAtLeast(0)
-        if (nx == targetX && ny == targetY) return
-        // 只往空位走：目标格压到别人时保持上一个合法格。
-        // 拖过头再拖回来，落点会自然恢复，不需要额外的"吸附"补救。
-        if (CardBoard.fitsAt(packed, start.copy(x = nx, y = ny))) {
-            targetX = nx
-            targetY = ny
-        }
     }
 
     fun resizeBy(dx: Float, dy: Float) {
@@ -349,15 +355,11 @@ fun DayCardBoard(
         dragX += dx
         dragY += dy
         val start = activeStart ?: return
-        // 连续跟手：卡片的右下角跟着手指走，不做整格吸附；
-        // 但上限是「到邻居为止」——拖到贴住邻居就停住，绝不会盖上去。
+        // 连续跟手：右下角跟着手指走，只夹在「最小 1 格、最大 3 格、不出右边界」内。
+        // 这里**不**检查邻居——盖到别人身上没关系，松手时会自动整理。
         val minSize = stepPx - spacingPx
-        val maxCols = CardBoard.maxFitCols(
-            packed, start, start.rows, limit = minOf(3, CardBoard.COLUMNS - start.x)
-        )
-        val maxRows = CardBoard.maxFitRows(packed, start, start.cols)
-        val maxWidth = maxCols * stepPx - spacingPx
-        val maxHeight = maxRows * stepPx - spacingPx
+        val maxWidth = minOf(3, CardBoard.COLUMNS - start.x) * stepPx - spacingPx
+        val maxHeight = 3 * stepPx - spacingPx
         liveWidthPx = (startWidthPx + dragX).coerceIn(minSize, maxWidth)
         liveHeightPx = (startHeightPx + dragY).coerceIn(minSize, maxHeight)
     }
@@ -375,8 +377,10 @@ fun DayCardBoard(
     fun endMove() {
         val start = activeStart
         if (gesture == BoardGesture.MOVE && start != null) {
-            // 落点在整个拖动过程中已经保证不重叠，直接落库
-            commit(start.copy(x = targetX, y = targetY), System.currentTimeMillis())
+            val nx = ((start.x * stepPx + dragX) / stepPx).roundToInt()
+                .coerceIn(0, CardBoard.COLUMNS - start.cols)
+            val ny = ((start.y * stepPx + dragY) / stepPx).roundToInt().coerceAtLeast(0)
+            settle(start.copy(x = nx, y = ny))
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
         resetGesture()
@@ -385,12 +389,11 @@ fun DayCardBoard(
     fun endResize() {
         val start = activeStart
         if (gesture == BoardGesture.RESIZE && start != null) {
-            // 松手才把实时宽高吸附到允许的六种规格；
-            // 吸附时再验一次不重叠，放不下的档位会被跳过（最坏保持原样）
+            // 松手才把实时宽高吸附到允许的六种规格，再整理被压到的卡
             val cols = (liveWidthPx + spacingPx) / stepPx
             val rows = (liveHeightPx + spacingPx) / stepPx
-            val shape = CardBoard.fitShapeAt(packed, start, cols, rows)
-            commit(CardBoard.resizeToAllowed(start, shape), System.currentTimeMillis())
+            val shape = CardBoard.nearestShape(cols, rows)
+            settle(CardBoard.resizeToAllowed(start, shape))
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
         resetGesture()
@@ -424,7 +427,7 @@ fun DayCardBoard(
             val box = planBoxes.getOrNull(index) ?: return@forEach
             val key = "p${data.plan.id}"
             // 刚落库、列表还没刷新时先用乐观值顶上，避免松手后闪一下原位
-            val shown = pending?.takeIf { it.first == key }?.second ?: box
+            val shown = pending[key] ?: box
             val active = activeKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
             val faceCols = if (resizing) {
@@ -437,8 +440,8 @@ fun DayCardBoard(
             } else {
                 shown.rows
             }
-            val xPx = (if (active && gesture == BoardGesture.MOVE) targetX else shown.x) * stepPx
-            val yPx = (if (active && gesture == BoardGesture.MOVE) targetY else shown.y) * stepPx
+            val xPx = shown.x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
+            val yPx = shown.y * stepPx + if (active && gesture == BoardGesture.MOVE) dragY else 0f
             val w = if (resizing) {
                 with(density) { liveWidthPx.toDp() }
             } else {
@@ -491,7 +494,7 @@ fun DayCardBoard(
             val data = trips[index]
             val box = tripBoxes.getOrNull(index) ?: return@forEach
             val key = "t${data.trip.id}"
-            val shown = pending?.takeIf { it.first == key }?.second ?: box
+            val shown = pending[key] ?: box
             val active = activeKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
             val faceCols = if (resizing) {
@@ -504,8 +507,8 @@ fun DayCardBoard(
             } else {
                 shown.rows
             }
-            val xPx = (if (active && gesture == BoardGesture.MOVE) targetX else shown.x) * stepPx
-            val yPx = (if (active && gesture == BoardGesture.MOVE) targetY else shown.y) * stepPx
+            val xPx = shown.x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
+            val yPx = shown.y * stepPx + if (active && gesture == BoardGesture.MOVE) dragY else 0f
             val w = if (resizing) {
                 with(density) { liveWidthPx.toDp() }
             } else {

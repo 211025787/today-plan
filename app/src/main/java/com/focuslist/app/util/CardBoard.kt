@@ -328,75 +328,41 @@ object CardBoard {
     }
 
     /**
-     * 在当前位置、保持 [rows] 行不变的前提下，最多能占几列（不会压到别的卡片）。
+     * 松手后的自动整理：锚点卡留在原地，被它压到的卡顺次挪到最近的空位。
      *
-     * 缩放时用它做实时上限：拖到边界就停住，卡片不会盖到邻居身上。
+     * 整理顺序固定为「先上后下、先左后右」，同一局面每次都会得到同样的结果，
+     * 不会因为列表顺序不同而抖动。返回列表与输入一一对应（顺序不变），
+     * 调用方拿它和原列表逐项比较，只把变化的那几张写回数据库。
      *
-     * @param cards 当前全部卡片（含自己）
-     * @param card 正在缩放的卡片
-     * @param rows 当前行数
-     * @param limit 期望的列数上限（默认 3，即允许的最大跨列）
-     * @return 放得下的最大列数，至少 1
+     * @param cards 当前全部卡片
+     * @param anchor 刚被拖动/缩放过的卡片（已带最终位置）
+     * @return 整理后的全部卡片
      */
-    fun maxFitCols(cards: List<CardBox>, card: CardBox, rows: Int, limit: Int = 3): Int {
-        val base = normalize(card)
-        val max = limit.coerceIn(1, COLUMNS - base.x)
-        for (cols in max downTo 1) {
-            if (fitsAt(cards, base.copy(cols = cols, rows = rows))) return cols
-        }
-        return 1
-    }
+    fun arrange(cards: List<CardBox>, anchor: CardBox): List<CardBox> {
+        if (cards.isEmpty()) return emptyList()
+        val anchorId = anchor.trip to anchor.key
+        val placed = mutableListOf(anchor)
+        val resolved = HashMap<Pair<Boolean, Long>, CardBox>()
 
-    /**
-     * 在当前位置、保持 [cols] 列不变的前提下，最多能占几行（不会压到别的卡片）。
-     *
-     * @param cards 当前全部卡片（含自己）
-     * @param card 正在缩放的卡片
-     * @param cols 当前列数
-     * @param limit 期望的行数上限（默认 3）
-     * @return 放得下的最大行数，至少 1
-     */
-    fun maxFitRows(cards: List<CardBox>, card: CardBox, cols: Int, limit: Int = 3): Int {
-        val base = normalize(card)
-        val max = limit.coerceAtLeast(1)
-        for (rows in max downTo 1) {
-            if (fitsAt(cards, base.copy(cols = cols, rows = rows))) return rows
-        }
-        return 1
-    }
+        // 先上后下、先左后右：位置靠前的卡优先留在原地，后面的被挤走
+        val order = cards.indices
+            .filter { (cards[it].trip to cards[it].key) != anchorId }
+            .sortedWith(compareBy({ cards[it].y }, { cards[it].x }))
 
-    /**
-     * 挑一个离期望宽高最近、又不会压到别人的规格。
-     *
-     * 松手时用它做最终吸附：先按与期望值的距离排序，再逐个验证是否放得下；
-     * 在当前位置一个都放不下时**保持原规格**——宁可不变，也不叠上去。
-     *
-     * @param cards 当前全部卡片（含自己）
-     * @param card 正在缩放的卡片
-     * @param desiredCols 期望列数（可带小数）
-     * @param desiredRows 期望行数（可带小数）
-     * @return 吸附到的规格
-     */
-    fun fitShapeAt(
-        cards: List<CardBox>,
-        card: CardBox,
-        desiredCols: Float,
-        desiredRows: Float
-    ): CardShape {
-        val base = normalize(card)
-        val dc = desiredCols.coerceIn(1f, MAX_SPAN.toFloat())
-        val dr = desiredRows.coerceIn(1f, MAX_SPAN.toFloat())
-        return ALLOWED_SHAPES
-            // 超出右边界的规格直接排除（缩放不挪位置，只在原位长）
-            .filter { it.cols <= COLUMNS - base.x }
-            .sortedBy { shape ->
-                val dx = shape.cols - dc
-                val dy = shape.rows - dr
-                dx * dx + dy * dy
+        order.forEach { index ->
+            val card = normalize(cards[index])
+            val target = if (fitsAt(placed, card)) {
+                card
+            } else {
+                resolveMove(placed, card, card.x, card.y)
             }
-            .firstOrNull { shape ->
-                fitsAt(cards, base.copy(cols = shape.cols, rows = shape.rows))
-            }
-            ?: CardShape(base.cols, base.rows)
+            placed.add(target)
+            resolved[card.trip to card.key] = target
+        }
+
+        return cards.mapIndexed { index, card ->
+            if ((card.trip to card.key) == anchorId) normalize(anchor)
+            else resolved[card.trip to card.key] ?: card
+        }
     }
 }

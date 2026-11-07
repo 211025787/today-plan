@@ -226,72 +226,72 @@ class CardBoardTest {
     }
 
     @Test
-    fun maxFitCols_stopsBeforeNeighbour() {
-        // 自己 1×1 在 (0,0)，邻居在 (2,0)：能长到 2 列，第 3 列被邻居占着
-        val self = card(1, 1, 1, x = 0, y = 0)
-        val other = card(2, 1, 1, x = 2, y = 0)
-        assertEquals(2, CardBoard.maxFitCols(listOf(self, other), self, rows = 1))
+    fun arrange_keepsAnchorAndPushesOverlapAway() {
+        val a = card(1, 1, 1, x = 0, y = 0)
+        val b = card(2, 1, 1, x = 0, y = 0)
+        val result = CardBoard.arrange(listOf(a, b), anchor = a)
+        assertEquals(0, result[0].x)
+        assertEquals(0, result[0].y)
+        // 被压到的 b 挪到最近的空位（右边一格）
+        assertEquals(1, result[1].x)
+        assertEquals(0, result[1].y)
     }
 
     @Test
-    fun maxFitCols_oneWhenNeighbourIsAdjacent() {
-        val self = card(1, 1, 1, x = 0, y = 0)
-        val other = card(2, 1, 1, x = 1, y = 0)
-        assertEquals(1, CardBoard.maxFitCols(listOf(self, other), self, rows = 1))
+    fun arrange_returnsListInInputOrder() {
+        // 锚点是列表里的第二张：结果顺序不能变，否则调用方按 index 比对会串
+        val a = card(1, 1, 1, x = 0, y = 0)
+        val b = card(2, 2, 2, x = 0, y = 0)
+        val result = CardBoard.arrange(listOf(a, b), anchor = b)
+        assertEquals(b.key, result[1].key)
+        assertEquals(0, result[1].x)
+        assertEquals(0, result[1].y)
+        assertEquals(a.key, result[0].key)
+        assertEquals(2, result[0].x)
     }
 
     @Test
-    fun maxFitCols_respectsRightEdgeAndLimit() {
-        // 贴着右边界（x = 3）时无论多空都只能 1 列
-        val self = card(1, 1, 1, x = 3, y = 0)
-        assertEquals(1, CardBoard.maxFitCols(listOf(self), self, rows = 1))
-        // limit 可以比可用空间更小
-        val wide = card(2, 1, 1, x = 0, y = 0)
-        assertEquals(2, CardBoard.maxFitCols(listOf(wide), wide, rows = 1, limit = 2))
+    fun arrange_leavesNonOverlappingBoardUntouched() {
+        val a = card(1, 1, 1, x = 0, y = 0)
+        val b = card(2, 1, 1, x = 1, y = 0)
+        val c = card(3, 2, 2, x = 2, y = 1)
+        val result = CardBoard.arrange(listOf(a, b, c), anchor = a)
+        assertEquals(listOf(a, b, c), result)
     }
 
     @Test
-    fun maxFitRows_stopsBeforeNeighbour() {
-        val self = card(1, 1, 1, x = 0, y = 0)
-        val other = card(2, 1, 1, x = 0, y = 2)
-        assertEquals(2, CardBoard.maxFitRows(listOf(self, other), self, cols = 1))
-        val near = card(3, 1, 1, x = 0, y = 1)
-        assertEquals(1, CardBoard.maxFitRows(listOf(self, near), self, cols = 1))
+    fun arrange_onlyMovesCardsThatWereHit() {
+        val a = card(1, 2, 2, x = 0, y = 0)
+        val hit = card(2, 1, 1, x = 1, y = 1)
+        val far = card(3, 1, 1, x = 3, y = 3)
+        val result = CardBoard.arrange(listOf(a, hit, far), anchor = a)
+        assertEquals(far, result[2])
+        assertFalse(CardBoard.overlaps(result[0], result[1]))
     }
 
     @Test
-    fun fitShapeAt_prefersClosestAllowedShape() {
-        val self = card(1, 1, 1, x = 0, y = 0)
-        val shape = CardBoard.fitShapeAt(listOf(self), self, 2.4f, 0.9f)
-        assertEquals(2, shape.cols)
-        assertEquals(1, shape.rows)
+    fun arrange_splitsStackOfThree() {
+        val a = card(1, 1, 1, x = 0, y = 0)
+        val b = card(2, 1, 1, x = 0, y = 0)
+        val c = card(3, 1, 1, x = 0, y = 0)
+        val result = CardBoard.arrange(listOf(a, b, c), anchor = c)
+        // 三张卡两两不重叠，且只有锚点留在原位
+        assertFalse(CardBoard.overlaps(result[0], result[1]))
+        assertFalse(CardBoard.overlaps(result[0], result[2]))
+        assertFalse(CardBoard.overlaps(result[1], result[2]))
+        assertEquals(0, result[2].x)
+        assertEquals(0, result[2].y)
     }
 
     @Test
-    fun fitShapeAt_skipsShapesThatWouldOverlap() {
-        // 邻居在 (1,0)：3×1 和 2×1 都会压上去，只能维持 1×1
-        val self = card(1, 1, 1, x = 0, y = 0)
-        val other = card(2, 1, 1, x = 1, y = 0)
-        val shape = CardBoard.fitShapeAt(listOf(self, other), self, 3f, 1f)
-        assertEquals(1, shape.cols)
-        assertEquals(1, shape.rows)
-    }
-
-    @Test
-    fun fitShapeAt_keepsCurrentShapeWhenNothingFits() {
-        // 老数据已经叠在一起：任何规格都放不下，保持原样而不是再叠一层
-        val self = card(1, 2, 2, x = 0, y = 0)
-        val other = card(2, 2, 2, x = 0, y = 0)
-        val shape = CardBoard.fitShapeAt(listOf(self, other), self, 3f, 3f)
-        assertEquals(2, shape.cols)
-        assertEquals(2, shape.rows)
-    }
-
-    @Test
-    fun fitShapeAt_neverExceedsRightEdge() {
-        val self = card(1, 1, 1, x = 3, y = 0)
-        val shape = CardBoard.fitShapeAt(listOf(self), self, 3f, 1f)
-        assertEquals(1, shape.cols)
-        assertEquals(1, shape.rows)
+    fun arrange_isDeterministic() {
+        val cards = listOf(
+            card(1, 1, 1, x = 0, y = 0),
+            card(2, 1, 1, x = 0, y = 0),
+            card(3, 2, 1, x = 0, y = 0)
+        )
+        val first = CardBoard.arrange(cards, anchor = cards[0])
+        val second = CardBoard.arrange(cards, anchor = cards[0])
+        assertEquals(first, second)
     }
 }
