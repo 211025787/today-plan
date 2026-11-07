@@ -758,7 +758,6 @@ fun DayCardBoard(
                         onCancel = ::cancelResize,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .offset(x = 8.dp, y = 8.dp)
                             .zIndex(2f)
                     )
                 }
@@ -1540,8 +1539,9 @@ private fun Modifier.cardBodyGestures(
  *
  * 它是卡片 Box 的兄弟节点（不是子节点），所以不受卡片的圆角 clip 影响，
  * 能画到边沿外面；热区 36dp 里只有靠角的一小块压在卡片上，1×1 小卡的
- * 中间完全留给轻点/长按。画的是一段与卡片圆角**同心、半径大 3dp** 的四分之一
- * 圆弧，看起来就像卡片圆角向外长出的一圈，再加一个 45° 方向的小圆点提示可拖。
+ * 中间完全留给轻点/长按。画的是一段与卡片圆角**同心、同半径**（零间隙）
+ * 的白色四分之一圆弧，描边 6dp，紧贴卡片边沿；下面垫一层极淡的深色描边，
+ * 免得纯白弧在浅色背景那一半糊掉。45° 上一个白圆点提示可拖。
  *
  * 手势自己吃掉 down，不等长按、不与卡身的长按拖动抢；回调全部走
  * `rememberUpdatedState`，避免旧组合里留着过时的整理逻辑。
@@ -1559,7 +1559,6 @@ private fun ResizeGrip(
     val dragNow = rememberUpdatedState(onDrag)
     val endNow = rememberUpdatedState(onEnd)
     val cancelNow = rememberUpdatedState(onCancel)
-    val tint = MaterialTheme.colorScheme.primary
     Box(
         modifier = modifier
             .size(36.dp)
@@ -1600,20 +1599,34 @@ private fun ResizeGrip(
             val r = cornerRadius.toPx()
             val cx = size.width - out - r
             val cy = size.height - out - r
-            val radius = r + 3.dp.toPx()
+            // 半径与卡片圆角完全相等：弧线正压在卡片边沿上，中间没有空白
+            val radius = r
+            val bounds = Offset(cx - radius, cy - radius)
+            val boundsSize = Size(radius * 2f, radius * 2f)
+            // 浅背景上白弧会糊，先垫一圈很淡的深色描边（比白弧宽 3dp）
             drawArc(
-                color = tint.copy(alpha = 0.9f),
+                color = Color.Black.copy(alpha = 0.18f),
                 startAngle = 0f,
                 sweepAngle = 90f,
                 useCenter = false,
-                topLeft = Offset(cx - radius, cy - radius),
-                size = Size(radius * 2f, radius * 2f),
-                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                topLeft = bounds,
+                size = boundsSize,
+                style = Stroke(width = 9.dp.toPx(), cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = Color.White,
+                startAngle = 0f,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = bounds,
+                size = boundsSize,
+                // 比上一版 3dp 加宽一倍
+                style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
             )
             val diagonal = radius * 0.7071f
             val dot = Offset(cx + diagonal, cy + diagonal)
-            drawCircle(color = Color.White, radius = 4.5.dp.toPx(), center = dot)
-            drawCircle(color = tint, radius = 3.dp.toPx(), center = dot)
+            drawCircle(color = Color.Black.copy(alpha = 0.18f), radius = 6.5.dp.toPx(), center = dot)
+            drawCircle(color = Color.White, radius = 5.dp.toPx(), center = dot)
         }
     }
 }

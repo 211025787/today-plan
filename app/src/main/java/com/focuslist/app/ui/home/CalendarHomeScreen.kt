@@ -1812,9 +1812,7 @@ private fun GradientPlanCard(
         if (!manageMode) {
             CardResizeHandle(
                 onClick = onEnterResize,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(2.dp)
+                modifier = Modifier.align(Alignment.BottomEnd)
             )
         }
         }
@@ -2405,9 +2403,7 @@ private fun GradientTripCard(
         // 调整大小覆盖层（与计划卡片共用同一组件）
         CardResizeHandle(
             onClick = onEnterResize,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(2.dp)
+            modifier = Modifier.align(Alignment.BottomEnd)
         )
         }
     }

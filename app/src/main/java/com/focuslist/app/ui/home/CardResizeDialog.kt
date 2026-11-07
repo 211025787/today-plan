@@ -45,7 +45,11 @@ import com.focuslist.app.ui.theme.parseThemeColor
 import kotlin.math.roundToInt
 
 /**
- * 卡片右下角的「调整大小」手柄：一圈弧形勾，呼吸提示可以拖。
+ * 卡片右下角的「调整大小」角标：白色四分之一圆弧，**紧贴卡片圆角边沿**。
+ *
+ * 日历卡片的圆角固定 22dp；当手柄右下角与卡片右下角重合时，圆心就在
+ * `(size - 22dp)`，画出来这段 90° 弧正好压在圆角轮廓上，中间不留空白。
+ * 描边 5dp（原来 2.5dp 的一倍），下面垫一圈淡深色让白色在浅背景上不糊。
  *
  * 卡片本身不再承担拖动逻辑——点它只是打开屏幕级的调整弹层，
  * 这样日历网格不会在拖动过程中重排（之前的闪退与乱跳都来自这里）。
@@ -63,17 +67,29 @@ fun CardResizeHandle(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 detectTapGestures(onTap = { onClick() })
             }
     ) {
-        Canvas(modifier = Modifier.size(26.dp)) {
-            val stroke = 2.5.dp.toPx()
-            val arcLen = size.width * 0.7f
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val r = 22.dp.toPx()
+            val cx = size.width - r
+            val cy = size.height - r
+            val bounds = Offset(cx - r, cy - r)
+            val boundsSize = Size(r * 2f, r * 2f)
             drawArc(
-                color = Color.White.copy(alpha = 0.9f),
+                color = Color.Black.copy(alpha = 0.18f),
                 startAngle = 0f,
                 sweepAngle = 90f,
                 useCenter = false,
-                topLeft = Offset(size.width * 0.15f, size.height * 0.15f),
-                size = Size(arcLen, arcLen),
-                style = Stroke(stroke, cap = StrokeCap.Round)
+                topLeft = bounds,
+                size = boundsSize,
+                style = Stroke(7.5.dp.toPx(), cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = Color.White,
+                startAngle = 0f,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = bounds,
+                size = boundsSize,
+                style = Stroke(5.dp.toPx(), cap = StrokeCap.Round)
             )
         }
     }
