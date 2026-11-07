@@ -332,14 +332,15 @@ object CardBoard {
         if (abs(position - current) > threshold) position.roundToInt() else current
 
     /**
-     * 整理：锚点卡留在原地，被它压到的卡**只往下让**，直到互不重叠。
+     * 整理：锚点卡留在原地；其余卡**自己家还空着就不动**，被压到的卡
+     * 从顶部按行扫描、落进**第一个放得下的空位**，直到互不重叠。
      *
-     * 用的是 dashboard 网格的经典模型（gridstack.js / react-grid-layout，两者都是 MIT）：
-     * 谁被压到，谁就从被压的位置往下走；撞到别人，别人接着往下走。
-     * 相比"找最近的空位"，这个模型有两个能被眼睛验证的好处：
-     * - 被挤的卡**永远在自己那一列往下滑**，不会横向乱跑，也就不会互相顶来顶去；
-     * - 结果是构造性无重叠的（每张卡落位前都和已落位的全部卡比对过，
-     *   而落位后的卡不再移动），不会出现"看着能放、算出来却叠着"。
+     * 两条能被眼睛验证的性质：
+     * - 挪一张卡到空白处，其它卡一张都不动（自己家空着就原地保留）；
+     * - 被挤走的卡**往上收**：锚点刚腾出来的上方空洞会被最先补上，
+     *   实在没有空位才往下面的新行去——和手机桌面的自动整理方向一致。
+     *   结果同样是构造性无重叠的（每张卡落位前都和已落位的全部卡比对过，
+     *   落位后不再移动）。
      *
      * @param cards 当前全部卡片
      * @param anchor 刚被拖动 / 缩放过的卡片（已带最终位置）
@@ -358,18 +359,32 @@ object CardBoard {
 
         order.forEach { index ->
             val base = normalize(cards[index])
-            val x = base.x.coerceIn(0, (COLUMNS - base.cols).coerceAtLeast(0))
-            var y = base.y.coerceAtLeast(0)
-            while (true) {
-                val candidate = base.copy(x = x, y = y)
-                val hits = placed.values.filter { overlaps(candidate, it) }
-                if (hits.isEmpty()) {
-                    placed[base.trip to base.key] = candidate
-                    return@forEach
-                }
-                // 直接跳到"撞到的卡的下沿"：这段区间里必然还是撞着同一张卡
-                y = hits.maxOf { it.y + it.rows }
+            val home = base.copy(
+                x = base.x.coerceIn(0, (COLUMNS - base.cols).coerceAtLeast(0)),
+                y = base.y.coerceAtLeast(0)
+            )
+            // 自己家还空着就不动：「挪一张卡到空白处，别的卡不动」由这句保证
+            if (placed.values.none { overlaps(home, it) }) {
+                placed[base.trip to base.key] = home
+                return@forEach
             }
+            // 被挤走了：从顶部开始按行扫描（行优先、从左到右），落进第一个
+            // 放得下的空位。锚点刚腾出来的上方空洞会被最先补上——自动整理
+            // 是「往上收」，而不是一路往下掉。行号没有上界，循环必然终止。
+            var spot: CardBox? = null
+            var y = 0
+            val maxX = (COLUMNS - base.cols).coerceAtLeast(0)
+            while (spot == null) {
+                for (x in 0..maxX) {
+                    val candidate = base.copy(x = x, y = y)
+                    if (placed.values.none { overlaps(candidate, it) }) {
+                        spot = candidate
+                        break
+                    }
+                }
+                y++
+            }
+            placed[base.trip to base.key] = spot!!
         }
         return cards.map { placed[it.trip to it.key] ?: it }
     }

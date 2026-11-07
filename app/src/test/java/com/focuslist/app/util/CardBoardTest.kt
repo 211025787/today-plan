@@ -205,15 +205,15 @@ class CardBoardTest {
     }
 
     @Test
-    fun arrange_keepsAnchorAndPushesOverlapDown() {
+    fun arrange_keepsAnchorAndPushedCardTakesFirstFreeSlot() {
         val a = card(1, 1, 1, x = 0, y = 0)
         val b = card(2, 1, 1, x = 0, y = 0)
         val result = CardBoard.arrange(listOf(a, b), anchor = a)
         assertEquals(0, result[0].x)
         assertEquals(0, result[0].y)
-        // 被压到的 b 在自己那一列往下让，不会被甩到旁边的列
-        assertEquals(0, result[1].x)
-        assertEquals(1, result[1].y)
+        // 被压到的 b 从顶部按行扫描，第一个空位是同一行的右边
+        assertEquals(1, result[1].x)
+        assertEquals(0, result[1].y)
     }
 
     @Test
@@ -226,9 +226,9 @@ class CardBoardTest {
         assertEquals(0, result[1].x)
         assertEquals(0, result[1].y)
         assertEquals(a.key, result[0].key)
-        // 被 2×2 压到的 1×1 往下让到它的下沿
-        assertEquals(0, result[0].x)
-        assertEquals(2, result[0].y)
+        // 被 2×2 压到的 1×1 补进第一行右侧的空位
+        assertEquals(2, result[0].x)
+        assertEquals(0, result[0].y)
     }
 
     @Test
@@ -331,19 +331,37 @@ class CardBoardTest {
     }
 
     @Test
-    fun arrange_onlyPushesDownAndKeepsColumns() {
-        // 被挤的卡永远留在自己那一列、只往下走——不会横向乱窜
-        val cards = listOf(
-            card(1, 2, 2, x = 0, y = 0),
-            card(2, 2, 2, x = 1, y = 0),
-            card(3, 2, 2, x = 1, y = 2)
-        )
-        val result = CardBoard.arrange(cards, anchor = cards[0])
-        assertEquals(cards[0], result[0])
-        for (i in 1 until cards.size) {
-            assertEquals("第 $i 张卡的列不该变", cards[i].x, result[i].x)
-            assertTrue("第 $i 张卡只该往下", result[i].y >= cards[i].y)
-        }
+    fun arrange_pushedCardFillsTheVacatedGapAbove() {
+        // 用户的要求："自动移动到上面的空白区域，而不是下面的"。
+        // 锚点 A 从 (0,0) 挪到 (0,2) 压住 C；C 不该往下掉到 (0,4)，
+        // 而是补进 A 刚腾出来的 (0,0)；没被碰的 B 原地不动。
+        val a = card(1, 2, 2, x = 0, y = 0)
+        val b = card(2, 2, 2, x = 2, y = 0)
+        val c = card(3, 2, 2, x = 0, y = 2)
+        val anchor = a.copy(y = 2)
+        val result = CardBoard.arrange(listOf(a, b, c), anchor)
+        assertEquals(CardBoard.normalize(anchor), result[0])
+        assertEquals("没被碰的卡不该动", b, result[1])
+        assertEquals(0, result[2].x)
+        assertEquals("被挤走的卡该补上面的空洞", 0, result[2].y)
+    }
+
+    @Test
+    fun arrange_goesDownOnlyWhenNoGapAbove() {
+        // 上方确实没有空位时，被挤的卡才落到下面的新行。
+        // 两行都被 2×1 占满；锚点 B 原地长高压住 D，
+        // 前两行没有任何空洞，D 只能去第三行。
+        val a = card(1, 2, 1, x = 0, y = 0)
+        val b = card(2, 2, 1, x = 2, y = 0)
+        val c = card(3, 2, 1, x = 0, y = 1)
+        val d = card(4, 2, 1, x = 2, y = 1)
+        val anchor = b.copy(rows = 2)
+        val result = CardBoard.arrange(listOf(a, b, c, d), anchor)
+        assertEquals(a, result[0])
+        assertEquals(CardBoard.normalize(anchor), result[1])
+        assertEquals("没被碰的卡不该动", c, result[2])
+        assertEquals(0, result[3].x)
+        assertEquals(2, result[3].y)
     }
 
     @Test
@@ -426,10 +444,13 @@ class CardBoardTest {
                 )
             }
         }
-        // 锚点必须原地不动，被压到的卡挪到它下面
+        // 锚点必须原地不动；被压到的 victim 补进上方第一个空位 (0,2)，
+        // 家被占了的 under 顺延到下一个空位 (2,3)
         assertEquals(anchor, result[0])
-        assertEquals(2, result[3].x)
-        assertEquals(3, result[3].y)
+        assertEquals(0, result[3].x)
+        assertEquals(2, result[3].y)
+        assertEquals(2, result[2].x)
+        assertEquals(3, result[2].y)
     }
 
     @Test
