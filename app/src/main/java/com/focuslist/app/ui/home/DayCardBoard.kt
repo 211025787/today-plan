@@ -55,10 +55,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -570,7 +568,8 @@ fun DayCardBoard(
         pushed.values.maxOfOrNull { it.y + it.rows } ?: 0,
         1
     )
-    val boardHeight = cellWidth * boardRows + spacing * (boardRows - 1)
+    // 多留 12dp：最下面那张卡的外侧缩放手柄要画到卡片边界之外，不能被裁掉
+    val boardHeight = cellWidth * boardRows + spacing * (boardRows - 1) + 12.dp
 
     // 网格提示淡入淡出：松手时跟着归位一起淡掉，而不是"啪"地消失
     val guidesAlpha by animateFloatAsState(
@@ -644,37 +643,52 @@ fun DayCardBoard(
             // forEach 顺序，Compose 按位置复用节点，手势节点就可能挂到另一张卡上——
             // 表现正是「点了这张卡的右下角，缩放的却是别的卡」。
             key(key) {
-                PlanBoardCard(
-                    data = data,
-                    cols = faceCols,
-                    rows = faceRows,
-                    width = animW,
-                    height = animH,
-                    manageMode = manageMode,
-                    selected = data.plan.id in selectedPlanIds,
-                    active = active,
-                    onToggleTimer = { onToggleTimer(data.plan.id) },
-                    onClick = {
-                        foregroundKey = key
-                        if (manageMode) onToggleSelect(data.plan.id) else onPlanClick(data.plan)
-                    },
-                    onLongClick = {
-                        foregroundKey = key
-                        if (manageMode) onToggleSelect(data.plan.id) else onPlanLongClick(data.plan)
-                    },
-                    onMoveStart = { startMove(shown) },
-                    onMove = ::moveBy,
-                    onMoveEnd = ::endMove,
-                    onMoveCancel = ::cancelMove,
-                    onResizeStart = { startResize(shown) },
-                    onResize = ::resizeBy,
-                    onResizeEnd = ::endResize,
-                    onResizeCancel = ::cancelResize,
+                val corner = if (animW < 100.dp || animH < 100.dp) 16.dp else 20.dp
+                Box(
                     modifier = Modifier
                         .offset { cardOffset }
-                        .size(animW, animH)
+                        // 多出 8dp 容纳挂在圆角外侧的手柄，保证它仍在父节点命中范围内
+                        .size(animW + 8.dp, animH + 8.dp)
                         .zIndex(if (active || settling) 10f else if (foregroundKey == key) 5f else 1f)
-                )
+                ) {
+                    PlanBoardCard(
+                        data = data,
+                        cols = faceCols,
+                        rows = faceRows,
+                        width = animW,
+                        height = animH,
+                        manageMode = manageMode,
+                        selected = data.plan.id in selectedPlanIds,
+                        active = active,
+                        onToggleTimer = { onToggleTimer(data.plan.id) },
+                        onClick = {
+                            foregroundKey = key
+                            if (manageMode) onToggleSelect(data.plan.id) else onPlanClick(data.plan)
+                        },
+                        onLongClick = {
+                            foregroundKey = key
+                            if (manageMode) onToggleSelect(data.plan.id) else onPlanLongClick(data.plan)
+                        },
+                        onMoveStart = { startMove(shown) },
+                        onMove = ::moveBy,
+                        onMoveEnd = ::endMove,
+                        onMoveCancel = ::cancelMove,
+                        modifier = Modifier.size(animW, animH)
+                    )
+                    if (!manageMode) {
+                        // 手柄是卡片的兄弟节点，不受圆角 clip 影响，挂在边沿外侧
+                        ResizeGrip(
+                            cornerRadius = corner,
+                            onStart = { startResize(shown) },
+                            onDrag = ::resizeBy,
+                            onEnd = ::endResize,
+                            onCancel = ::cancelResize,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .zIndex(2f)
+                        )
+                    }
+                }
             }
         }
 
@@ -711,30 +725,43 @@ fun DayCardBoard(
                 gestureRunning = gesture != BoardGesture.NONE || settling
             )
             key(key) {
-                TripBoardCard(
-                    trip = data.trip,
-                    cols = faceCols,
-                    rows = faceRows,
-                    width = animW,
-                    height = animH,
-                    active = active,
-                    onClick = {
-                        foregroundKey = key
-                        onTripClick(data.trip)
-                    },
-                    onMoveStart = { startMove(shown) },
-                    onMove = ::moveBy,
-                    onMoveEnd = ::endMove,
-                    onMoveCancel = ::cancelMove,
-                    onResizeStart = { startResize(shown) },
-                    onResize = ::resizeBy,
-                    onResizeEnd = ::endResize,
-                    onResizeCancel = ::cancelResize,
+                val corner = if (animW < 100.dp || animH < 100.dp) 16.dp else 20.dp
+                Box(
                     modifier = Modifier
                         .offset { cardOffset }
-                        .size(animW, animH)
+                        // 多出 8dp 容纳挂在圆角外侧的手柄，保证它仍在父节点命中范围内
+                        .size(animW + 8.dp, animH + 8.dp)
                         .zIndex(if (active || settling) 10f else if (foregroundKey == key) 5f else 1f)
-                )
+                ) {
+                    TripBoardCard(
+                        trip = data.trip,
+                        cols = faceCols,
+                        rows = faceRows,
+                        width = animW,
+                        height = animH,
+                        active = active,
+                        onClick = {
+                            foregroundKey = key
+                            onTripClick(data.trip)
+                        },
+                        onMoveStart = { startMove(shown) },
+                        onMove = ::moveBy,
+                        onMoveEnd = ::endMove,
+                        onMoveCancel = ::cancelMove,
+                        modifier = Modifier.size(animW, animH)
+                    )
+                    ResizeGrip(
+                        cornerRadius = corner,
+                        onStart = { startResize(shown) },
+                        onDrag = ::resizeBy,
+                        onEnd = ::endResize,
+                        onCancel = ::cancelResize,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = 8.dp, y = 8.dp)
+                            .zIndex(2f)
+                    )
+                }
             }
         }
     }
@@ -845,7 +872,8 @@ private fun GridGuides(
 }
 
 /**
- * 计划卡片的自由画布条目：背景、手势、计时按钮、缩放手柄与响应式内容。
+ * 计划卡片的自由画布条目：背景、卡身手势、计时按钮与响应式内容。
+ * 缩放手柄由外层 Box 贴在卡片外侧，不在这里渲染。
  */
 @Composable
 private fun PlanBoardCard(
@@ -864,10 +892,6 @@ private fun PlanBoardCard(
     onMove: (Float, Float) -> Unit,
     onMoveEnd: () -> Unit,
     onMoveCancel: () -> Unit,
-    onResizeStart: () -> Unit,
-    onResize: (Float, Float) -> Unit,
-    onResizeEnd: () -> Unit,
-    onResizeCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val plan = data.plan
@@ -911,11 +935,7 @@ private fun PlanBoardCard(
                 onMoveStart = onMoveStart,
                 onMove = onMove,
                 onMoveEnd = onMoveEnd,
-                onMoveCancel = onMoveCancel,
-                onResizeStart = onResizeStart,
-                onResize = onResize,
-                onResizeEnd = onResizeEnd,
-                onResizeCancel = onResizeCancel
+                onMoveCancel = onMoveCancel
             )
     ) {
         // 玻璃拟态顶部高光
@@ -941,13 +961,18 @@ private fun PlanBoardCard(
         )
 
         if (!manageMode) {
+            // 1×1 卡在手机上才 76dp 宽：28dp 按钮 + 6dp 内边距的命中区会盖到
+            // 卡片正中心，点一下就变成「开始计时」。小卡把按钮缩到 24dp、贴角 4dp。
+            val tinyCard = cols == 1 && rows == 1
+            val timerSize = if (tinyCard) 20.dp else 28.dp
+            val timerInset = if (tinyCard) 3.dp else 6.dp
             // 计时按钮：固定右上角，内容区已为它留出 34dp
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .size(28.dp)
+                    .padding(timerInset)
+                    .size(timerSize)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.26f))
                     .clickable(onClick = onToggleTimer)
@@ -956,11 +981,9 @@ private fun PlanBoardCard(
                     imageVector = if (data.running) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (data.running) "暂停计时" else "开始计时",
                     tint = Color.White,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(if (tinyCard) 13.dp else 17.dp)
                 )
             }
-            // 缩放手柄角标（纯视觉）：右下角 56dp 区域按下即进入缩放拖动
-            ResizeGrip(modifier = Modifier.align(Alignment.BottomEnd))
         } else {
             // 管理态：左上角勾选圈
             Box(
@@ -1263,10 +1286,6 @@ private fun TripBoardCard(
     onMove: (Float, Float) -> Unit,
     onMoveEnd: () -> Unit,
     onMoveCancel: () -> Unit,
-    onResizeStart: () -> Unit,
-    onResize: (Float, Float) -> Unit,
-    onResizeEnd: () -> Unit,
-    onResizeCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val base = parseThemeColor(trip.colorHex)
@@ -1307,11 +1326,7 @@ private fun TripBoardCard(
                 onMoveStart = onMoveStart,
                 onMove = onMove,
                 onMoveEnd = onMoveEnd,
-                onMoveCancel = onMoveCancel,
-                onResizeStart = onResizeStart,
-                onResize = onResize,
-                onResizeEnd = onResizeEnd,
-                onResizeCancel = onResizeCancel
+                onMoveCancel = onMoveCancel
             )
     ) {
         Box(
@@ -1420,23 +1435,19 @@ private fun TripBoardCard(
                 }
             }
         }
-        ResizeGrip(modifier = Modifier.align(Alignment.BottomEnd))
     }
 }
 
 /**
- * 卡片主体的手势总管：轻点 / 长按拖动 / 右下角缩放。
+ * 卡片主体的手势：轻点 / 长按拖动。
  *
- * 按下时先看落点：手指落在右下角「缩放区」（56dp 见方，手柄角标画在那儿）
- * 就直接进入缩放拖动，不等长按、也不与长按手势抢；落在其它地方照旧走
- * 「长按 500ms 后拖动」的路子。
+ * 卡身只处理「轻点 / 长按拖动」；缩放交给贴在卡片外侧的独立 [ResizeGrip]。
  *
- * 以前的缩放手柄是卡片右下角一个独立的小 composable，44dp 热区再被圆角
- * clip 削掉一角，实际可点面积很小；而且它和卡身的长按手势是两套
- * pointerInput，抢事件的时序稍微不对就「拖不动」。现在只有这一个手势入口，
- * 命中判断用整张卡的坐标，触发面积够大、路径唯一。
+ * 以前在卡身右下角划了 56dp 见方的缩放区，手机上 1×1 卡才 76dp 宽，
+ * 这个区盖掉了大半个卡面——「点卡片中间却触发调整大小」就是这么来的。
+ * 现在缩放手柄整个挪到卡片圆角外侧，卡身内部无论点哪里都只走这里。
  *
- * 长按后移动超过阈值才开始真正移动；长按后原地松手仍然打开原来的操作菜单。
+ * 长按后移动超过 touch slop 才开始真正移动；长按后原地松手仍然打开操作菜单。
  * 用 suppressClick 避免长按松手时又触发一次轻点（统计弹层）。
  */
 @Composable
@@ -1448,11 +1459,7 @@ private fun Modifier.cardBodyGestures(
     onMoveStart: () -> Unit,
     onMove: (Float, Float) -> Unit,
     onMoveEnd: () -> Unit,
-    onMoveCancel: () -> Unit,
-    onResizeStart: () -> Unit,
-    onResize: (Float, Float) -> Unit,
-    onResizeEnd: () -> Unit,
-    onResizeCancel: () -> Unit
+    onMoveCancel: () -> Unit
 ): Modifier {
     if (!enabled) {
         return this.clickable(onClick = onClick)
@@ -1467,10 +1474,6 @@ private fun Modifier.cardBodyGestures(
     val moveNow = rememberUpdatedState(onMove)
     val moveEndNow = rememberUpdatedState(onMoveEnd)
     val moveCancelNow = rememberUpdatedState(onMoveCancel)
-    val resizeStartNow = rememberUpdatedState(onResizeStart)
-    val resizeNow = rememberUpdatedState(onResize)
-    val resizeEndNow = rememberUpdatedState(onResizeEnd)
-    val resizeCancelNow = rememberUpdatedState(onResizeCancel)
 
     fun suppressBriefly() {
         suppressClick = true
@@ -1485,131 +1488,132 @@ private fun Modifier.cardBodyGestures(
             if (!suppressClick) clickNow.value()
         }
         .pointerInput(key) {
-            val resizeZone = 56.dp.toPx()
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
-                val inResizeZone =
-                    down.position.x >= size.width - resizeZone &&
-                        down.position.y >= size.height - resizeZone
-
-                if (inResizeZone) {
-                    // 缩放：按下即吃掉 down，卡身的轻点/长按都不会再被触发；
-                    // 不等长按，手指一动就开始改大小
-                    down.consume()
-                    suppressBriefly()
-                    var started = false
-                    var lifted = false
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) {
-                            lifted = true
-                            break
-                        }
-                        // 用原始坐标差：positionChange() 在事件被别人消费过之后返回 0
-                        val dx = change.position.x - change.previousPosition.x
-                        val dy = change.position.y - change.previousPosition.y
-                        if (dx != 0f || dy != 0f) {
-                            if (!started) {
-                                started = true
-                                resizeStartNow.value()
-                            }
-                            change.consume()
-                            resizeNow.value(dx, dy)
-                        }
+                // 先等长按；500ms 内松手就是一次普通轻点（交给 clickable）
+                awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                moved = false
+                suppressBriefly()
+                // 带 touch slop：长按后原地轻颤不算移动，松手仍然弹操作菜单
+                val slop = viewConfiguration.touchSlop
+                var started = false
+                var accX = 0f
+                var accY = 0f
+                var lifted = false
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) {
+                        lifted = true
+                        break
                     }
-                    if (started) {
-                        if (lifted) resizeEndNow.value() else resizeCancelNow.value()
-                    }
-                } else {
-                    // 移动：先等长按；500ms 内松手就是一次普通轻点（交给 clickable）
-                    awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
-                    moved = false
-                    suppressBriefly()
-                    // 带 touch slop：长按后原地轻颤不算移动，松手仍然弹操作菜单
-                    val slop = viewConfiguration.touchSlop
-                    var started = false
-                    var accX = 0f
-                    var accY = 0f
-                    var lifted = false
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) {
-                            lifted = true
-                            break
+                    val dx = change.position.x - change.previousPosition.x
+                    val dy = change.position.y - change.previousPosition.y
+                    if (dx == 0f && dy == 0f) continue
+                    change.consume()
+                    if (!started) {
+                        accX += dx
+                        accY += dy
+                        if (abs(accX) + abs(accY) > slop) {
+                            started = true
+                            moved = true
+                            moveStartNow.value()
+                            moveNow.value(accX, accY)
                         }
-                        val dx = change.position.x - change.previousPosition.x
-                        val dy = change.position.y - change.previousPosition.y
-                        if (dx == 0f && dy == 0f) continue
-                        change.consume()
-                        if (!started) {
-                            accX += dx
-                            accY += dy
-                            if (abs(accX) + abs(accY) > slop) {
-                                started = true
-                                moved = true
-                                moveStartNow.value()
-                                moveNow.value(accX, accY)
-                            }
-                        } else {
-                            moveNow.value(dx, dy)
-                        }
-                    }
-                    if (started) {
-                        if (lifted) moveEndNow.value() else moveCancelNow.value()
                     } else {
-                        // 长按后原地松手：打开操作菜单
-                        longClickNow.value()
+                        moveNow.value(dx, dy)
                     }
-                    suppressBriefly()
                 }
+                if (started) {
+                    if (lifted) moveEndNow.value() else moveCancelNow.value()
+                } else {
+                    // 长按后原地松手：打开操作菜单
+                    longClickNow.value()
+                }
+                suppressBriefly()
             }
         }
 }
 
 /**
- * 右下角的缩放手柄角标：纯视觉提示。
+ * 贴在卡片**右下角外侧**的缩放手柄。
  *
- * 手势本身在 [cardBodyGestures] 里按按下位置路由（右下角 56dp 区域内按下
- * 直接进缩放），这里只画那个白色角标，不再自己挂 pointerInput——热区小、
- * 又被圆角 clip 削角，独立手势正是「右下角很难触发」的根源。
+ * 它是卡片 Box 的兄弟节点（不是子节点），所以不受卡片的圆角 clip 影响，
+ * 能画到边沿外面；热区 36dp 里只有靠角的一小块压在卡片上，1×1 小卡的
+ * 中间完全留给轻点/长按。画的是一段与卡片圆角**同心、半径大 3dp** 的四分之一
+ * 圆弧，看起来就像卡片圆角向外长出的一圈，再加一个 45° 方向的小圆点提示可拖。
+ *
+ * 手势自己吃掉 down，不等长按、不与卡身的长按拖动抢；回调全部走
+ * `rememberUpdatedState`，避免旧组合里留着过时的整理逻辑。
  */
 @Composable
-private fun ResizeGrip(modifier: Modifier = Modifier) {
+private fun ResizeGrip(
+    cornerRadius: Dp,
+    onStart: () -> Unit,
+    onDrag: (Float, Float) -> Unit,
+    onEnd: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val startNow = rememberUpdatedState(onStart)
+    val dragNow = rememberUpdatedState(onDrag)
+    val endNow = rememberUpdatedState(onEnd)
+    val cancelNow = rememberUpdatedState(onCancel)
+    val tint = MaterialTheme.colorScheme.primary
     Box(
-        contentAlignment = Alignment.BottomEnd,
-        modifier = modifier.size(44.dp)
-    ) {
-        androidx.compose.foundation.Canvas(
-            modifier = Modifier
-                .padding(end = 5.dp, bottom = 5.dp)
-                .size(30.dp)
-        ) {
-            val stroke = 4.dp.toPx()
-            val inset = 3.dp.toPx()
-            val radius = 7.dp.toPx()
-            // 更醒目的白色直角括号，类似系统 Dock 右下角的白色角标
-            val path = Path().apply {
-                moveTo(size.width * 0.16f, size.height - inset)
-                lineTo(size.width - inset - radius, size.height - inset)
-                quadraticBezierTo(
-                    size.width - inset,
-                    size.height - inset,
-                    size.width - inset,
-                    size.height - inset - radius
-                )
-                lineTo(size.width - inset, size.height * 0.16f)
+        modifier = modifier
+            .size(36.dp)
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    var started = false
+                    var lifted = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            lifted = true
+                            break
+                        }
+                        // 用原始坐标差：事件被别人消费过之后 positionChange() 会返回 0
+                        val dx = change.position.x - change.previousPosition.x
+                        val dy = change.position.y - change.previousPosition.y
+                        if (dx != 0f || dy != 0f) {
+                            if (!started) {
+                                started = true
+                                startNow.value()
+                            }
+                            change.consume()
+                            dragNow.value(dx, dy)
+                        }
+                    }
+                    if (started) {
+                        if (lifted) endNow.value() else cancelNow.value()
+                    }
+                }
             }
-            drawPath(
-                path = path,
-                color = Color.White.copy(alpha = 0.96f),
-                style = Stroke(
-                    width = stroke,
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round
-                )
+    ) {
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            // 手柄右下角比卡片右下角外移 8dp，反推卡片圆角圆心在这个 Canvas 里的位置
+            val out = 8.dp.toPx()
+            val r = cornerRadius.toPx()
+            val cx = size.width - out - r
+            val cy = size.height - out - r
+            val radius = r + 3.dp.toPx()
+            drawArc(
+                color = tint.copy(alpha = 0.9f),
+                startAngle = 0f,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = Offset(cx - radius, cy - radius),
+                size = Size(radius * 2f, radius * 2f),
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
             )
+            val diagonal = radius * 0.7071f
+            val dot = Offset(cx + diagonal, cy + diagonal)
+            drawCircle(color = Color.White, radius = 4.5.dp.toPx(), center = dot)
+            drawCircle(color = tint, radius = 3.dp.toPx(), center = dot)
         }
     }
 }
