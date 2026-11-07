@@ -219,13 +219,12 @@ fun DayCardBoard(
     // 旧卡 / 新卡第一次出现：自动补位并写回，从此位置固定；
     // 超出 1–4 格的脏数据由 normalize 夹回去，这里负责把夹过的结果写回数据库。
     val autoPlaced = remember { mutableSetOf<String>() }
-    // 历史重叠整理是否已经做过（每次进页面只做一次，见下面的说明）
-    var legacyRepaired by remember { mutableStateOf(false) }
     LaunchedEffect(packed) {
         plans.forEachIndexed { index, data ->
             val plan = data.plan
             val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
-            val needsPlace = plan.cardX < 0 || plan.cardY < 0
+            // 位置和 pack 算出来的不一致（没摆过、或历史重叠被往下让过）就写回
+            val needsPlace = plan.cardX != box.x || plan.cardY != box.y
             val needsShape = plan.cardCols > 0 &&
                 (plan.cardCols != box.cols || plan.cardRows != box.rows)
             if (needsPlace || needsShape) {
@@ -238,43 +237,13 @@ fun DayCardBoard(
         trips.forEachIndexed { index, data ->
             val trip = data.trip
             val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
-            val needsPlace = trip.cardX < 0 || trip.cardY < 0
+            val needsPlace = trip.cardX != box.x || trip.cardY != box.y
             val needsShape = trip.cardCols > 0 &&
                 (trip.cardCols != box.cols || trip.cardRows != box.rows)
             if (needsPlace || needsShape) {
                 val key = "t${trip.id}"
                 if (autoPlaced.add(key)) {
                     onTripLayout(trip.id, box.cols, box.rows, box.x, box.y, trip.cardZ)
-                }
-            }
-        }
-
-        // 老数据修复：早期缩放不检查重叠，可能已经有卡叠在一起。
-        // 直接用和拖动同一套 arrange（锚点取第一张，其余往下让），一次修好。
-        //
-        // 只做一次，而且只在进页面后的第一次快照上做：松手时是逐张落库的，
-        // 中间态（A 已挪走、B 还没挪）看起来就是"重叠"，若每次都修，
-        // 就会把用户刚放下的卡再挪走——表现正是"放不了，自己跑到下一行"。
-        val current = planBoxes + tripBoxes
-        if (!legacyRepaired && current.isNotEmpty()) {
-            legacyRepaired = true
-            val repaired = CardBoard.arrange(current, current.first())
-            repaired.forEachIndexed { index, box ->
-                val before = current[index]
-                if (box == before) return@forEachIndexed
-                // 修复标记带上目标坐标：同一张卡一局里可能被压到好几次
-                val mark = "${if (box.trip) "t" else "p"}${box.key}@${box.x},${box.y}"
-                if (autoPlaced.add("fix-$mark")) {
-                    val z = if (index < plans.size) {
-                        plans[index].plan.cardZ
-                    } else {
-                        trips[index - plans.size].trip.cardZ
-                    }
-                    if (box.trip) {
-                        onTripLayout(box.key, box.cols, box.rows, box.x, box.y, z)
-                    } else {
-                        onPlanLayout(box.key, box.cols, box.rows, box.x, box.y, z)
-                    }
                 }
             }
         }
@@ -305,6 +274,10 @@ fun DayCardBoard(
     // 松手后还在滑向格子的那张卡：用它把「手指停下的位置 → 格子」的残差补间掉，
     // 这样松手是"啪嗒"归位，而不是瞬移
     var settlingKey by remember { mutableStateOf<String?>(null) }
+    // 手势开始时的那一版布局。整个手势都用它当基准：
+    // "这次拖动到底动了谁"因此是确定的——落库只会写这几张，
+    // 不会因为期间数据有任何变化，把别的卡也一起改掉。
+    var gestureBase by remember { mutableStateOf<List<CardBox>?>(null) }
     // 拖动中卡片当前落到哪一格。用状态而不是每次现算，是为了做滞回：
     // 手指停在格线上时不会在相邻两格之间反复横跳，邻居也就不会来回抖
     var moveCell by remember { mutableStateOf(IntOffset.Zero) }
@@ -332,14 +305,7 @@ fun DayCardBoard(
     // 这一帧真正要画的布局：数据库快照 + 还没追平的乐观值。
     // 画位置、算画布高度、落库全用它——三份数据各算各的，就会在松手那一帧
     // 出现"卡片跳一下""画布缩一行把卡片裁掉半截"这类怪事。
-    val rawBoxes = packed.map { pending[boxKeyOf(it)] ?: it }
-    // 兜底：万一残留了重叠（旧版本写过的数据、写了一半的中间态），画之前先整理一遍。
-    // "屏幕永远不出现两张压在一起的卡"这条，比省这一次计算重要。
-    val effective = if (CardBoard.hasOverlap(rawBoxes)) {
-        CardBoard.arrange(rawBoxes, rawBoxes.first())
-    } else {
-        rawBoxes
-    }
+    val effective = packed.map { pending[boxKeyOf(it)] ?: it }
 
     // 松手后的归位补间：dragX/dragY 里存的是「格子位置与手指位置的差」，
     // 用弹簧把它推到 0，卡片的视觉位置就从手指处滑进格子。
@@ -382,15 +348,17 @@ fun DayCardBoard(
     // 实时整理：拿当前占位当锚点跑一遍 [CardBoard.arrange]，被压到的卡当场挪到最近空位。
     // 移动、缩放两种手势都走这条路——和手机桌面一样，邻居不用等松手就让开。
     // 这份结果既用于渲染，也**原样**用于落库（见 settle）。
+    // 手势期间以手势开始时的布局为基准，手势之外就是当前布局
+    val baseline = gestureBase ?: effective
     val previewArrangement: List<CardBox>? = previewAnchor?.let {
-        CardBoard.arrange(effective, it)
+        CardBoard.arrange(baseline, it)
     }
     val pushed: Map<String, CardBox> = if (previewArrangement == null || previewAnchor == null) {
         emptyMap()
     } else {
         val anchorId = boxKeyOf(previewAnchor)
         val out = HashMap<String, CardBox>()
-        effective.forEachIndexed { index, box ->
+        baseline.forEachIndexed { index, box ->
             val id = boxKeyOf(box)
             if (id != anchorId && previewArrangement[index] != box) {
                 out[id] = previewArrangement[index]
@@ -419,9 +387,9 @@ fun DayCardBoard(
         ) {
             previewArrangement
         } else {
-            CardBoard.arrange(effective, anchor)
+            CardBoard.arrange(baseline, anchor)
         }
-        val changed = arranged.indices.filter { arranged[it] != effective[it] }
+        val changed = arranged.indices.filter { arranged[it] != baseline[it] }
         if (changed.isEmpty()) return
         val anchorId = boxKeyOf(anchor)
         // 先写被挤走的卡，最后写锚点卡：锚点拿到最新时间戳，整理完仍在最上层
@@ -436,6 +404,7 @@ fun DayCardBoard(
         // 缩放手势优先：手柄已经开拖了就别再被卡身的长按接管
         if (gesture == BoardGesture.RESIZE) return
         settlingKey = null
+        gestureBase = effective
         foregroundKey = boxKeyOf(box)
         activeKey = boxKeyOf(box)
         gesture = BoardGesture.MOVE
@@ -450,6 +419,7 @@ fun DayCardBoard(
         if (manageMode) return
         if (gesture == BoardGesture.MOVE && activeKey != null) return
         settlingKey = null
+        gestureBase = effective
         foregroundKey = boxKeyOf(box)
         activeKey = boxKeyOf(box)
         gesture = BoardGesture.RESIZE
@@ -510,6 +480,7 @@ fun DayCardBoard(
     }
 
     fun resetGesture() {
+        gestureBase = null
         activeKey = null
         gesture = BoardGesture.NONE
         activeStart = null

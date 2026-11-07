@@ -301,6 +301,36 @@ class CardBoardTest {
     }
 
     @Test
+    fun pack_neverReturnsOverlappingCards() {
+        // 历史数据里可能有两张卡被摆在同一个格子（旧版本允许手工叠放）。
+        // pack 之后必须已经不重叠，否则后面每次整理都在一个坏局面上算。
+        val cards = listOf(
+            card(1, 2, 2, x = 0, y = 0),
+            card(2, 2, 2, x = 0, y = 0),
+            card(3, 1, 2, x = 2, y = 0)
+        )
+        val result = CardBoard.pack(cards)
+        assertFalse(CardBoard.hasOverlap(result))
+        assertEquals(cards[0], result[0])
+    }
+
+    @Test
+    fun arrange_droppingIntoEmptySpaceMovesNobodyElse() {
+        // 用户最常见的一句抱怨："我就挪到空白地方，别人怎么动了"
+        val board = listOf(
+            card(1, 2, 2, x = 0, y = 0),
+            card(2, 2, 2, x = 2, y = 0),
+            card(3, 2, 2, x = 0, y = 2)
+        )
+        val anchor = card(1, 1, 1, x = 3, y = 5)
+        val result = CardBoard.arrange(board, anchor)
+        assertEquals(CardBoard.normalize(anchor), result[0])
+        for (i in 1 until board.size) {
+            assertEquals("第 $i 张卡不该动", board[i], result[i])
+        }
+    }
+
+    @Test
     fun arrange_onlyPushesDownAndKeepsColumns() {
         // 被挤的卡永远留在自己那一列、只往下走——不会横向乱窜
         val cards = listOf(

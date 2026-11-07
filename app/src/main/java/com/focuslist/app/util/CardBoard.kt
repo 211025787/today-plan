@@ -141,7 +141,24 @@ object CardBoard {
             result[index] = card.copy(x = placedX, y = placedY)
             occupy(placedX, placedY, card.cols, card.rows)
         }
-        return result
+
+        // 最后再保证一次「整块板子不重叠」：历史数据里可能有两张卡被摆在同一个格子上
+        // （旧版本允许手工叠放），那会让后面的每次整理都拿一个已经重叠的局面去算。
+        // 这里按顺序把后到的卡往下让，输出的布局永远不重叠。
+        val settled = ArrayList<CardBox>(result.size)
+        result.forEach { card ->
+            var y = card.y
+            while (true) {
+                val candidate = card.copy(y = y)
+                val hits = settled.filter { overlaps(candidate, it) }
+                if (hits.isEmpty()) {
+                    settled.add(candidate)
+                    return@forEach
+                }
+                y = hits.maxOf { it.y + it.rows }
+            }
+        }
+        return settled
     }
 
     /**
