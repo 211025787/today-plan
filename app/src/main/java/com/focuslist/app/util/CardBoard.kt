@@ -326,4 +326,77 @@ object CardBoard {
             y = base.y.coerceAtLeast(0)
         )
     }
+
+    /**
+     * 在当前位置、保持 [rows] 行不变的前提下，最多能占几列（不会压到别的卡片）。
+     *
+     * 缩放时用它做实时上限：拖到边界就停住，卡片不会盖到邻居身上。
+     *
+     * @param cards 当前全部卡片（含自己）
+     * @param card 正在缩放的卡片
+     * @param rows 当前行数
+     * @param limit 期望的列数上限（默认 3，即允许的最大跨列）
+     * @return 放得下的最大列数，至少 1
+     */
+    fun maxFitCols(cards: List<CardBox>, card: CardBox, rows: Int, limit: Int = 3): Int {
+        val base = normalize(card)
+        val max = limit.coerceIn(1, COLUMNS - base.x)
+        for (cols in max downTo 1) {
+            if (fitsAt(cards, base.copy(cols = cols, rows = rows))) return cols
+        }
+        return 1
+    }
+
+    /**
+     * 在当前位置、保持 [cols] 列不变的前提下，最多能占几行（不会压到别的卡片）。
+     *
+     * @param cards 当前全部卡片（含自己）
+     * @param card 正在缩放的卡片
+     * @param cols 当前列数
+     * @param limit 期望的行数上限（默认 3）
+     * @return 放得下的最大行数，至少 1
+     */
+    fun maxFitRows(cards: List<CardBox>, card: CardBox, cols: Int, limit: Int = 3): Int {
+        val base = normalize(card)
+        val max = limit.coerceAtLeast(1)
+        for (rows in max downTo 1) {
+            if (fitsAt(cards, base.copy(cols = cols, rows = rows))) return rows
+        }
+        return 1
+    }
+
+    /**
+     * 挑一个离期望宽高最近、又不会压到别人的规格。
+     *
+     * 松手时用它做最终吸附：先按与期望值的距离排序，再逐个验证是否放得下；
+     * 在当前位置一个都放不下时**保持原规格**——宁可不变，也不叠上去。
+     *
+     * @param cards 当前全部卡片（含自己）
+     * @param card 正在缩放的卡片
+     * @param desiredCols 期望列数（可带小数）
+     * @param desiredRows 期望行数（可带小数）
+     * @return 吸附到的规格
+     */
+    fun fitShapeAt(
+        cards: List<CardBox>,
+        card: CardBox,
+        desiredCols: Float,
+        desiredRows: Float
+    ): CardShape {
+        val base = normalize(card)
+        val dc = desiredCols.coerceIn(1f, MAX_SPAN.toFloat())
+        val dr = desiredRows.coerceIn(1f, MAX_SPAN.toFloat())
+        return ALLOWED_SHAPES
+            // 超出右边界的规格直接排除（缩放不挪位置，只在原位长）
+            .filter { it.cols <= COLUMNS - base.x }
+            .sortedBy { shape ->
+                val dx = shape.cols - dc
+                val dy = shape.rows - dr
+                dx * dx + dy * dy
+            }
+            .firstOrNull { shape ->
+                fitsAt(cards, base.copy(cols = shape.cols, rows = shape.rows))
+            }
+            ?: CardShape(base.cols, base.rows)
+    }
 }

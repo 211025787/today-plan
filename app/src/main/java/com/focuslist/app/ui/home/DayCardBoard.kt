@@ -31,6 +31,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -190,6 +192,11 @@ fun DayCardBoard(
     val planBoxes = packed.take(plans.size)
     val tripBoxes = packed.drop(plans.size)
 
+    // 松手落库到列表重新发射之间有一小段空窗。这期间如果直接按 packed 画，
+    // 卡片会先弹回原位、再跳到新位置——看起来就像"拖了却没放对"。
+    // 用一条乐观值顶住，等 packed 里出现同样的坐标再撤掉。
+    var pending by remember { mutableStateOf<Pair<String, CardBox>?>(null) }
+
     // 旧卡 / 新卡第一次出现：自动补位并写回，从此位置固定；
     // 已有的非六种规格也一并写回最近的合法档位。
     val autoPlaced = remember { mutableSetOf<String>() }
@@ -220,6 +227,47 @@ fun DayCardBoard(
                 }
             }
         }
+
+        // 老数据修复：早期缩放不检查重叠，可能已经有卡叠在一起。
+        // 按当前顺序逐张"落位"，后到的卡若压到前面的卡就挪到最近空位，一次修好；
+        // 不修的话，这些卡既缩不大（找不到不重叠的规格），也会继续出现"点错卡"。
+        val settled = mutableListOf<CardBox>()
+        plans.forEachIndexed { index, data ->
+            val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
+            val target = if (CardBoard.fitsAt(settled, box)) {
+                box
+            } else {
+                CardBoard.resolveMove(settled, box, box.x, box.y)
+            }
+            if (target != box && autoPlaced.add("fix-p${data.plan.id}")) {
+                onPlanLayout(
+                    data.plan.id, target.cols, target.rows, target.x, target.y, data.plan.cardZ
+                )
+            }
+            settled.add(target)
+        }
+        trips.forEachIndexed { index, data ->
+            val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
+            val target = if (CardBoard.fitsAt(settled, box)) {
+                box
+            } else {
+                CardBoard.resolveMove(settled, box, box.x, box.y)
+            }
+            if (target != box && autoPlaced.add("fix-t${data.trip.id}")) {
+                onTripLayout(
+                    data.trip.id, target.cols, target.rows, target.x, target.y, data.trip.cardZ
+                )
+            }
+            settled.add(target)
+        }
+
+        // packed 里已经出现同样的坐标，乐观值可以撤了
+        pending?.let { (key, want) ->
+            val actual = (planBoxes + tripBoxes).firstOrNull {
+                (if (it.trip) "t${it.key}" else "p${it.key}") == key
+            }
+            if (actual == want) pending = null
+        }
     }
 
     // 当前手势：只允许一张卡同时被拖动/缩放
@@ -228,7 +276,11 @@ fun DayCardBoard(
     var activeStart by remember { mutableStateOf<CardBox?>(null) }
     var dragX by remember { mutableFloatStateOf(0f) }
     var dragY by remember { mutableFloatStateOf(0f) }
-    // 缩放中的实时像素宽高：跟手连续变化，松手才吸附到六种规格
+    // 拖动中的落点（格子坐标）：只接受不重叠的格子，卡片按格吸附着走。
+    // 手指划过别人的卡时落点保持在上一格，所以整个拖动过程都不会叠上去。
+    var targetX by remember { mutableIntStateOf(0) }
+    var targetY by remember { mutableIntStateOf(0) }
+    // 缩放中的实时像素宽高：跟手连续变化，但被「到邻居为止」的空间夹住
     var liveWidthPx by remember { mutableFloatStateOf(0f) }
     var liveHeightPx by remember { mutableFloatStateOf(0f) }
     var startWidthPx by remember { mutableFloatStateOf(0f) }
@@ -237,7 +289,9 @@ fun DayCardBoard(
     var foregroundKey by remember { mutableStateOf<String?>(null) }
     val spacingPx = with(density) { spacing.toPx() }
 
+
     fun commit(box: CardBox, z: Long) {
+        pending = (if (box.trip) "t${box.key}" else "p${box.key}") to box
         if (box.trip) {
             onTripLayout(box.key, box.cols, box.rows, box.x, box.y, z)
         } else {
@@ -251,6 +305,8 @@ fun DayCardBoard(
         activeKey = if (box.trip) "t${box.key}" else "p${box.key}"
         gesture = BoardGesture.MOVE
         activeStart = box
+        targetX = box.x
+        targetY = box.y
         dragX = 0f
         dragY = 0f
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -275,6 +331,17 @@ fun DayCardBoard(
         if (gesture != BoardGesture.MOVE) return
         dragX += dx
         dragY += dy
+        val start = activeStart ?: return
+        val nx = ((start.x * stepPx + dragX) / stepPx).roundToInt()
+            .coerceIn(0, CardBoard.COLUMNS - start.cols)
+        val ny = ((start.y * stepPx + dragY) / stepPx).roundToInt().coerceAtLeast(0)
+        if (nx == targetX && ny == targetY) return
+        // 只往空位走：目标格压到别人时保持上一个合法格。
+        // 拖过头再拖回来，落点会自然恢复，不需要额外的"吸附"补救。
+        if (CardBoard.fitsAt(packed, start.copy(x = nx, y = ny))) {
+            targetX = nx
+            targetY = ny
+        }
     }
 
     fun resizeBy(dx: Float, dy: Float) {
@@ -283,12 +350,16 @@ fun DayCardBoard(
         dragY += dy
         val start = activeStart ?: return
         // 连续跟手：卡片的右下角跟着手指走，不做整格吸附；
-        // 最小 1×1，最大 3 列 / 3 行，右边界限制在当前行剩余列数内。
-        val minWidth = stepPx - spacingPx
-        val maxWidth = minOf(3, CardBoard.COLUMNS - start.x) * stepPx - spacingPx
-        val maxHeight = 3 * stepPx - spacingPx
-        liveWidthPx = (startWidthPx + dragX).coerceIn(minWidth, maxWidth)
-        liveHeightPx = (startHeightPx + dragY).coerceIn(minWidth, maxHeight)
+        // 但上限是「到邻居为止」——拖到贴住邻居就停住，绝不会盖上去。
+        val minSize = stepPx - spacingPx
+        val maxCols = CardBoard.maxFitCols(
+            packed, start, start.rows, limit = minOf(3, CardBoard.COLUMNS - start.x)
+        )
+        val maxRows = CardBoard.maxFitRows(packed, start, start.cols)
+        val maxWidth = maxCols * stepPx - spacingPx
+        val maxHeight = maxRows * stepPx - spacingPx
+        liveWidthPx = (startWidthPx + dragX).coerceIn(minSize, maxWidth)
+        liveHeightPx = (startHeightPx + dragY).coerceIn(minSize, maxHeight)
     }
 
     fun resetGesture() {
@@ -304,11 +375,8 @@ fun DayCardBoard(
     fun endMove() {
         val start = activeStart
         if (gesture == BoardGesture.MOVE && start != null) {
-            val nx = ((start.x * stepPx + dragX) / stepPx).roundToInt()
-                .coerceIn(0, CardBoard.COLUMNS - start.cols)
-            val ny = ((start.y * stepPx + dragY) / stepPx).roundToInt().coerceAtLeast(0)
-            // 松手时如果目标压到别人，自动吸到最近的空位
-            commit(CardBoard.resolveMove(packed, start, nx, ny), System.currentTimeMillis())
+            // 落点在整个拖动过程中已经保证不重叠，直接落库
+            commit(start.copy(x = targetX, y = targetY), System.currentTimeMillis())
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
         resetGesture()
@@ -317,10 +385,11 @@ fun DayCardBoard(
     fun endResize() {
         val start = activeStart
         if (gesture == BoardGesture.RESIZE && start != null) {
-            // 松手才把实时宽高吸附到允许的六种规格
+            // 松手才把实时宽高吸附到允许的六种规格；
+            // 吸附时再验一次不重叠，放不下的档位会被跳过（最坏保持原样）
             val cols = (liveWidthPx + spacingPx) / stepPx
             val rows = (liveHeightPx + spacingPx) / stepPx
-            val shape = CardBoard.nearestShape(cols, rows)
+            val shape = CardBoard.fitShapeAt(packed, start, cols, rows)
             commit(CardBoard.resizeToAllowed(start, shape), System.currentTimeMillis())
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
@@ -354,115 +423,125 @@ fun DayCardBoard(
             val data = plans[index]
             val box = planBoxes.getOrNull(index) ?: return@forEach
             val key = "p${data.plan.id}"
+            // 刚落库、列表还没刷新时先用乐观值顶上，避免松手后闪一下原位
+            val shown = pending?.takeIf { it.first == key }?.second ?: box
             val active = activeKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
             val faceCols = if (resizing) {
                 ((liveWidthPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
             } else {
-                box.cols
+                shown.cols
             }
             val faceRows = if (resizing) {
                 ((liveHeightPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
             } else {
-                box.rows
+                shown.rows
             }
-            val xPx = box.x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
-            val yPx = box.y * stepPx + if (active && gesture == BoardGesture.MOVE) dragY else 0f
+            val xPx = (if (active && gesture == BoardGesture.MOVE) targetX else shown.x) * stepPx
+            val yPx = (if (active && gesture == BoardGesture.MOVE) targetY else shown.y) * stepPx
             val w = if (resizing) {
                 with(density) { liveWidthPx.toDp() }
             } else {
-                cellWidth * box.cols + spacing * (box.cols - 1)
+                cellWidth * shown.cols + spacing * (shown.cols - 1)
             }
             val h = if (resizing) {
                 with(density) { liveHeightPx.toDp() }
             } else {
-                cellWidth * box.rows + spacing * (box.rows - 1)
+                cellWidth * shown.rows + spacing * (shown.rows - 1)
             }
-            PlanBoardCard(
-                data = data,
-                cols = faceCols,
-                rows = faceRows,
-                width = w,
-                height = h,
-                manageMode = manageMode,
-                selected = data.plan.id in selectedPlanIds,
-                active = active,
-                onToggleTimer = { onToggleTimer(data.plan.id) },
-                onClick = {
-                    foregroundKey = key
-                    if (manageMode) onToggleSelect(data.plan.id) else onPlanClick(data.plan)
-                },
-                onLongClick = {
-                    foregroundKey = key
-                    if (manageMode) onToggleSelect(data.plan.id) else onPlanLongClick(data.plan)
-                },
-                onMoveStart = { startMove(box) },
-                onMove = ::moveBy,
-                onMoveEnd = ::endMove,
-                onMoveCancel = ::resetGesture,
-                onResizeStart = { startResize(box) },
-                onResize = ::resizeBy,
-                onResizeEnd = ::endResize,
-                onResizeCancel = ::resetGesture,
-                modifier = Modifier
-                    .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
-                    .size(w, h)
-                    .zIndex(if (active) 10f else if (foregroundKey == key) 5f else 1f)
-            )
+            // key()：卡片的组合身份必须跟着 id 走。少了它，置顶（cardZ 变化）会改变
+            // forEach 顺序，Compose 按位置复用节点，手势节点就可能挂到另一张卡上——
+            // 表现正是「点了这张卡的右下角，缩放的却是别的卡」。
+            key(key) {
+                PlanBoardCard(
+                    data = data,
+                    cols = faceCols,
+                    rows = faceRows,
+                    width = w,
+                    height = h,
+                    manageMode = manageMode,
+                    selected = data.plan.id in selectedPlanIds,
+                    active = active,
+                    onToggleTimer = { onToggleTimer(data.plan.id) },
+                    onClick = {
+                        foregroundKey = key
+                        if (manageMode) onToggleSelect(data.plan.id) else onPlanClick(data.plan)
+                    },
+                    onLongClick = {
+                        foregroundKey = key
+                        if (manageMode) onToggleSelect(data.plan.id) else onPlanLongClick(data.plan)
+                    },
+                    onMoveStart = { startMove(shown) },
+                    onMove = ::moveBy,
+                    onMoveEnd = ::endMove,
+                    onMoveCancel = ::resetGesture,
+                    onResizeStart = { startResize(shown) },
+                    onResize = ::resizeBy,
+                    onResizeEnd = ::endResize,
+                    onResizeCancel = ::resetGesture,
+                    modifier = Modifier
+                        .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
+                        .size(w, h)
+                        .zIndex(if (active) 10f else if (foregroundKey == key) 5f else 1f)
+                )
+            }
         }
 
         trips.indices.sortedBy { trips[it].trip.cardZ }.forEach { index ->
             val data = trips[index]
             val box = tripBoxes.getOrNull(index) ?: return@forEach
             val key = "t${data.trip.id}"
+            val shown = pending?.takeIf { it.first == key }?.second ?: box
             val active = activeKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
             val faceCols = if (resizing) {
                 ((liveWidthPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
             } else {
-                box.cols
+                shown.cols
             }
             val faceRows = if (resizing) {
                 ((liveHeightPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
             } else {
-                box.rows
+                shown.rows
             }
-            val xPx = box.x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
-            val yPx = box.y * stepPx + if (active && gesture == BoardGesture.MOVE) dragY else 0f
+            val xPx = (if (active && gesture == BoardGesture.MOVE) targetX else shown.x) * stepPx
+            val yPx = (if (active && gesture == BoardGesture.MOVE) targetY else shown.y) * stepPx
             val w = if (resizing) {
                 with(density) { liveWidthPx.toDp() }
             } else {
-                cellWidth * box.cols + spacing * (box.cols - 1)
+                cellWidth * shown.cols + spacing * (shown.cols - 1)
             }
             val h = if (resizing) {
                 with(density) { liveHeightPx.toDp() }
             } else {
-                cellWidth * box.rows + spacing * (box.rows - 1)
+                cellWidth * shown.rows + spacing * (shown.rows - 1)
             }
-            TripBoardCard(
-                trip = data.trip,
-                cols = faceCols,
-                rows = faceRows,
-                width = w,
-                height = h,
-                active = active,
-                onClick = {
-                    foregroundKey = key
-                    onTripClick(data.trip)
-                },
-                onMoveStart = { startMove(box) },
-                onMove = ::moveBy,
-                onMoveEnd = ::endMove,
-                onMoveCancel = ::resetGesture,
-                onResizeStart = { startResize(box) },
-                onResize = ::resizeBy,
-                onResizeEnd = ::endResize,
-                onResizeCancel = ::resetGesture,
-                modifier = Modifier
-                    .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
-                    .size(w, h)
-                    .zIndex(if (active) 10f else if (foregroundKey == key) 5f else 1f)
-            )
+            key(key) {
+                TripBoardCard(
+                    trip = data.trip,
+                    cols = faceCols,
+                    rows = faceRows,
+                    width = w,
+                    height = h,
+                    active = active,
+                    onClick = {
+                        foregroundKey = key
+                        onTripClick(data.trip)
+                    },
+                    onMoveStart = { startMove(shown) },
+                    onMove = ::moveBy,
+                    onMoveEnd = ::endMove,
+                    onMoveCancel = ::resetGesture,
+                    onResizeStart = { startResize(shown) },
+                    onResize = ::resizeBy,
+                    onResizeEnd = ::endResize,
+                    onResizeCancel = ::resetGesture,
+                    modifier = Modifier
+                        .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
+                        .size(w, h)
+                        .zIndex(if (active) 10f else if (foregroundKey == key) 5f else 1f)
+                )
+            }
         }
     }
 }
@@ -1147,7 +1226,9 @@ private fun ResizeGrip(
     Box(
         contentAlignment = Alignment.BottomEnd,
         modifier = modifier
-            .size(56.dp)
+            // 只覆盖可见角标附近的一小块：56dp 时整张 1×1 卡的右下角都成了手柄，
+            // 想点卡片本身反而点不到
+            .size(40.dp)
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = {
