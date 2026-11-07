@@ -360,8 +360,25 @@ class CardBoardTest {
         assertEquals(a, result[0])
         assertEquals(CardBoard.normalize(anchor), result[1])
         assertEquals("没被碰的卡不该动", c, result[2])
-        assertEquals(0, result[3].x)
+        // 上方没空位时落到下面的新行，但仍留在自己那一列
+        assertEquals(2, result[3].x)
         assertEquals(2, result[3].y)
+    }
+
+    @Test
+    fun arrange_pushedCardPrefersItsOwnColumn() {
+        // 同一行有多个空位时，先补自己原来那一列上方的洞，别横向乱窜
+        val a = card(1, 1, 1, x = 0, y = 0)
+        val b = card(2, 1, 1, x = 3, y = 0)
+        val c = card(3, 1, 1, x = 2, y = 1)
+        val d = card(4, 1, 1, x = 1, y = 3)
+        val anchor = d.copy(x = 2, y = 1)
+        val result = CardBoard.arrange(listOf(a, b, c, d), anchor)
+        assertEquals(a, result[0])
+        assertEquals(b, result[1])
+        assertEquals(CardBoard.normalize(anchor), result[3])
+        assertEquals(2, result[2].x)
+        assertEquals(0, result[2].y)
     }
 
     @Test

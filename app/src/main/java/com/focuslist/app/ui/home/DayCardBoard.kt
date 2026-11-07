@@ -43,6 +43,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -174,6 +175,9 @@ fun DayCardBoard(
     val haptic = LocalHapticFeedback.current
     val step = cellWidth + spacing
     val stepPx = with(density) { step.toPx() }
+    // 落库回调也要能从旧组合的函数里读到最新值
+    val planLayoutNow = rememberUpdatedState(onPlanLayout)
+    val tripLayoutNow = rememberUpdatedState(onTripLayout)
 
     // 数据库里的尺寸/坐标 → 算法占位。cardCols/cardRows 为 0 的旧数据用 cardSize 兜底；
     // 超出 1..4 的脏数据由 pack 里的 normalize 夹回去。
@@ -287,18 +291,21 @@ fun DayCardBoard(
 
     fun boxKeyOf(box: CardBox): String = if (box.trip) "t${box.key}" else "p${box.key}"
 
-    fun zOf(box: CardBox): Long = if (box.trip) {
-        trips.firstOrNull { it.trip.id == box.key }?.trip?.cardZ ?: 0L
-    } else {
-        plans.firstOrNull { it.plan.id == box.key }?.plan?.cardZ ?: 0L
+    // 卡片 z 序同样放进 State：旧组合的函数不该按旧 cardZ 写回
+    val zNow = remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    SideEffect {
+        zNow.value =
+            plans.associate { "p${it.plan.id}" to it.plan.cardZ } +
+                trips.associate { "t${it.trip.id}" to it.trip.cardZ }
     }
+    fun zOf(box: CardBox): Long = zNow.value[boxKeyOf(box)] ?: 0L
 
     fun commitOne(box: CardBox, z: Long) {
         pending = pending + (boxKeyOf(box) to box)
         if (box.trip) {
-            onTripLayout(box.key, box.cols, box.rows, box.x, box.y, z)
+            tripLayoutNow.value(box.key, box.cols, box.rows, box.x, box.y, z)
         } else {
-            onPlanLayout(box.key, box.cols, box.rows, box.x, box.y, z)
+            planLayoutNow.value(box.key, box.cols, box.rows, box.x, box.y, z)
         }
     }
 
@@ -306,6 +313,13 @@ fun DayCardBoard(
     // 画位置、算画布高度、落库全用它——三份数据各算各的，就会在松手那一帧
     // 出现"卡片跳一下""画布缩一行把卡片裁掉半截"这类怪事。
     val effective = packed.map { pending[boxKeyOf(it)] ?: it }
+    // 手势回调不一定来自最新组合：Compose 可能跳过中间那层卡片的重组合，
+    // pointerInput 里留下的仍是旧组合创建的函数。State 委托跨组合共享、读到的是
+    // 最新值，但普通 val 是那一帧的死快照——把两者混用就会出现"松手后按旧布局
+    // 重新算一遍"，落库结果和屏幕上预览的不一样。所以把有效布局也放进 State，
+    // 所有手势回调一律从 State 取。
+    val effectiveNow = remember { mutableStateOf(emptyList<CardBox>()) }
+    SideEffect { effectiveNow.value = effective }
 
     // 松手后的归位补间：dragX/dragY 里存的是「格子位置与手指位置的差」，
     // 用弹簧把它推到 0，卡片的视觉位置就从手指处滑进格子。
@@ -368,28 +382,23 @@ fun DayCardBoard(
     }
 
     /**
-     * 松手收尾：把**屏幕上已经排好的那一版**写进数据库，不再重算。
+     * 松手收尾：以**手势开始时锁定的那一版布局**为唯一基准，按最终锚点重排一次。
      *
-     * 重算看着更"干净"，实际是 bug 源：落库是逐张写，数据库会在中途发射一次
-     * 「A 已挪走、B 还没挪」的中间态，拿它重算就会得到另一个结果——
-     * 表现就是"我明明放在这里，它自己跑到下一行"。
-     * 只有预览不可用（理论上不会发生）时才退回即时计算。
+     * 以前这里优先用组合里的 `previewArrangement`，看着最省事，实际是 bug 源：
+     * 手势回调可能来自旧组合，`previewArrangement` / `baseline` 是旧帧快照，
+     * 于是松手按旧布局又算一遍，落库结果和屏幕上预览的不一致——
+     * 表现就是"我明明放这儿，别的卡却跳到另一行"。
+     *
+     * `gestureBase` 和 `effectiveNow` 都是 State，任何组合创建的函数读到的都是
+     * 当前值；而 `arrange` 是纯函数，同一份基准 + 同一个锚点必然得到预览那一版，
+     * 所以这里直接重算，既确定又和屏幕一致。落库逐张写产生的中间态也影响不到它。
      *
      * @param anchor 刚被拖动 / 缩放过的卡片（已带最终位置与规格）
      */
     fun settle(anchor: CardBox) {
-        val seen = previewAnchor
-        val arranged = if (
-            previewArrangement != null && seen != null &&
-            boxKeyOf(seen) == boxKeyOf(anchor) &&
-            seen.cols == anchor.cols && seen.rows == anchor.rows &&
-            seen.x == anchor.x && seen.y == anchor.y
-        ) {
-            previewArrangement
-        } else {
-            CardBoard.arrange(baseline, anchor)
-        }
-        val changed = arranged.indices.filter { arranged[it] != baseline[it] }
+        val base = gestureBase ?: effectiveNow.value
+        val arranged = CardBoard.arrange(base, anchor)
+        val changed = arranged.indices.filter { arranged[it] != base[it] }
         if (changed.isEmpty()) return
         val anchorId = boxKeyOf(anchor)
         // 先写被挤走的卡，最后写锚点卡：锚点拿到最新时间戳，整理完仍在最上层
@@ -404,7 +413,7 @@ fun DayCardBoard(
         // 缩放手势优先：手柄已经开拖了就别再被卡身的长按接管
         if (gesture == BoardGesture.RESIZE) return
         settlingKey = null
-        gestureBase = effective
+        gestureBase = effectiveNow.value
         foregroundKey = boxKeyOf(box)
         activeKey = boxKeyOf(box)
         gesture = BoardGesture.MOVE
@@ -419,7 +428,7 @@ fun DayCardBoard(
         if (manageMode) return
         if (gesture == BoardGesture.MOVE && activeKey != null) return
         settlingKey = null
-        gestureBase = effective
+        gestureBase = effectiveNow.value
         foregroundKey = boxKeyOf(box)
         activeKey = boxKeyOf(box)
         gesture = BoardGesture.RESIZE

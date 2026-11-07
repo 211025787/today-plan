@@ -374,8 +374,11 @@ object CardBoard {
             var spot: CardBox? = null
             var y = 0
             val maxX = (COLUMNS - base.cols).coerceAtLeast(0)
+            // 同一行里先试原本那一列，再往两边找：被挤的卡尽量只上下移动，
+            // 不会从最右列瞬间横跳到最左列（那看着就像"自己跑掉了"）。
+            val columns = (0..maxX).sortedWith(compareBy({ abs(it - base.x) }, { it }))
             while (spot == null) {
-                for (x in 0..maxX) {
+                for (x in columns) {
                     val candidate = base.copy(x = x, y = y)
                     if (placed.values.none { overlaps(candidate, it) }) {
                         spot = candidate
