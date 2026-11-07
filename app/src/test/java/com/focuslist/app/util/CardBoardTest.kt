@@ -263,6 +263,20 @@ class CardBoardTest {
     }
 
     @Test
+    fun arrange_doesNotCascadeIntoUntouchedCards() {
+        // 锚点压住 hit。hit 最近的空位正好是 untouched 的家——
+        // 让位逻辑若只看"已经落位的那几张"，hit 会搬进 untouched 的家，
+        // 再把 untouched 挤走，用户看到的就是"我没碰的卡也乱跳"。
+        val anchor = card(1, 2, 2, x = 0, y = 2)
+        val hit = card(2, 2, 2, x = 1, y = 2)
+        val untouched = card(3, 2, 2, x = 2, y = 2)
+        val result = CardBoard.arrange(listOf(anchor, hit, untouched), anchor)
+        assertEquals(untouched, result[2])
+        assertFalse(CardBoard.overlaps(result[0], result[1]))
+        assertFalse(CardBoard.overlaps(result[1], result[2]))
+    }
+
+    @Test
     fun arrange_neverChangesCardSize() {
         // 整理只挪位置，任何一张卡的宽高都必须原样保留——
         // 用户看到的"卡片突然变小"如果真发生了，只能来自这里被改坏

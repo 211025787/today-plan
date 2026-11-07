@@ -12,7 +12,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -63,7 +62,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -439,6 +437,8 @@ fun DayCardBoard(
 
     fun startMove(box: CardBox) {
         if (manageMode) return
+        // 缩放手势优先：手柄已经开拖了就别再被卡身的长按接管
+        if (gesture == BoardGesture.RESIZE) return
         settlingKey = null
         foregroundKey = boxKeyOf(box)
         activeKey = boxKeyOf(box)
@@ -452,6 +452,7 @@ fun DayCardBoard(
 
     fun startResize(box: CardBox) {
         if (manageMode) return
+        if (gesture == BoardGesture.MOVE && activeKey != null) return
         settlingKey = null
         foregroundKey = boxKeyOf(box)
         activeKey = boxKeyOf(box)
@@ -520,6 +521,16 @@ fun DayCardBoard(
         dragY = 0f
         liveWidthPx = 0f
         liveHeightPx = 0f
+    }
+
+    /** 只有当前确实是移动手势时才收尾：别把正在进行的缩放一起清掉 */
+    fun cancelMove() {
+        if (gesture == BoardGesture.MOVE) resetGesture()
+    }
+
+    /** 同上，缩放版本 */
+    fun cancelResize() {
+        if (gesture == BoardGesture.RESIZE) resetGesture()
     }
 
     fun endMove() {
@@ -664,11 +675,11 @@ fun DayCardBoard(
                     onMoveStart = { startMove(shown) },
                     onMove = ::moveBy,
                     onMoveEnd = ::endMove,
-                    onMoveCancel = ::resetGesture,
+                    onMoveCancel = ::cancelMove,
                     onResizeStart = { startResize(shown) },
                     onResize = ::resizeBy,
                     onResizeEnd = ::endResize,
-                    onResizeCancel = ::resetGesture,
+                    onResizeCancel = ::cancelResize,
                     modifier = Modifier
                         .offset { cardOffset }
                         .size(animW, animH)
@@ -724,11 +735,11 @@ fun DayCardBoard(
                     onMoveStart = { startMove(shown) },
                     onMove = ::moveBy,
                     onMoveEnd = ::endMove,
-                    onMoveCancel = ::resetGesture,
+                    onMoveCancel = ::cancelMove,
                     onResizeStart = { startResize(shown) },
                     onResize = ::resizeBy,
                     onResizeEnd = ::endResize,
-                    onResizeCancel = ::resetGesture,
+                    onResizeCancel = ::cancelResize,
                     modifier = Modifier
                         .offset { cardOffset }
                         .size(animW, animH)
@@ -1487,18 +1498,30 @@ private fun ResizeGrip(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
                     var started = false
-                    val completed = drag(down.id) { change ->
-                        val delta = change.positionChange()
-                        change.consume()
-                        // 真移动了才进入缩放态：轻点一下手柄不该闪出网格
-                        if (!started) {
-                            started = true
-                            startNow.value()
+                    var lifted = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            lifted = true
+                            break
                         }
-                        dragNow.value(delta.x, delta.y)
+                        // 直接用坐标差：positionChange() 在事件被别人消费过之后会返回 0，
+                        // 一旦上游有谁碰过这个事件，手柄就再也拖不动了。
+                        val dx = change.position.x - change.previousPosition.x
+                        val dy = change.position.y - change.previousPosition.y
+                        if (dx != 0f || dy != 0f) {
+                            // 真移动了才进入缩放态：轻点一下手柄不该闪出网格
+                            if (!started) {
+                                started = true
+                                startNow.value()
+                            }
+                            change.consume()
+                            dragNow.value(dx, dy)
+                        }
                     }
                     if (started) {
-                        if (completed) endNow.value() else cancelNow.value()
+                        if (lifted) endNow.value() else cancelNow.value()
                     }
                 }
             }

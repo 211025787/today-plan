@@ -310,8 +310,9 @@ object CardBoard {
     fun arrange(cards: List<CardBox>, anchor: CardBox): List<CardBox> {
         if (cards.isEmpty()) return emptyList()
         val anchorId = anchor.trip to anchor.key
-        val placed = mutableListOf(anchor)
         val resolved = HashMap<Pair<Boolean, Long>, CardBox>()
+        cards.forEach { resolved[it.trip to it.key] = normalize(it) }
+        resolved[anchorId] = normalize(anchor)
 
         // 先上后下、先左后右：位置靠前的卡优先留在原地，后面的被挤走
         val order = cards.indices
@@ -320,18 +321,19 @@ object CardBoard {
 
         order.forEach { index ->
             val card = normalize(cards[index])
-            val target = if (fitsAt(placed, card)) {
+            // 判断"这里有没有人"要看**整块板子**：已经让过位的卡用新位置，
+            // 还没轮到的卡用原位置。只看已经落位的那几张的话，被挤走的卡会落到
+            // 一张还没处理的卡身上，再把那张卡也挤走——连锁反应，
+            // 用户看到的就是"我没碰的卡也乱跳"。
+            val board = cards.mapNotNull { resolved[it.trip to it.key] }
+            val target = if (fitsAt(board, card)) {
                 card
             } else {
-                resolveMove(placed, card, card.x, card.y)
+                resolveMove(board, card, card.x, card.y)
             }
-            placed.add(target)
             resolved[card.trip to card.key] = target
         }
 
-        return cards.mapIndexed { index, card ->
-            if ((card.trip to card.key) == anchorId) normalize(anchor)
-            else resolved[card.trip to card.key] ?: card
-        }
+        return cards.map { resolved[it.trip to it.key] ?: it }
     }
 }
