@@ -275,6 +275,28 @@ class CardBoardTest {
     }
 
     @Test
+    fun snapCell_keepsCurrentWhenHoveringOnGridLine() {
+        // 手指停在格线上（0.5 格处）不该换格，否则邻居会被反复挤开又退回
+        assertEquals(0, CardBoard.snapCell(0, 0.5f))
+        assertEquals(0, CardBoard.snapCell(0, -0.5f))
+        assertEquals(1, CardBoard.snapCell(1, 1.55f))
+    }
+
+    @Test
+    fun snapCell_switchesOncePastThreshold() {
+        assertEquals(1, CardBoard.snapCell(0, 0.61f))
+        assertEquals(0, CardBoard.snapCell(1, 0.39f))
+        assertEquals(3, CardBoard.snapCell(0, 2.8f))
+    }
+
+    @Test
+    fun snapCell_thresholdIsConfigurable() {
+        // 阈值调小就更容易换格
+        assertEquals(1, CardBoard.snapCell(0, 0.5f, threshold = 0.4f))
+        assertEquals(0, CardBoard.snapCell(0, 0.9f, threshold = 0.95f))
+    }
+
+    @Test
     fun arrange_afterGrowthNothingOverlaps() {
         // 照搬用户截图里的那一局面：箍点长高后压住了右边的大卡
         val anchor = card(1, 1, 3, x = 2, y = 0)

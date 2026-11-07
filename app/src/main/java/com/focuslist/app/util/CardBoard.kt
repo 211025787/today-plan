@@ -1,5 +1,6 @@
 package com.focuslist.app.util
 
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -243,7 +244,7 @@ object CardBoard {
             for (x in 0..(COLUMNS - base.cols)) {
                 val candidate = base.copy(x = x, y = y, cols = base.cols, rows = base.rows)
                 if (!fitsAt(cards, candidate)) continue
-                val score = kotlin.math.abs(x - target.x) + kotlin.math.abs(y - target.y)
+                val score = abs(x - target.x) + abs(y - target.y)
                 if (score < bestScore) {
                     bestScore = score
                     best = candidate
@@ -279,6 +280,21 @@ object CardBoard {
         cols = cols.roundToInt().coerceIn(1, maxCols.coerceAtLeast(1)),
         rows = rows.roundToInt().coerceIn(1, maxRows.coerceAtLeast(1))
     )
+
+    /**
+     * 拖动时卡片落到哪一格：带滞回的取整。
+     *
+     * 直接用 round 的话，手指停在格线上时会左右反复跳，
+     * 被推着让位的邻居就跟着抖。这里只有离开当前格中心超过 [threshold] 才换格，
+     * 阈值取 0.6 格——足够稳，又不至于让跟手感变钝。
+     *
+     * @param current 当前所在的格子
+     * @param position 手指（卡片左上角）现在的浮点位置，单位是格
+     * @param threshold 换格阈值，单位是格
+     * @return 新的格子
+     */
+    fun snapCell(current: Int, position: Float, threshold: Float = 0.6f): Int =
+        if (abs(position - current) > threshold) position.roundToInt() else current
 
     /**
      * 松手后的自动整理：锚点卡留在原地，被它压到的卡顺次挪到最近的空位。
