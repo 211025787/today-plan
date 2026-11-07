@@ -1,5 +1,7 @@
 package com.focuslist.app.util
 
+import kotlin.math.roundToInt
+
 /**
  * 日历日卡片在自由画布上的占位。
  *
@@ -24,23 +26,24 @@ data class CardBox(
 )
 
 /**
- * 卡片允许的规格（与旧版六个档位一致）。
+ * 卡片尺寸，单位是格子。
  *
  * @property cols 占列数
  * @property rows 占行数
  */
 data class CardShape(val cols: Int, val rows: Int) {
     /** 展示用标签，如 "2×2" */
-    val label: String get() = "${cols}×${rows}"
+    val label: String get() = "${cols}×$rows"
 }
 
 /**
  * 日卡片的自由排版算法。
  *
  * 关键约定：
- * - **手动摆放过的卡片位置永远不再自动移动**（resize 只钳制边界）；
- * - 只有新卡片 / 旧数据（x/y < 0）才会被补位，补位时避开所有已占格子；
- * - 允许手动把两张卡叠在一起，用户自己负责；补位不会主动叠。
+ * - 卡片尺寸就是它占的格子数（1..4），画出来的大小和占位永远一一对应——
+ *   这是「缩放时邻居实时被挤开」能对得上的前提；
+ * - 手动摆放过的卡片位置不会因为别人变化而漂移，只有 [arrange] 会挪动被压到的卡；
+ * - 任意时刻允许的最大占位是 4 列 × 4 行，x 必须满足 x + cols ≤ 4。
  *
  * 纯函数，不依赖 Compose / Android，方便单测。
  */
@@ -51,16 +54,6 @@ object CardBoard {
 
     /** 单张卡最大跨列 / 跨行 */
     const val MAX_SPAN = 4
-
-    /** 拖拽缩放最终只允许落到这六种规格 */
-    val ALLOWED_SHAPES: List<CardShape> = listOf(
-        CardShape(1, 1),
-        CardShape(1, 2),
-        CardShape(2, 1),
-        CardShape(2, 2),
-        CardShape(1, 3),
-        CardShape(3, 1)
-    )
 
     /**
      * 把列数、行数夹到合法范围；未摆放的卡片保持 -1。
@@ -265,67 +258,27 @@ object CardBoard {
     }
 
     /**
-     * 指定宽高是否是允许的六种规格。
+     * 把实时拖动的浮点尺寸吸附成格子数。
      *
-     * @param cols 列数
-     * @param rows 行数
-     * @return 是否合法
-     */
-    fun isAllowed(cols: Int, rows: Int): Boolean =
-        ALLOWED_SHAPES.any { it.cols == cols && it.rows == rows }
-
-    /**
-     * 把实时拖动得到的浮点宽高吸附到最近的允许规格。
-     *
-     * 比如拖到 2.6×1.2 会吸附到 3×1，拖到 1.4×2.4 会吸附到 1×2。
+     * 逐轴四舍五入、互不影响——横向拖动只改列、纵向只改行。
+     * 早先版本是「在六种预设里找最近的二维点」，会出现「往宽了拖反而变窄」
+     * 的怪现象，也让缩放时无法预测；这里改成独立取整。
      *
      * @param cols 实时列数（可带小数）
      * @param rows 实时行数（可带小数）
-     * @return 最近的允许规格
-     */
-    fun nearestShape(cols: Float, rows: Float): CardShape {
-        val c = cols.coerceIn(1f, MAX_SPAN.toFloat())
-        val r = rows.coerceIn(1f, MAX_SPAN.toFloat())
-        return ALLOWED_SHAPES.minBy { shape ->
-            val dc = shape.cols - c
-            val dr = shape.rows - r
-            dc * dc + dr * dr
-        }
-    }
-
-    /**
-     * 把已有的列/行归一化到允许的六种规格。
-     *
-     * 旧数据 / 之前自由拖出来的 4×1、3×2 等规格会吸附到最近的合法档位。
-     *
-     * @param cols 原列数
-     * @param rows 原行数
+     * @param maxCols 列数上限（受卡片所在列限制，最多 4）
+     * @param maxRows 行数上限
      * @return 合法规格
      */
-    fun allowedShape(cols: Int, rows: Int): CardShape {
-        val c = cols.coerceIn(1, MAX_SPAN)
-        val r = rows.coerceIn(1, MAX_SPAN)
-        return ALLOWED_SHAPES.firstOrNull { it.cols == c && it.rows == r }
-            ?: nearestShape(c.toFloat(), r.toFloat())
-    }
-
-    /**
-     * 按允许规格设置卡片大小，并把 x 收进四列内。
-     *
-     * @param card 原占位
-     * @param shape 目标规格
-     * @return 新占位
-     */
-    fun resizeToAllowed(card: CardBox, shape: CardShape): CardBox {
-        val base = normalize(card)
-        val x = base.x.coerceIn(0, COLUMNS - shape.cols)
-        return base.copy(
-            cols = shape.cols,
-            rows = shape.rows,
-            x = x,
-            y = base.y.coerceAtLeast(0)
-        )
-    }
+    fun snapShape(
+        cols: Float,
+        rows: Float,
+        maxCols: Int = COLUMNS,
+        maxRows: Int = MAX_SPAN
+    ): CardShape = CardShape(
+        cols = cols.roundToInt().coerceIn(1, maxCols.coerceAtLeast(1)),
+        rows = rows.roundToInt().coerceIn(1, maxRows.coerceAtLeast(1))
+    )
 
     /**
      * 松手后的自动整理：锚点卡留在原地，被它压到的卡顺次挪到最近的空位。

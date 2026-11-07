@@ -1,5 +1,9 @@
 package com.focuslist.app.ui.home
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateIntOffsetAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +40,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +72,7 @@ import com.focuslist.app.data.local.entity.TripEntity
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.CardBoard
 import com.focuslist.app.util.CardBox
+import com.focuslist.app.util.CardShape
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -106,8 +112,8 @@ private enum class BoardGesture { NONE, MOVE, RESIZE }
  *
  * 与原来的 `LazyVerticalGrid` 不同：
  * - 卡片坐标由数据库里的 (cardX, cardY) 决定，不再自动流式重排；
- * - 长按卡片进入拖动，松手吸附到最近的格子；
- * - 右下角手柄直接拖动改大小，不再弹「选尺寸」弹层；
+ * - 长按卡片进入拖动，松手落到最近的格子，压到的卡自动整理；
+ * - 右下角手柄拖动改大小，按格取整，被压到的卡**实时**让位（不用等松手）；
  * - 第一次打开的旧数据会自动补位并写回，之后位置不再自动变化。
  *
  * @param plans 当天生效的计划
@@ -148,21 +154,17 @@ fun DayCardBoard(
     val stepPx = with(density) { step.toPx() }
 
     // 数据库里的尺寸/坐标 → 算法占位。cardCols/cardRows 为 0 的旧数据用 cardSize 兜底；
-    // 非六种规格（例如之前拖出的 4×1 / 3×2）在这里归一化到最近的合法档位。
+    // 超出 1..4 的脏数据由 pack 里的 normalize 夹回去。
     val boxes = remember(plans, trips) {
         buildList {
             plans.forEach { data ->
                 val plan = data.plan
-                val shape = CardBoard.allowedShape(
-                    if (plan.cardCols > 0) plan.cardCols else legacyCols(plan.cardSize),
-                    if (plan.cardRows > 0) plan.cardRows else legacyRows(plan.cardSize)
-                )
                 add(
                     CardBox(
                         key = plan.id,
                         trip = false,
-                        cols = shape.cols,
-                        rows = shape.rows,
+                        cols = if (plan.cardCols > 0) plan.cardCols else legacyCols(plan.cardSize),
+                        rows = if (plan.cardRows > 0) plan.cardRows else legacyRows(plan.cardSize),
                         x = plan.cardX,
                         y = plan.cardY
                     )
@@ -170,16 +172,12 @@ fun DayCardBoard(
             }
             trips.forEach { data ->
                 val trip = data.trip
-                val shape = CardBoard.allowedShape(
-                    if (trip.cardCols > 0) trip.cardCols else legacyCols(trip.cardSize),
-                    if (trip.cardRows > 0) trip.cardRows else legacyRows(trip.cardSize)
-                )
                 add(
                     CardBox(
                         key = trip.id,
                         trip = true,
-                        cols = shape.cols,
-                        rows = shape.rows,
+                        cols = if (trip.cardCols > 0) trip.cardCols else legacyCols(trip.cardSize),
+                        rows = if (trip.cardRows > 0) trip.cardRows else legacyRows(trip.cardSize),
                         x = trip.cardX,
                         y = trip.cardY
                     )
@@ -238,7 +236,9 @@ fun DayCardBoard(
             } else {
                 CardBoard.resolveMove(settled, box, box.x, box.y)
             }
-            if (target != box && autoPlaced.add("fix-p${data.plan.id}")) {
+            // 修复标记要带上目标坐标：同一张卡在一局里可能被压到好几次
+            // （缩一次、再缩一次），只按 id 去重会让第二次起再也修不动。
+            if (target != box && autoPlaced.add("fix-p${data.plan.id}@${target.x},${target.y}")) {
                 onPlanLayout(
                     data.plan.id, target.cols, target.rows, target.x, target.y, data.plan.cardZ
                 )
@@ -252,7 +252,7 @@ fun DayCardBoard(
             } else {
                 CardBoard.resolveMove(settled, box, box.x, box.y)
             }
-            if (target != box && autoPlaced.add("fix-t${data.trip.id}")) {
+            if (target != box && autoPlaced.add("fix-t${data.trip.id}@${target.x},${target.y}")) {
                 onTripLayout(
                     data.trip.id, target.cols, target.rows, target.x, target.y, data.trip.cardZ
                 )
@@ -276,11 +276,13 @@ fun DayCardBoard(
     var activeStart by remember { mutableStateOf<CardBox?>(null) }
     var dragX by remember { mutableFloatStateOf(0f) }
     var dragY by remember { mutableFloatStateOf(0f) }
-    // 缩放中的实时像素宽高：跟手连续变化，松手才吸附到六种规格
+    // 缩放中的实时像素宽高：跟手变化，再由 resizeShape 逐轴取整成格子数
     var liveWidthPx by remember { mutableFloatStateOf(0f) }
     var liveHeightPx by remember { mutableFloatStateOf(0f) }
     var startWidthPx by remember { mutableFloatStateOf(0f) }
     var startHeightPx by remember { mutableFloatStateOf(0f) }
+    // 上一次吸附到的规格：跨格时给一次轻微触感，让「吸附」这件事有反馈
+    var lastSnap by remember { mutableStateOf(CardShape(0, 0)) }
     // 最近操作的卡片置顶：整理前先压在邻居上时，用户仍能完整看到自己刚调整的卡
     var foregroundKey by remember { mutableStateOf<String?>(null) }
     val spacingPx = with(density) { spacing.toPx() }
@@ -305,10 +307,15 @@ fun DayCardBoard(
     /**
      * 松手收尾：锚点卡落定后交给 [CardBoard.arrange] 自动整理，
      * 被它压到的卡会被挪到最近的空位——整块板子永远不会留下重叠。
+     *
+     * 基底用「乐观值优先」的当前画面，而不是数据库里的 [packed]：
+     * 缩放时屏幕上已经被挤走的卡就在这些乐观值里，跟着它整理才能做到
+     * 「松手就是眼前这个画面」，不会先弹回旧位置再挪一次。
      */
     fun settle(anchor: CardBox) {
-        val arranged = CardBoard.arrange(packed, anchor)
-        val changed = arranged.indices.filter { arranged[it] != packed[it] }
+        val base = packed.map { pending[boxKeyOf(it)] ?: it }
+        val arranged = CardBoard.arrange(base, anchor)
+        val changed = arranged.indices.filter { arranged[it] != base[it] }
         if (changed.isEmpty()) return
         val anchorId = boxKeyOf(anchor)
         // 先写被挤走的卡，最后写锚点卡：锚点拿到最新时间戳，整理完仍在最上层
@@ -316,6 +323,40 @@ fun DayCardBoard(
             .forEach { commitOne(arranged[it], zOf(arranged[it])) }
         changed.firstOrNull { boxKeyOf(arranged[it]) == anchorId }
             ?.let { commitOne(arranged[it], System.currentTimeMillis()) }
+    }
+
+    // 缩放的目标规格：按当前像素尺寸**逐轴**取整到格子（横向只改列、纵向只改行）。
+    // 卡片本体也按这个规格绘制，这样「画出来的大小」和「占的格子」永远一致——
+    // 邻居被挤开时边缘才对得齐，也不会出现半个身位的重叠。
+    val resizeBase = if (gesture == BoardGesture.RESIZE) activeStart else null
+    val resizeShape: CardShape? = resizeBase?.let { start ->
+        CardBoard.snapShape(
+            cols = (liveWidthPx + spacingPx) / stepPx,
+            rows = (liveHeightPx + spacingPx) / stepPx,
+            maxCols = CardBoard.COLUMNS - start.x,
+            maxRows = CardBoard.MAX_SPAN
+        )
+    }
+    val resizeAnchor: CardBox? = if (resizeBase != null && resizeShape != null) {
+        resizeBase.copy(cols = resizeShape.cols, rows = resizeShape.rows)
+    } else {
+        null
+    }
+    // 实时整理：拿这个规格当锚点跑一遍 [CardBoard.arrange]，被压到的卡当场挪到最近空位。
+    // 只用于渲染、不落库；松手时 [settle] 用同一套算法和同一个规格，
+    // 所以手指停在哪儿、松手就是哪儿，不会出现「松手才突然挪开」的跳变。
+    val pushed: Map<String, CardBox> = if (resizeAnchor == null) {
+        emptyMap()
+    } else {
+        val base = packed.map { pending[boxKeyOf(it)] ?: it }
+        val arranged = CardBoard.arrange(base, resizeAnchor)
+        val anchorId = boxKeyOf(resizeAnchor)
+        val out = HashMap<String, CardBox>()
+        base.forEachIndexed { index, box ->
+            val id = boxKeyOf(box)
+            if (id != anchorId && arranged[index] != box) out[id] = arranged[index]
+        }
+        out
     }
 
     fun startMove(box: CardBox) {
@@ -341,6 +382,7 @@ fun DayCardBoard(
         startHeightPx = box.rows * stepPx - spacingPx
         liveWidthPx = startWidthPx
         liveHeightPx = startHeightPx
+        lastSnap = CardShape(box.cols, box.rows)
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
     }
 
@@ -355,13 +397,23 @@ fun DayCardBoard(
         dragX += dx
         dragY += dy
         val start = activeStart ?: return
-        // 连续跟手：右下角跟着手指走，只夹在「最小 1 格、最大 3 格、不出右边界」内。
-        // 这里**不**检查邻居——盖到别人身上没关系，松手时会自动整理。
+        // 右下角完全跟手：只夹在「最小 1 格、最大 4 格、不出右边界」内。
+        // 具体落到几格由 resizeShape 取整决定，邻居会跟着立刻让位。
         val minSize = stepPx - spacingPx
-        val maxWidth = minOf(3, CardBoard.COLUMNS - start.x) * stepPx - spacingPx
-        val maxHeight = 3 * stepPx - spacingPx
+        val maxWidth = (CardBoard.COLUMNS - start.x) * stepPx - spacingPx
+        val maxHeight = CardBoard.MAX_SPAN * stepPx - spacingPx
         liveWidthPx = (startWidthPx + dragX).coerceIn(minSize, maxWidth)
         liveHeightPx = (startHeightPx + dragY).coerceIn(minSize, maxHeight)
+        val shape = CardBoard.snapShape(
+            cols = (liveWidthPx + spacingPx) / stepPx,
+            rows = (liveHeightPx + spacingPx) / stepPx,
+            maxCols = CardBoard.COLUMNS - start.x,
+            maxRows = CardBoard.MAX_SPAN
+        )
+        if (shape != lastSnap && lastSnap.cols > 0) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+        lastSnap = shape
     }
 
     fun resetGesture() {
@@ -389,24 +441,32 @@ fun DayCardBoard(
     fun endResize() {
         val start = activeStart
         if (gesture == BoardGesture.RESIZE && start != null) {
-            // 松手才把实时宽高吸附到允许的六种规格，再整理被压到的卡
-            val cols = (liveWidthPx + spacingPx) / stepPx
-            val rows = (liveHeightPx + spacingPx) / stepPx
-            val shape = CardBoard.nearestShape(cols, rows)
-            settle(CardBoard.resizeToAllowed(start, shape))
+            // 松手就按当前规格落定。占位和画出来的大小本来就一致，不再二次吸附，
+            // 因此松手瞬间卡片尺寸不会跳、被挤走的卡也不用再挪第二次。
+            val shape = CardBoard.snapShape(
+                cols = (liveWidthPx + spacingPx) / stepPx,
+                rows = (liveHeightPx + spacingPx) / stepPx,
+                maxCols = CardBoard.COLUMNS - start.x,
+                maxRows = CardBoard.MAX_SPAN
+            )
+            settle(start.copy(cols = shape.cols, rows = shape.rows))
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
         resetGesture()
     }
 
-    val activeResizeBottomPx = if (gesture == BoardGesture.RESIZE && activeStart != null) {
-        activeStart!!.y * stepPx + liveHeightPx + spacingPx
+    // 缩放时画布只需要容纳「吸附后的规格」：用连续像素算会多出一行空白，
+    // 整页高度会跟着手指呼吸
+    val activeResizeBottomPx = if (resizeShape != null && resizeBase != null) {
+        (resizeBase.y + resizeShape.rows) * stepPx
     } else {
         0f
     }
     val boardRows = maxOf(
         CardBoard.canvasRows(packed),
         ceil(activeResizeBottomPx / stepPx).toInt(),
+        // 被挤出去的卡可能落到更下面，画布得跟着长，否则会贴边被裁掉
+        pushed.values.maxOfOrNull { it.y + it.rows } ?: 0,
         1
     )
     val boardHeight = cellWidth * boardRows + spacing * (boardRows - 1)
@@ -426,32 +486,34 @@ fun DayCardBoard(
             val data = plans[index]
             val box = planBoxes.getOrNull(index) ?: return@forEach
             val key = "p${data.plan.id}"
-            // 刚落库、列表还没刷新时先用乐观值顶上，避免松手后闪一下原位
-            val shown = pending[key] ?: box
+            // 刚落库、列表还没刷新时先用乐观值顶上，避免松手后闪一下原位；
+            // 缩放中还要把「已经被挤到新位置的卡」画在预览位上
+            val shown = pushed[key] ?: pending[key] ?: box
             val active = activeKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
-            val faceCols = if (resizing) {
-                ((liveWidthPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
-            } else {
-                shown.cols
-            }
-            val faceRows = if (resizing) {
-                ((liveHeightPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
-            } else {
-                shown.rows
-            }
+            val faceCols = if (resizing) resizeShape?.cols ?: shown.cols else shown.cols
+            val faceRows = if (resizing) resizeShape?.rows ?: shown.rows else shown.rows
             val xPx = shown.x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
             val yPx = shown.y * stepPx + if (active && gesture == BoardGesture.MOVE) dragY else 0f
-            val w = if (resizing) {
-                with(density) { liveWidthPx.toDp() }
-            } else {
-                cellWidth * shown.cols + spacing * (shown.cols - 1)
-            }
-            val h = if (resizing) {
-                with(density) { liveHeightPx.toDp() }
-            } else {
-                cellWidth * shown.rows + spacing * (shown.rows - 1)
-            }
+            val w = cellWidth * faceCols + spacing * (faceCols - 1)
+            val h = cellWidth * faceRows + spacing * (faceRows - 1)
+            // 尺寸只做 90ms 补间：跨界时和邻居一起挪，不会一格一格地"哆嗦"
+            val animW by animateDpAsState(
+                targetValue = w,
+                animationSpec = tween(durationMillis = 90, easing = FastOutSlowInEasing),
+                label = "cardW"
+            )
+            val animH by animateDpAsState(
+                targetValue = h,
+                animationSpec = tween(durationMillis = 90, easing = FastOutSlowInEasing),
+                label = "cardH"
+            )
+            // 被挤走的卡用 150ms 补间滑过去，正在跟手的那张逐帧直给
+            val cardOffset = rememberCardOffset(
+                target = IntOffset(xPx.roundToInt(), yPx.roundToInt()),
+                active = active,
+                gestureRunning = gesture != BoardGesture.NONE
+            )
             // key()：卡片的组合身份必须跟着 id 走。少了它，置顶（cardZ 变化）会改变
             // forEach 顺序，Compose 按位置复用节点，手势节点就可能挂到另一张卡上——
             // 表现正是「点了这张卡的右下角，缩放的却是别的卡」。
@@ -460,8 +522,8 @@ fun DayCardBoard(
                     data = data,
                     cols = faceCols,
                     rows = faceRows,
-                    width = w,
-                    height = h,
+                    width = animW,
+                    height = animH,
                     manageMode = manageMode,
                     selected = data.plan.id in selectedPlanIds,
                     active = active,
@@ -483,8 +545,8 @@ fun DayCardBoard(
                     onResizeEnd = ::endResize,
                     onResizeCancel = ::resetGesture,
                     modifier = Modifier
-                        .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
-                        .size(w, h)
+                        .offset { cardOffset }
+                        .size(animW, animH)
                         .zIndex(if (active) 10f else if (foregroundKey == key) 5f else 1f)
                 )
             }
@@ -494,38 +556,38 @@ fun DayCardBoard(
             val data = trips[index]
             val box = tripBoxes.getOrNull(index) ?: return@forEach
             val key = "t${data.trip.id}"
-            val shown = pending[key] ?: box
+            val shown = pushed[key] ?: pending[key] ?: box
             val active = activeKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
-            val faceCols = if (resizing) {
-                ((liveWidthPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
-            } else {
-                shown.cols
-            }
-            val faceRows = if (resizing) {
-                ((liveHeightPx + spacingPx) / stepPx).roundToInt().coerceIn(1, 3)
-            } else {
-                shown.rows
-            }
+            val faceCols = if (resizing) resizeShape?.cols ?: shown.cols else shown.cols
+            val faceRows = if (resizing) resizeShape?.rows ?: shown.rows else shown.rows
             val xPx = shown.x * stepPx + if (active && gesture == BoardGesture.MOVE) dragX else 0f
             val yPx = shown.y * stepPx + if (active && gesture == BoardGesture.MOVE) dragY else 0f
-            val w = if (resizing) {
-                with(density) { liveWidthPx.toDp() }
-            } else {
-                cellWidth * shown.cols + spacing * (shown.cols - 1)
-            }
-            val h = if (resizing) {
-                with(density) { liveHeightPx.toDp() }
-            } else {
-                cellWidth * shown.rows + spacing * (shown.rows - 1)
-            }
+            val w = cellWidth * faceCols + spacing * (faceCols - 1)
+            val h = cellWidth * faceRows + spacing * (faceRows - 1)
+            // 尺寸只做 90ms 补间：跨界时和邻居一起挪，不会一格一格地"哆嗦"
+            val animW by animateDpAsState(
+                targetValue = w,
+                animationSpec = tween(durationMillis = 90, easing = FastOutSlowInEasing),
+                label = "cardW"
+            )
+            val animH by animateDpAsState(
+                targetValue = h,
+                animationSpec = tween(durationMillis = 90, easing = FastOutSlowInEasing),
+                label = "cardH"
+            )
+            val cardOffset = rememberCardOffset(
+                target = IntOffset(xPx.roundToInt(), yPx.roundToInt()),
+                active = active,
+                gestureRunning = gesture != BoardGesture.NONE
+            )
             key(key) {
                 TripBoardCard(
                     trip = data.trip,
                     cols = faceCols,
                     rows = faceRows,
-                    width = w,
-                    height = h,
+                    width = animW,
+                    height = animH,
                     active = active,
                     onClick = {
                         foregroundKey = key
@@ -540,13 +602,37 @@ fun DayCardBoard(
                     onResizeEnd = ::endResize,
                     onResizeCancel = ::resetGesture,
                     modifier = Modifier
-                        .offset { IntOffset(xPx.roundToInt(), yPx.roundToInt()) }
-                        .size(w, h)
+                        .offset { cardOffset }
+                        .size(animW, animH)
                         .zIndex(if (active) 10f else if (foregroundKey == key) 5f else 1f)
                 )
             }
         }
     }
+}
+
+/**
+ * 卡片偏移：手势进行中给非拖拽卡加一段 150ms 补间，
+ * 被挤走时是「滑」出去而不是瞬移；正在跟手的卡必须逐帧直给，否则会落后于手指。
+ *
+ * @param target 目标像素偏移
+ * @param active 是否是当前正在拖拽 / 缩放的卡
+ * @param gestureRunning 是否处于移动或缩放手势中
+ * @return 实际用于布局的偏移
+ */
+@Composable
+private fun rememberCardOffset(
+    target: IntOffset,
+    active: Boolean,
+    gestureRunning: Boolean
+): IntOffset {
+    if (active || !gestureRunning) return target
+    val animated by animateIntOffsetAsState(
+        targetValue = target,
+        animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing),
+        label = "cardOffset"
+    )
+    return animated
 }
 
 /**
@@ -1173,6 +1259,13 @@ private fun Modifier.cardBodyGestures(
     val scope = rememberCoroutineScope()
     var suppressClick by remember(key) { mutableStateOf(false) }
     var moved by remember(key) { mutableStateOf(false) }
+    // 同 ResizeGrip：手势块只跑一次，回调必须从最新组合里取
+    val clickNow = rememberUpdatedState(onClick)
+    val longClickNow = rememberUpdatedState(onLongClick)
+    val moveStartNow = rememberUpdatedState(onMoveStart)
+    val moveNow = rememberUpdatedState(onMove)
+    val moveEndNow = rememberUpdatedState(onMoveEnd)
+    val moveCancelNow = rememberUpdatedState(onMoveCancel)
 
     fun suppressBriefly() {
         suppressClick = true
@@ -1184,31 +1277,31 @@ private fun Modifier.cardBodyGestures(
 
     return this
         .clickable {
-            if (!suppressClick) onClick()
+            if (!suppressClick) clickNow.value()
         }
         .pointerInput(key) {
             detectDragGesturesAfterLongPress(
                 onDragStart = {
                     moved = false
                     suppressBriefly()
-                    onMoveStart()
+                    moveStartNow.value()
                 },
                 onDrag = { change, amount ->
                     change.consume()
                     if (abs(amount.x) + abs(amount.y) > 0.5f) moved = true
-                    onMove(amount.x, amount.y)
+                    moveNow.value(amount.x, amount.y)
                 },
                 onDragEnd = {
                     if (moved) {
-                        onMoveEnd()
+                        moveEndNow.value()
                     } else {
-                        onMoveCancel()
-                        onLongClick()
+                        moveCancelNow.value()
+                        longClickNow.value()
                     }
                     suppressBriefly()
                 },
                 onDragCancel = {
-                    onMoveCancel()
+                    moveCancelNow.value()
                     suppressBriefly()
                 }
             )
@@ -1226,6 +1319,13 @@ private fun ResizeGrip(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // pointerInput(Unit) 只会跑一次，里面捕获的是**首次组合**的这组 lambda。
+    // 不套 rememberUpdatedState 的话，松手时调用的仍是旧画布上的整理逻辑，
+    // 它会以为"什么都没变"从而不落库——重叠就一直留在那儿。
+    val startNow = rememberUpdatedState(onStart)
+    val dragNow = rememberUpdatedState(onDrag)
+    val endNow = rememberUpdatedState(onEnd)
+    val cancelNow = rememberUpdatedState(onCancel)
     Box(
         contentAlignment = Alignment.BottomEnd,
         modifier = modifier
@@ -1235,17 +1335,17 @@ private fun ResizeGrip(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = {
-                        onStart()
+                        startNow.value()
                     },
                     onDrag = { change, amount ->
                         change.consume()
-                        onDrag(amount.x, amount.y)
+                        dragNow.value(amount.x, amount.y)
                     },
                     onDragEnd = {
-                        onEnd()
+                        endNow.value()
                     },
                     onDragCancel = {
-                        onCancel()
+                        cancelNow.value()
                     }
                 )
             }

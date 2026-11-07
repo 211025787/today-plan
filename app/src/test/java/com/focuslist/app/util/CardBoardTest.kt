@@ -2,6 +2,7 @@ package com.focuslist.app.util
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -177,52 +178,30 @@ class CardBoardTest {
     }
 
     @Test
-    fun allowedShapes_areExactlySix() {
-        assertEquals(
-            listOf(1 to 1, 1 to 2, 2 to 1, 2 to 2, 1 to 3, 3 to 1),
-            CardBoard.ALLOWED_SHAPES.map { it.cols to it.rows }
-        )
-        assertTrue(CardBoard.isAllowed(2, 2))
-        assertFalse(CardBoard.isAllowed(3, 2))
-        assertFalse(CardBoard.isAllowed(4, 1))
+    fun snapShape_roundsEachAxisIndependently() {
+        // 横向只影响列、纵向只影响行：往宽了拖绝不会把行数改小
+        assertEquals(1 to 1, CardBoard.snapShape(1f, 1f).let { it.cols to it.rows })
+        assertEquals(1 to 1, CardBoard.snapShape(1.4f, 1.4f).let { it.cols to it.rows })
+        assertEquals(2 to 2, CardBoard.snapShape(1.5f, 1.5f).let { it.cols to it.rows })
+        assertEquals(3 to 2, CardBoard.snapShape(2.6f, 1.6f).let { it.cols to it.rows })
+        assertEquals(1 to 3, CardBoard.snapShape(1.1f, 2.6f).let { it.cols to it.rows })
     }
 
     @Test
-    fun nearestShape_snapsToSixPresets() {
-        assertEquals(1 to 1, CardBoard.nearestShape(1f, 1f).let { it.cols to it.rows })
-        assertEquals(2 to 1, CardBoard.nearestShape(2.2f, 1.1f).let { it.cols to it.rows })
-        assertEquals(1 to 2, CardBoard.nearestShape(1.1f, 2.2f).let { it.cols to it.rows })
-        assertEquals(2 to 2, CardBoard.nearestShape(2.1f, 2.1f).let { it.cols to it.rows })
-        assertEquals(3 to 1, CardBoard.nearestShape(3.1f, 1.1f).let { it.cols to it.rows })
-        assertEquals(1 to 3, CardBoard.nearestShape(1.1f, 3.1f).let { it.cols to it.rows })
+    fun snapShape_clampsToMaxima() {
+        // 从最右列往右拖，列数上限只剩 1，行数仍然可以到 4
+        val shape = CardBoard.snapShape(3f, 3.4f, maxCols = 1, maxRows = 4)
+        assertEquals(1, shape.cols)
+        assertEquals(3, shape.rows)
+        assertEquals(1, CardBoard.snapShape(0.2f, 0.2f).cols)
+        assertEquals(4, CardBoard.snapShape(9f, 9f).rows)
     }
 
     @Test
-    fun nearestShape_tiesPreferEarlierLargerShape() {
-        // 3×2 到 2×2 与 3×1 距离都是 1；列表里 2×2 在前
-        val shape = CardBoard.nearestShape(3f, 2f)
-        assertEquals(2, shape.cols)
-        assertEquals(2, shape.rows)
-    }
-
-    @Test
-    fun allowedShape_normalizesLegacyArbitrarySizes() {
-        assertEquals(3, CardBoard.allowedShape(4, 1).cols)
-        assertEquals(1, CardBoard.allowedShape(4, 1).rows)
-        assertEquals(2, CardBoard.allowedShape(3, 2).cols)
-        assertEquals(2, CardBoard.allowedShape(3, 2).rows)
-        assertEquals(1, CardBoard.allowedShape(1, 4).cols)
-        assertEquals(3, CardBoard.allowedShape(1, 4).rows)
-    }
-
-    @Test
-    fun resizeToAllowed_clampsXIntoColumns() {
-        val original = card(1, 1, 1, x = 3, y = 2)
-        val resized = CardBoard.resizeToAllowed(original, CardShape(2, 2))
-        assertEquals(2, resized.cols)
-        assertEquals(2, resized.rows)
-        assertEquals(2, resized.x)
-        assertEquals(2, resized.y)
+    fun snapShape_allowsArbitrarySpans() {
+        // 不再限制成六种预设：2×3、4×1 这类尺寸是合法的
+        assertEquals(2 to 3, CardBoard.snapShape(2f, 3f).let { it.cols to it.rows })
+        assertEquals(4 to 1, CardBoard.snapShape(4f, 1f).let { it.cols to it.rows })
     }
 
     @Test
@@ -293,5 +272,38 @@ class CardBoardTest {
         val first = CardBoard.arrange(cards, anchor = cards[0])
         val second = CardBoard.arrange(cards, anchor = cards[0])
         assertEquals(first, second)
+    }
+
+    @Test
+    fun arrange_afterGrowthNothingOverlaps() {
+        // 照搬用户截图里的那一局面：箍点长高后压住了右边的大卡
+        val anchor = card(1, 1, 3, x = 2, y = 0)
+        val left = card(2, 2, 2, x = 0, y = 0)
+        val under = card(3, 2, 2, x = 0, y = 2)
+        val victim = card(4, 2, 2, x = 2, y = 1)
+        val result = CardBoard.arrange(listOf(anchor, left, under, victim), anchor)
+        for (i in result.indices) {
+            for (j in i + 1 until result.size) {
+                assertFalse(
+                    "${result[i]} 与 ${result[j]} 重叠",
+                    CardBoard.overlaps(result[i], result[j])
+                )
+            }
+        }
+        // 锚点必须原地不动，被压到的卡挪到它下面
+        assertEquals(anchor, result[0])
+        assertEquals(2, result[3].x)
+        assertEquals(3, result[3].y)
+    }
+
+    @Test
+    fun arrange_shrinkingBackRestoresOriginalSpot() {
+        // 每一帧都从同一份「原始画布」重算，所以缩回去时被挤走的卡会回原位，
+        // 不会因为上一帧被挪过就一路往下漂
+        val small = card(1, 1, 1, x = 0, y = 0)
+        val below = card(2, 1, 1, x = 0, y = 1)
+        val base = listOf(small, below)
+        assertNotEquals(base, CardBoard.arrange(base, small.copy(rows = 3)))
+        assertEquals(base, CardBoard.arrange(base, small))
     }
 }
