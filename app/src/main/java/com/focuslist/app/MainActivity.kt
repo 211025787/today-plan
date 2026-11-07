@@ -33,7 +33,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -152,6 +151,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 开屏时间轴起点。WarmSplash 会拿它算出「首帧比这个点晚了多少」，
+        // 把那一段从淡入里扣掉——扣掉多少，文字就提前多少（上限 300ms）。
+        val splashStartNanos = System.nanoTime()
+
         enableEdgeToEdge()
 
         // 小组件点击"番茄钟"快捷入口：跳到专注页
@@ -200,24 +204,6 @@ class MainActivity : ComponentActivity() {
                         AppScaffold(container = app.container, startRoute = startRoute)
                     }
 
-                    // 退出请求：播完和被跳过都走这里，而且只认第一次——
-                    // 连点两下时第二下不会把还盖着的开屏直接摘掉。
-                    var exitRequested by remember { mutableStateOf(false) }
-                    LaunchedEffect(exitRequested) {
-                        if (!exitRequested) return@LaunchedEffect
-                        if (!warmUpApp) {
-                            // 轻点跳过时主界面还没组合。这时候直接淡出开屏，
-                            // 这 280ms 底下什么都没有，露出来就是一屏纯色。
-                            // 先组合主界面，等它真正画出第一帧（两个帧回调）再淡出。
-                            warmUpApp = true
-                            withFrameNanos { }
-                            withFrameNanos { }
-                        }
-                        splashVisible = false
-                        // 开屏收了才申请通知权限：系统弹窗会压住动画的帧
-                        requestNotificationPermissionIfNeeded()
-                    }
-
                     AnimatedVisibility(
                         visible = splashVisible,
                         enter = EnterTransition.None,
@@ -227,8 +213,15 @@ class MainActivity : ComponentActivity() {
                         WarmSplash(
                             quote = warmQuote,
                             darkTheme = darkTheme,
+                            // 时间轴起点：开屏据此算出「首帧来晚了多少」，
+                            // 把这段延迟从淡入里扣掉（最多 300ms），文字因此提前出现
+                            startAtNanos = splashStartNanos,
                             onQuoteWritten = { warmUpApp = true },
-                            onFinished = { exitRequested = true }
+                            onFinished = {
+                                splashVisible = false
+                                // 开屏收了才申请通知权限：系统弹窗会压住动画的帧
+                                requestNotificationPermissionIfNeeded()
+                            }
                         )
                     }
                 }

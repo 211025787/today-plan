@@ -1,11 +1,11 @@
 package com.focuslist.app.ui.splash
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,9 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,7 +37,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -62,22 +58,49 @@ private val WarmAccent = Color(0xFFE4763A)
 private val InkLight = Color(0xFF2E2723)
 private val InkDark = Color(0xFFF6EDE4)
 
+/** 「暖历」淡入的总时长：从时间轴起点算起固定 1200ms 走完，速度不由首帧早晚决定 */
+private const val FADE_MS = 1200
+
+/** 首帧迟到时最多从动画里扣掉多少毫秒——也就是文字最多提前 0.3 秒出现 */
+private const val MAX_HEAD_START_MS = 300L
+
 /**
- * 开屏页：图标 60dp 全程不动 →「暖历」两字用 1200ms 缓缓浮现 → 随机格言与署名被逐字写下 → 进入主界面。
+ * 把一条缓动曲线整体后移 [offset]（0..1）。
+ *
+ * 用在「这句动画其实已经播了一段、只是那段没人看见」的续播场景：
+ * 新的 0..1 进度映射回曲线原本的 offset..1 区间。因为 `tween` 的 easing 作用在
+ * **值的增量**上（从起始值到目标值的那一段），所以这里还要按起始值归一化一次，
+ * 归一化之后 value(f) = base(offset + f·(1-offset))，即绝对进度上的一一对应——
+ * 曲线的形状和每毫秒的 alpha 变化量都和原动画完全一样，只是起点换了。
+ */
+internal class ShiftedEasing(private val base: Easing, private val offset: Float) : Easing {
+    private val start: Float = base.transform(offset)
+
+    override fun transform(fraction: Float): Float {
+        val absolute = base.transform(offset + fraction * (1f - offset))
+        return ((absolute - start) / (1f - start)).coerceIn(0f, 1f)
+    }
+}
+
+/**
+ * 开屏页：图标 60dp 全程不动 →「暖历」两字缓缓浮现 → 随机格言与署名被逐字写下 → 进入主界面。
  *
  * 手写感由四层叠出来：毛笔字体 + 每字随机微小倾角 + 从左往右的笔迹揭示 +
  * 笔尖墨点跟随。逐字推进而不是整句淡入，才有「正在写」的感觉。
  *
- * 点一下任意位置可跳过。
+ * 这一屏不响应点击：从冷启动进来的人就是来看这句话的，跳过键只会让人手滑错过。
  *
  * @param quote 本次冷启动抽到的格言
- * @param onFinished 动画播完（或被跳过）后回调
+ * @param startAtNanos 时间轴起点（`System.nanoTime()`），由 Activity 在创建时打点。
+ *   开屏首帧之前耗掉的时间（窗口首帧、字体加载）从这里扣掉，最多扣 [MAX_HEAD_START_MS]。
+ * @param onFinished 动画播完后回调
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WarmSplash(
     quote: WarmQuote,
     darkTheme: Boolean,
+    startAtNanos: Long,
     onFinished: () -> Unit,
     onQuoteWritten: () -> Unit = {}
 ) {
@@ -90,8 +113,8 @@ fun WarmSplash(
     // 图标全程 60dp 不动：系统启动帧画的也是同一枚图标（放大后 ≈61dp），
     // 从点开到开屏结束，图标尺寸一次都不变。
     //
-    // 真正的过渡发生在「没有文字 → 有文字」这一步：品牌名从完全透明用 1200ms
-    // 匀速浮现。比起常见的 200~300ms 淡入，这个时长明显更慢，也更从容。
+    // 真正的过渡发生在「没有文字 → 有文字」这一步：品牌名从完全透明缓缓浮现。
+    // 比起常见的 200~300ms 淡入，这个时长明显更慢，也更从容。
     val brandAlpha = remember { Animatable(0f) }
     // 笔尖进度：单位是「字」，名言写完接着写署名
     val pen = remember { Animatable(0f) }
@@ -99,31 +122,43 @@ fun WarmSplash(
     val authorText = "— " + quote.author
     val total = textLength + authorText.length
     val perCharMs = 46
-    var skipped by remember { mutableStateOf(false) }
 
-    // skipped 变化时取消整段动画协程，轻点跳过后不会在后台继续跑完
-    LaunchedEffect(quote, skipped) {
-        if (skipped) return@LaunchedEffect
-        // 名言这条线先挂起来等着（写完再回调去组合主界面）；
-        // 让它先 launch、自己排在后面，是为了让淡入成为本协程的第一句话——
+    LaunchedEffect(quote) {
+        // 时间轴从 Activity 创建那一刻起算。首帧之前（窗口首帧、字体加载）耗掉的时间
+        // 在这里直接扣掉——扣多少就是「提前多少」，曲线和每秒的变化量都不变。
+        // 上限 300ms：再多的话第一帧一出来文字就已经很浓了，反而像"跳"出来的。
+        val headStartMs = ((System.nanoTime() - startAtNanos) / 1_000_000L)
+            .coerceIn(0L, MAX_HEAD_START_MS)
+        val offset = headStartMs / FADE_MS.toFloat()
+        val remainMs = (FADE_MS * (1f - offset)).toInt().coerceAtLeast(1)
+
+        // 名言这条线先挂起来等着（写完再回调去组合主界面），
+        // 自己排在后面，是为了让淡入成为本协程的第一句话——
         // 中间不再经过一次协程分发，淡入就能在这一帧的同一批回调里起步，不多等一帧。
         launch {
-            // 1300ms 落笔：文字 1200ms 刚浮现完，只留 100ms 换气。
-            delay(1300)
+            // 文字收尾后再留 100ms 换气才落笔
+            delay(remainMs + 100L)
             pen.animateTo(total.toFloat(), tween(total * perCharMs, easing = LinearEasing))
             // 名言写完、画面静止：现在才去组合主界面，掉帧不会被看见
             onQuoteWritten()
             delay(650)
             onFinished()
         }
-        // 「暖历」两字：**图标一出现就开始**浮现，用 1200ms（1200ms 结束）。
+        // 「暖历」两字：从时间轴起点开始浮现。
+        // 起点已经不是 0 的话（首帧来晚了），先跳到曲线上对应的位置再续播——
+        // 相当于这句动画"已经播了 headStartMs"，只是那一段没人看见。
+        if (offset > 0f) brandAlpha.snapTo(LinearOutSlowInEasing.transform(offset))
         // 缓动用 LinearOutSlowInEasing（线性起、减速收）：匀速淡入的结尾是「戛然而止」，
         // 会被读成一卡；这个曲线起手不突兀、收尾柔和。
-        brandAlpha.animateTo(1f, tween(1200, easing = LinearOutSlowInEasing))
+        brandAlpha.animateTo(
+            1f,
+            tween(remainMs, easing = ShiftedEasing(LinearOutSlowInEasing, offset))
+        )
     }
 
     // 用 BoxWithConstraints 拿屏高：图标位置要和系统启动帧**算得一模一样**，
     // 否则切换瞬间图标会从屏幕正中跳到偏上（真机验证过）。
+    // 整屏不挂任何点击手势：从冷启动进来就是来看这句话的，手一滑跳过去反而错过唯一的内容。
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -136,13 +171,6 @@ fun WarmSplash(
                     radius = with(density) { 300.dp.toPx() },
                     center = Offset(size.width / 2f, size.height * 0.42f)
                 )
-            }
-            // 轻点跳过，不显示提示文字，免得抢了手写动画的戏
-            .pointerInput(Unit) {
-                detectTapGestures(onTap = {
-                    skipped = true
-                    onFinished()
-                })
             }
     ) {
         // 与 splash_small_icon 同一套几何：
