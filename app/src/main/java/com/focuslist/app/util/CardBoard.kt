@@ -205,6 +205,24 @@ object CardBoard {
     }
 
     /**
+     * 整块板子上是否还有任意两张卡叠在一起。
+     *
+     * 渲染前的兜底用：只要还叠着就先整理一遍再画，
+     * 屏幕上永远不该出现两张压在一起的卡。
+     *
+     * @param cards 全部卡片
+     * @return 存在重叠时为 true
+     */
+    fun hasOverlap(cards: List<CardBox>): Boolean {
+        for (i in cards.indices) {
+            for (j in i + 1 until cards.size) {
+                if (overlaps(cards[i], cards[j])) return true
+            }
+        }
+        return false
+    }
+
+    /**
      * 目标位置是否和除自己以外的卡片都不重叠。
      *
      * @param cards 当前全部卡片
@@ -297,43 +315,45 @@ object CardBoard {
         if (abs(position - current) > threshold) position.roundToInt() else current
 
     /**
-     * 松手后的自动整理：锚点卡留在原地，被它压到的卡顺次挪到最近的空位。
+     * 整理：锚点卡留在原地，被它压到的卡**只往下让**，直到互不重叠。
      *
-     * 整理顺序固定为「先上后下、先左后右」，同一局面每次都会得到同样的结果，
-     * 不会因为列表顺序不同而抖动。返回列表与输入一一对应（顺序不变），
-     * 调用方拿它和原列表逐项比较，只把变化的那几张写回数据库。
+     * 用的是 dashboard 网格的经典模型（gridstack.js / react-grid-layout，两者都是 MIT）：
+     * 谁被压到，谁就从被压的位置往下走；撞到别人，别人接着往下走。
+     * 相比"找最近的空位"，这个模型有两个能被眼睛验证的好处：
+     * - 被挤的卡**永远在自己那一列往下滑**，不会横向乱跑，也就不会互相顶来顶去；
+     * - 结果是构造性无重叠的（每张卡落位前都和已落位的全部卡比对过，
+     *   而落位后的卡不再移动），不会出现"看着能放、算出来却叠着"。
      *
      * @param cards 当前全部卡片
-     * @param anchor 刚被拖动/缩放过的卡片（已带最终位置）
-     * @return 整理后的全部卡片
+     * @param anchor 刚被拖动 / 缩放过的卡片（已带最终位置）
+     * @return 整理后的全部卡片（顺序与输入一致）
      */
     fun arrange(cards: List<CardBox>, anchor: CardBox): List<CardBox> {
         if (cards.isEmpty()) return emptyList()
         val anchorId = anchor.trip to anchor.key
-        val resolved = HashMap<Pair<Boolean, Long>, CardBox>()
-        cards.forEach { resolved[it.trip to it.key] = normalize(it) }
-        resolved[anchorId] = normalize(anchor)
+        val placed = LinkedHashMap<Pair<Boolean, Long>, CardBox>()
+        placed[anchorId] = normalize(anchor)
 
-        // 先上后下、先左后右：位置靠前的卡优先留在原地，后面的被挤走
+        // 处理顺序固定「先上后下、先左后右」，同一局面结果唯一
         val order = cards.indices
             .filter { (cards[it].trip to cards[it].key) != anchorId }
             .sortedWith(compareBy({ cards[it].y }, { cards[it].x }))
 
         order.forEach { index ->
-            val card = normalize(cards[index])
-            // 判断"这里有没有人"要看**整块板子**：已经让过位的卡用新位置，
-            // 还没轮到的卡用原位置。只看已经落位的那几张的话，被挤走的卡会落到
-            // 一张还没处理的卡身上，再把那张卡也挤走——连锁反应，
-            // 用户看到的就是"我没碰的卡也乱跳"。
-            val board = cards.mapNotNull { resolved[it.trip to it.key] }
-            val target = if (fitsAt(board, card)) {
-                card
-            } else {
-                resolveMove(board, card, card.x, card.y)
+            val base = normalize(cards[index])
+            val x = base.x.coerceIn(0, (COLUMNS - base.cols).coerceAtLeast(0))
+            var y = base.y.coerceAtLeast(0)
+            while (true) {
+                val candidate = base.copy(x = x, y = y)
+                val hits = placed.values.filter { overlaps(candidate, it) }
+                if (hits.isEmpty()) {
+                    placed[base.trip to base.key] = candidate
+                    return@forEach
+                }
+                // 直接跳到"撞到的卡的下沿"：这段区间里必然还是撞着同一张卡
+                y = hits.maxOf { it.y + it.rows }
             }
-            resolved[card.trip to card.key] = target
         }
-
-        return cards.map { resolved[it.trip to it.key] ?: it }
+        return cards.map { placed[it.trip to it.key] ?: it }
     }
 }

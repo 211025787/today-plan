@@ -205,15 +205,15 @@ class CardBoardTest {
     }
 
     @Test
-    fun arrange_keepsAnchorAndPushesOverlapAway() {
+    fun arrange_keepsAnchorAndPushesOverlapDown() {
         val a = card(1, 1, 1, x = 0, y = 0)
         val b = card(2, 1, 1, x = 0, y = 0)
         val result = CardBoard.arrange(listOf(a, b), anchor = a)
         assertEquals(0, result[0].x)
         assertEquals(0, result[0].y)
-        // 被压到的 b 挪到最近的空位（右边一格）
-        assertEquals(1, result[1].x)
-        assertEquals(0, result[1].y)
+        // 被压到的 b 在自己那一列往下让，不会被甩到旁边的列
+        assertEquals(0, result[1].x)
+        assertEquals(1, result[1].y)
     }
 
     @Test
@@ -226,7 +226,9 @@ class CardBoardTest {
         assertEquals(0, result[1].x)
         assertEquals(0, result[1].y)
         assertEquals(a.key, result[0].key)
-        assertEquals(2, result[0].x)
+        // 被 2×2 压到的 1×1 往下让到它的下沿
+        assertEquals(0, result[0].x)
+        assertEquals(2, result[0].y)
     }
 
     @Test
@@ -260,6 +262,58 @@ class CardBoardTest {
         assertFalse(CardBoard.overlaps(result[1], result[2]))
         assertEquals(0, result[2].x)
         assertEquals(0, result[2].y)
+    }
+
+    @Test
+    fun arrange_neverLeavesOverlapsOnRandomBoards() {
+        // 300 局随机局面（允许输入本身就重叠），整理结果必须一张都不叠。
+        // 这条是"屏幕上还能看到叠着的卡"的守门员。
+        val random = kotlin.random.Random(20261107)
+        repeat(300) { round ->
+            val count = 2 + random.nextInt(7)
+            val cards = (1..count).map { id ->
+                val cols = 1 + random.nextInt(4)
+                val rows = 1 + random.nextInt(4)
+                CardBox(
+                    key = id.toLong(),
+                    trip = false,
+                    cols = cols,
+                    rows = rows,
+                    x = random.nextInt(CardBoard.COLUMNS - cols + 1),
+                    y = random.nextInt(5)
+                )
+            }
+            val anchor = cards[random.nextInt(cards.size)].let { it.copy(y = random.nextInt(6)) }
+            val result = CardBoard.arrange(cards, anchor)
+            for (i in result.indices) {
+                for (j in i + 1 until result.size) {
+                    assertFalse(
+                        "第 $round 局：${result[i]} 与 ${result[j]} 重叠",
+                        CardBoard.overlaps(result[i], result[j])
+                    )
+                }
+            }
+            assertEquals(
+                CardBoard.normalize(anchor),
+                result.first { it.key == anchor.key }
+            )
+        }
+    }
+
+    @Test
+    fun arrange_onlyPushesDownAndKeepsColumns() {
+        // 被挤的卡永远留在自己那一列、只往下走——不会横向乱窜
+        val cards = listOf(
+            card(1, 2, 2, x = 0, y = 0),
+            card(2, 2, 2, x = 1, y = 0),
+            card(3, 2, 2, x = 1, y = 2)
+        )
+        val result = CardBoard.arrange(cards, anchor = cards[0])
+        assertEquals(cards[0], result[0])
+        for (i in 1 until cards.size) {
+            assertEquals("第 $i 张卡的列不该变", cards[i].x, result[i].x)
+            assertTrue("第 $i 张卡只该往下", result[i].y >= cards[i].y)
+        }
     }
 
     @Test

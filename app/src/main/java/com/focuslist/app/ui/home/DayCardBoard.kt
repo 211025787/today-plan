@@ -250,43 +250,32 @@ fun DayCardBoard(
         }
 
         // 老数据修复：早期缩放不检查重叠，可能已经有卡叠在一起。
-        // 按当前顺序逐张"落位"，后到的卡若压到前面的卡就挪到最近空位，一次修好。
+        // 直接用和拖动同一套 arrange（锚点取第一张，其余往下让），一次修好。
         //
         // 只做一次，而且只在进页面后的第一次快照上做：松手时是逐张落库的，
         // 中间态（A 已挪走、B 还没挪）看起来就是"重叠"，若每次都修，
         // 就会把用户刚放下的卡再挪走——表现正是"放不了，自己跑到下一行"。
-        val hasCards = plans.isNotEmpty() || trips.isNotEmpty()
-        if (!legacyRepaired && hasCards) {
+        val current = planBoxes + tripBoxes
+        if (!legacyRepaired && current.isNotEmpty()) {
             legacyRepaired = true
-            val settled = mutableListOf<CardBox>()
-            plans.forEachIndexed { index, data ->
-                val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
-                val target = if (CardBoard.fitsAt(settled, box)) {
-                    box
-                } else {
-                    CardBoard.resolveMove(settled, box, box.x, box.y)
+            val repaired = CardBoard.arrange(current, current.first())
+            repaired.forEachIndexed { index, box ->
+                val before = current[index]
+                if (box == before) return@forEachIndexed
+                // 修复标记带上目标坐标：同一张卡一局里可能被压到好几次
+                val mark = "${if (box.trip) "t" else "p"}${box.key}@${box.x},${box.y}"
+                if (autoPlaced.add("fix-$mark")) {
+                    val z = if (index < plans.size) {
+                        plans[index].plan.cardZ
+                    } else {
+                        trips[index - plans.size].trip.cardZ
+                    }
+                    if (box.trip) {
+                        onTripLayout(box.key, box.cols, box.rows, box.x, box.y, z)
+                    } else {
+                        onPlanLayout(box.key, box.cols, box.rows, box.x, box.y, z)
+                    }
                 }
-                // 修复标记要带上目标坐标：同一张卡一局里可能被压到好几次
-                if (target != box && autoPlaced.add("fix-p${data.plan.id}@${target.x},${target.y}")) {
-                    onPlanLayout(
-                        data.plan.id, target.cols, target.rows, target.x, target.y, data.plan.cardZ
-                    )
-                }
-                settled.add(target)
-            }
-            trips.forEachIndexed { index, data ->
-                val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
-                val target = if (CardBoard.fitsAt(settled, box)) {
-                    box
-                } else {
-                    CardBoard.resolveMove(settled, box, box.x, box.y)
-                }
-                if (target != box && autoPlaced.add("fix-t${data.trip.id}@${target.x},${target.y}")) {
-                    onTripLayout(
-                        data.trip.id, target.cols, target.rows, target.x, target.y, data.trip.cardZ
-                    )
-                }
-                settled.add(target)
             }
         }
 
@@ -343,7 +332,14 @@ fun DayCardBoard(
     // 这一帧真正要画的布局：数据库快照 + 还没追平的乐观值。
     // 画位置、算画布高度、落库全用它——三份数据各算各的，就会在松手那一帧
     // 出现"卡片跳一下""画布缩一行把卡片裁掉半截"这类怪事。
-    val effective = packed.map { pending[boxKeyOf(it)] ?: it }
+    val rawBoxes = packed.map { pending[boxKeyOf(it)] ?: it }
+    // 兜底：万一残留了重叠（旧版本写过的数据、写了一半的中间态），画之前先整理一遍。
+    // "屏幕永远不出现两张压在一起的卡"这条，比省这一次计算重要。
+    val effective = if (CardBoard.hasOverlap(rawBoxes)) {
+        CardBoard.arrange(rawBoxes, rawBoxes.first())
+    } else {
+        rawBoxes
+    }
 
     // 松手后的归位补间：dragX/dragY 里存的是「格子位置与手指位置的差」，
     // 用弹簧把它推到 0，卡片的视觉位置就从手指处滑进格子。
@@ -604,6 +600,20 @@ fun DayCardBoard(
     )
 
     Box(modifier = modifier.fillMaxWidth().height(boardHeight)) {
+        // 拖动时把"松手会落在哪一格"画出来：卡片跟手浮在上面，
+        // 这个虚线框才是它真正的占位。不用猜，也就不会有"怎么又叠上了"的错觉。
+        if (gesture == BoardGesture.MOVE && moveAnchor != null) {
+            DropOutline(
+                x = moveAnchor.x,
+                y = moveAnchor.y,
+                cols = moveAnchor.cols,
+                rows = moveAnchor.rows,
+                cellWidth = cellWidth,
+                spacing = spacing,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            )
+        }
+
         // 细网格提示：拖动 / 缩放时才显示，方便对齐
         if (guidesAlpha > 0.01f) {
             GridGuides(
@@ -772,6 +782,49 @@ private fun rememberCardOffset(
         label = "cardOffset"
     )
     return animated
+}
+
+/**
+ * 拖动中的落位虚框：显示卡片松手后会占哪几格。
+ *
+ * @param x 目标列
+ * @param y 目标行
+ * @param cols 占列数
+ * @param rows 占行数
+ * @param cellWidth 单格宽度
+ * @param spacing 间距
+ * @param color 线色
+ */
+@Composable
+private fun DropOutline(
+    x: Int,
+    y: Int,
+    cols: Int,
+    rows: Int,
+    cellWidth: Dp,
+    spacing: Dp,
+    color: Color
+) {
+    val step = cellWidth + spacing
+    androidx.compose.foundation.Canvas(
+        modifier = Modifier
+            .offset(x = step * x, y = step * y)
+            .size(
+                width = cellWidth * cols + spacing * (cols - 1),
+                height = cellWidth * rows + spacing * (rows - 1)
+            )
+    ) {
+        drawRoundRect(
+            color = color,
+            cornerRadius = CornerRadius(16.dp.toPx()),
+            style = Stroke(
+                width = 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(
+                    floatArrayOf(9.dp.toPx(), 6.dp.toPx())
+                )
+            )
+        )
+    }
 }
 
 /**
