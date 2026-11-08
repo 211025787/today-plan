@@ -3,14 +3,18 @@ package com.focuslist.app.ui.plan
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,12 +33,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,6 +59,7 @@ import com.focuslist.app.util.PlanPaces
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** 计划有效期展示格式 */
 private val sheetRangeFormat = SimpleDateFormat("M/d", Locale.CHINA)
@@ -66,8 +73,9 @@ private val sheetDayOfMonthFormat = SimpleDateFormat("d", Locale.CHINA)
 /**
  * 统计弹层里的一个操作按钮。
  *
- * 原长按菜单的功能（编辑今日时长 / 存为模板 / 导出日历 / 删除计划）
+ * 原长按菜单里剩下需要按钮的功能（存为模板 / 导出日历 / 删除计划）
  * 由调用方以这种描述传进来，弹层只负责统一排版，不碰具体业务状态。
+ * 「编辑今日时长」不再用按钮/弹窗，改成下面那条可拖动的今日进度条。
  *
  * @property icon 图标
  * @property label 文案
@@ -87,7 +95,7 @@ data class PlanSheetAction(
  * 内容从上到下：
  * 1. 头图（图标 + 名称 + 有效期与每日目标）；
  * 2. 一排操作按钮（原来要长按卡片才出现的功能，现在点开统计就能用）；
- * 3. 整体节奏 / 今天的进度条（计划已结束时隐藏）；
+ * 3. 整体节奏 / **可直接拖动的今日进度条**（滑动改今日时长，计划已结束时隐藏）；
  * 4. 连续达标 / 最长连续 / 达标率三个数字；
  * 5. 最近 14 天柱状图，点柱子看某天详情；
  * 6. 累计投入与活跃日日均。
@@ -96,6 +104,7 @@ data class PlanSheetAction(
  * @param todaySeconds 今天的累计秒数（含未落库的运行段），由首页实时传入
  * @param repository 计划仓库（读逐日投入）
  * @param onDismiss 关闭回调
+ * @param onTodayMinutesChange 在今日进度条上滑动后提交的新分钟数
  * @param actions 统计页内的操作按钮（空列表则整块不显示）
  * @param hint 操作区下方的一行手势提示；null 则不显示
  */
@@ -106,6 +115,7 @@ fun PlanInsightSheet(
     todaySeconds: Long,
     repository: PlanRepository,
     onDismiss: () -> Unit,
+    onTodayMinutesChange: (Int) -> Unit = {},
     actions: List<PlanSheetAction> = emptyList(),
     hint: String? = null
 ) {
@@ -113,17 +123,25 @@ fun PlanInsightSheet(
     val planColor = parseThemeColor(plan.colorHex)
     var logs by remember(plan.id) { mutableStateOf<List<PlanLogEntity>>(emptyList()) }
     var selectedDate by remember(plan.id) { mutableStateOf<Long?>(null) }
+    // 今日进度条正在拖动时的草稿值：拖动时先本地即时跟手，松手再落库，
+    // 数据库把新值发回来后清掉草稿，避免挡住计时器的实时更新。
+    var draftMinutes by remember(plan.id) { mutableStateOf<Int?>(null) }
+    var dragging by remember(plan.id) { mutableStateOf(false) }
+    LaunchedEffect(todaySeconds) {
+        if (!dragging) draftMinutes = null
+    }
+    val shownSeconds = draftMinutes?.let { it.toLong() * 60L } ?: todaySeconds
 
     LaunchedEffect(plan.id) {
         // 取整个计划跨度：整体节奏要算总投入，14 天窗口只是其中一段
         logs = repository.logsOfPlan(plan.id, plan.startDate, today)
     }
 
-    // 今天用调用方传入的实时秒数覆盖库中值（运行中的计时还没落库）
-    val daily = remember(logs, plan.id, plan.startDate, plan.endDate, todaySeconds, today) {
+    // 今天用调用方传入的实时秒数（或拖动草稿）覆盖库中值（运行中的计时还没落库）
+    val daily = remember(logs, plan.id, plan.startDate, plan.endDate, shownSeconds, today) {
         val map = logs.associate { it.date to it.accumulatedSec }.toMutableMap()
         if (today in plan.startDate..plan.endDate) {
-            map[today] = todaySeconds.coerceAtLeast(0L)
+            map[today] = shownSeconds.coerceAtLeast(0L)
         }
         map
     }
@@ -137,7 +155,7 @@ fun PlanInsightSheet(
         )
     }
     // 整体节奏：把「时间过了多少」与「目标完成多少」放在一起比
-    val pace = remember(daily, plan.dailyGoalMinutes, plan.startDate, plan.endDate, today) {
+    val pace = remember(daily, plan.dailyGoalMinutes, plan.startDate, plan.endDate, shownSeconds, today) {
         PlanPaces.of(
             planStart = plan.startDate,
             planEnd = plan.endDate,
@@ -159,7 +177,19 @@ fun PlanInsightSheet(
             PlanHeader(plan = plan, color = planColor)
             PlanActions(actions = actions, hint = hint)
             PaceBlock(pace = pace, color = planColor)
-            insight.today?.let { point -> TodayProgress(point = point, insight = insight, color = planColor) }
+            insight.today?.let { point ->
+                TodayProgress(
+                    point = point,
+                    insight = insight,
+                    color = planColor,
+                    onDragStart = { dragging = true },
+                    onMinutesChange = { minutes -> draftMinutes = minutes },
+                    onCommit = { minutes ->
+                        dragging = false
+                        onTodayMinutesChange(minutes)
+                    }
+                )
+            }
             InsightCard(
                 insight = insight,
                 planColor = planColor,
@@ -345,14 +375,33 @@ private fun PaceBlock(pace: PlanPace, color: Color) {
 }
 
 /**
- * 今日进度：一行数字 + 一条比例条。
+ * 今日进度：一行实时数字 + **可直接拖动的进度条**。
  *
- * @param point 今天的投入点
+ * 以前要改今日时长得再开一个输入框弹窗，隔着一层、也不直观；现在进度条
+ * 本身就是滑杆：按下或左右滑动即时改写今天的分钟数，松手才落库。
+ * 白色圆点是滑块，条上给出「滑动调整」的提示，所见即所得。
+ *
+ * @param point 今天的投入点（拖动中会是草稿值）
  * @param insight 计划画像（取今日文案）
  * @param color 计划主题色
+ * @param onDragStart 拖动开始回调（用于锁住草稿、挡住外部数据刷新）
+ * @param onMinutesChange 拖动过程中的草稿分钟数
+ * @param onCommit 松手时提交的最终分钟数
  */
 @Composable
-private fun TodayProgress(point: PlanDayPoint, insight: PlanInsight, color: Color) {
+private fun TodayProgress(
+    point: PlanDayPoint,
+    insight: PlanInsight,
+    color: Color,
+    onDragStart: () -> Unit,
+    onMinutesChange: (Int) -> Unit,
+    onCommit: (Int) -> Unit
+) {
+    val startNow = rememberUpdatedState(onDragStart)
+    val changeNow = rememberUpdatedState(onMinutesChange)
+    val commitNow = rememberUpdatedState(onCommit)
+    val goal = point.goalMinutes.coerceAtLeast(1)
+    val fraction = (point.minutes.toFloat() / goal).coerceIn(0f, 1f)
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -361,35 +410,83 @@ private fun TodayProgress(point: PlanDayPoint, insight: PlanInsight, color: Colo
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = "${point.minutes} / ${point.goalMinutes} 分钟",
+                text = "${point.minutes} / $goal 分钟",
                 style = MaterialTheme.typography.labelMedium,
                 color = color,
                 fontWeight = FontWeight.Medium
             )
         }
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp)
-                .height(8.dp)
-                .clip(RoundedCornerShape(50))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(top = 6.dp)
+                .height(32.dp)
+                .pointerInput(goal) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        startNow.value()
+                        var lastMinutes = point.minutes
+                        fun apply(x: Float) {
+                            val minutes = (x / size.width.toFloat() * goal)
+                                .roundToInt().coerceIn(0, goal)
+                            lastMinutes = minutes
+                            changeNow.value(minutes)
+                        }
+                        apply(down.position.x)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            change.consume()
+                            apply(change.position.x)
+                        }
+                        commitNow.value(lastMinutes)
+                    }
+                }
         ) {
-            if (point.barRatio > 0f) {
+            // 轨道
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            )
+            // 已完成部分
+            if (fraction > 0f) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(point.barRatio)
-                        .fillMaxHeight()
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth(fraction.coerceAtLeast(0.02f))
+                        .height(10.dp)
                         .clip(RoundedCornerShape(50))
                         .background(color)
                 )
             }
+            // 滑块：白色圆点，跟着当前值走
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset(x = maxWidth * fraction - 10.dp)
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .border(2.dp, color, CircleShape)
+            )
         }
+        Text(
+            text = "← 在进度条上左右滑动，直接调整今日时长 →",
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            modifier = Modifier.padding(top = 2.dp)
+        )
         Text(
             text = insight.todayText,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 6.dp)
+            modifier = Modifier.padding(top = 2.dp)
         )
     }
 }

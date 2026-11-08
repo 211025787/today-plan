@@ -399,8 +399,6 @@ fun CalendarHomeScreen(
     val selectedIds by viewModel.selectMode.collectAsState()
     // 计划投入统计弹层：点卡片打开（原长按菜单的功能都并到这里）
     var insightPlan by remember { mutableStateOf<PlanEntity?>(null) }
-    // 编辑今日时长对话框的目标计划
-    var editPlan by remember { mutableStateOf<PlanEntity?>(null) }
     // 删除确认对话框：单删时为该计划，批量删时为 null（用 selectedIds 判断）
     var deleteConfirmPlan by remember { mutableStateOf<PlanEntity?>(null) }
     var deleteConfirmBatch by remember { mutableStateOf(false) }
@@ -965,11 +963,8 @@ fun CalendarHomeScreen(
             ),
             repository = container.planRepository,
             onDismiss = closeSheet,
+            onTodayMinutesChange = { minutes -> viewModel.setTodayMinutes(plan.id, minutes) },
             actions = listOf(
-                PlanSheetAction(Icons.Default.Edit, "编辑今日时长") {
-                    closeSheet()
-                    editPlan = plan
-                },
                 PlanSheetAction(Icons.Default.Star, "存为模板") {
                     closeSheet()
                     val template = PlanTemplates.fromPlan(
@@ -999,43 +994,6 @@ fun CalendarHomeScreen(
                 }
             ),
             hint = "长按卡片拖动换位置，右下角拖动改大小"
-        )
-    }
-
-    // 编辑今日时长对话框：手动补录已完成分钟数
-    editPlan?.let { plan ->
-        val todayStart = DateUtils.startOfDay(System.currentTimeMillis())
-        var minutesText by remember(plan.id) {
-            mutableStateOf((viewModel.daySecondsOf(state, plan.id, todayStart) / 60L).toString())
-        }
-        AlertDialog(
-            onDismissRequest = { editPlan = null },
-            title = { Text("编辑今日时长") },
-            text = {
-                Column {
-                    Text(
-                        text = "为「${plan.title}」设置今天已完成的分钟数",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = minutesText,
-                        onValueChange = { minutesText = it.filter { c -> c.isDigit() } },
-                        label = { Text("分钟") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val minutes = minutesText.toIntOrNull() ?: 0
-                    viewModel.setTodayMinutes(plan.id, minutes)
-                    editPlan = null
-                }) { Text("保存") }
-            },
-            dismissButton = { TextButton(onClick = { editPlan = null }) { Text("取消") } }
         )
     }
 
