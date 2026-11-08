@@ -144,7 +144,6 @@ private enum class BoardGesture { NONE, MOVE, RESIZE }
  * @param manageMode 是否多选管理
  * @param selectedPlanIds 已选计划
  * @param onPlanClick 点击计划（非管理态打开统计）
- * @param onPlanLongClick 长按且没有拖动（打开操作菜单）
  * @param onTripClick 点击行程
  * @param onToggleTimer 开始 / 暂停计划计时
  * @param onToggleSelect 管理态切换勾选
@@ -161,7 +160,6 @@ fun DayCardBoard(
     manageMode: Boolean,
     selectedPlanIds: Set<Long>,
     onPlanClick: (PlanEntity) -> Unit,
-    onPlanLongClick: (PlanEntity) -> Unit,
     onTripClick: (TripEntity) -> Unit,
     onToggleTimer: (Long) -> Unit,
     onToggleSelect: (Long) -> Unit,
@@ -665,10 +663,6 @@ fun DayCardBoard(
                             foregroundKey = key
                             if (manageMode) onToggleSelect(data.plan.id) else onPlanClick(data.plan)
                         },
-                        onLongClick = {
-                            foregroundKey = key
-                            if (manageMode) onToggleSelect(data.plan.id) else onPlanLongClick(data.plan)
-                        },
                         onMoveStart = { startMove(shown) },
                         onMove = ::moveBy,
                         onMoveEnd = ::endMove,
@@ -886,7 +880,6 @@ private fun PlanBoardCard(
     active: Boolean,
     onToggleTimer: () -> Unit,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
     onMoveStart: () -> Unit,
     onMove: (Float, Float) -> Unit,
     onMoveEnd: () -> Unit,
@@ -930,7 +923,6 @@ private fun PlanBoardCard(
                 key = plan.id,
                 enabled = !manageMode,
                 onClick = onClick,
-                onLongClick = onLongClick,
                 onMoveStart = onMoveStart,
                 onMove = onMove,
                 onMoveEnd = onMoveEnd,
@@ -1321,7 +1313,6 @@ private fun TripBoardCard(
                 key = -trip.id,
                 enabled = true,
                 onClick = onClick,
-                onLongClick = {},
                 onMoveStart = onMoveStart,
                 onMove = onMove,
                 onMoveEnd = onMoveEnd,
@@ -1446,15 +1437,14 @@ private fun TripBoardCard(
  * 这个区盖掉了大半个卡面——「点卡片中间却触发调整大小」就是这么来的。
  * 现在缩放手柄整个挪到卡片圆角外侧，卡身内部无论点哪里都只走这里。
  *
- * 长按后移动超过 touch slop 才开始真正移动；长按后原地松手仍然打开操作菜单。
- * 用 suppressClick 避免长按松手时又触发一次轻点（统计弹层）。
+ * 长按后移动超过 touch slop 才开始真正移动；**长按后原地松手不再弹操作菜单**，
+ * 那些功能已搬进单击打开的统计弹层。这里只吃掉这次点击，避免松手又触发轻点。
  */
 @Composable
 private fun Modifier.cardBodyGestures(
     key: Long,
     enabled: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
     onMoveStart: () -> Unit,
     onMove: (Float, Float) -> Unit,
     onMoveEnd: () -> Unit,
@@ -1465,10 +1455,8 @@ private fun Modifier.cardBodyGestures(
     }
     val scope = rememberCoroutineScope()
     var suppressClick by remember(key) { mutableStateOf(false) }
-    var moved by remember(key) { mutableStateOf(false) }
     // 手势块只跑一次，回调必须从最新组合里取
     val clickNow = rememberUpdatedState(onClick)
-    val longClickNow = rememberUpdatedState(onLongClick)
     val moveStartNow = rememberUpdatedState(onMoveStart)
     val moveNow = rememberUpdatedState(onMove)
     val moveEndNow = rememberUpdatedState(onMoveEnd)
@@ -1491,9 +1479,8 @@ private fun Modifier.cardBodyGestures(
                 val down = awaitFirstDown(requireUnconsumed = false)
                 // 先等长按；500ms 内松手就是一次普通轻点（交给 clickable）
                 awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
-                moved = false
                 suppressBriefly()
-                // 带 touch slop：长按后原地轻颤不算移动，松手仍然弹操作菜单
+                // 带 touch slop：长按后原地轻颤不算移动，也不打开任何菜单
                 val slop = viewConfiguration.touchSlop
                 var started = false
                 var accX = 0f
@@ -1515,7 +1502,6 @@ private fun Modifier.cardBodyGestures(
                         accY += dy
                         if (abs(accX) + abs(accY) > slop) {
                             started = true
-                            moved = true
                             moveStartNow.value()
                             moveNow.value(accX, accY)
                         }
@@ -1525,10 +1511,8 @@ private fun Modifier.cardBodyGestures(
                 }
                 if (started) {
                     if (lifted) moveEndNow.value() else moveCancelNow.value()
-                } else {
-                    // 长按后原地松手：打开操作菜单
-                    longClickNow.value()
                 }
+                // 长按原地松手：什么都不做，只把这次点击吞掉
                 suppressBriefly()
             }
         }
@@ -1540,8 +1524,9 @@ private fun Modifier.cardBodyGestures(
  * 它是卡片 Box 的兄弟节点（不是子节点），所以不受卡片的圆角 clip 影响，
  * 能画到边沿外面；热区 36dp 里只有靠角的一小块压在卡片上，1×1 小卡的
  * 中间完全留给轻点/长按。画的是一段与卡片圆角**同心、同半径**（零间隙）
- * 的白色四分之一圆弧，描边 6dp，紧贴卡片边沿；下面垫一层极淡的深色描边，
- * 免得纯白弧在浅色背景那一半糊掉。角上只有这一道弧，不再画圆点。
+ * 的白色四分之一圆弧，描边 6dp；中心线半径比卡片圆角小半个描边宽，
+ * 因此角标**最外沿与卡片最外沿齐平**——既不突出到卡片外，也不留空隙。
+ * 角上只有这一道弧，不再画圆点或深色垫边。
  *
  * 手势自己吃掉 down，不等长按、不与卡身的长按拖动抢；回调全部走
  * `rememberUpdatedState`，避免旧组合里留着过时的整理逻辑。
@@ -1599,29 +1584,19 @@ private fun ResizeGrip(
             val r = cornerRadius.toPx()
             val cx = size.width - out - r
             val cy = size.height - out - r
-            // 半径与卡片圆角完全相等：弧线正压在卡片边沿上，中间没有空白
-            val radius = r
-            val bounds = Offset(cx - radius, cy - radius)
-            val boundsSize = Size(radius * 2f, radius * 2f)
-            // 浅背景上白弧会糊，先垫一圈很淡的深色描边（比白弧宽 3dp）
-            drawArc(
-                color = Color.Black.copy(alpha = 0.18f),
-                startAngle = 0f,
-                sweepAngle = 90f,
-                useCenter = false,
-                topLeft = bounds,
-                size = boundsSize,
-                style = Stroke(width = 9.dp.toPx(), cap = StrokeCap.Round)
-            )
+            // 白色描边 6dp，中心线半径 = 卡片圆角 - 半个描边宽：
+            // 于是描边的**最外沿**正好落在卡片轮廓上，角标不会突出到卡片外面，
+            // 也不会和卡片边沿之间留空隙。整道弧都在卡片色块内，无需深色垫边。
+            val stroke = 6.dp.toPx()
+            val radius = (r - stroke / 2f).coerceAtLeast(1f)
             drawArc(
                 color = Color.White,
                 startAngle = 0f,
                 sweepAngle = 90f,
                 useCenter = false,
-                topLeft = bounds,
-                size = boundsSize,
-                // 比上一版 3dp 加宽一倍
-                style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
+                topLeft = Offset(cx - radius, cy - radius),
+                size = Size(radius * 2f, radius * 2f),
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
             )
         }
     }

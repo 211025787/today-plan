@@ -129,6 +129,7 @@ import com.focuslist.app.ui.common.antiBurnInDrift
 import com.focuslist.app.ui.note.DayNotePreviewCard
 import com.focuslist.app.ui.plan.AddPlanSheet
 import com.focuslist.app.ui.plan.PlanInsightSheet
+import com.focuslist.app.ui.plan.PlanSheetAction
 import com.focuslist.app.ui.plan.QuickPlanSheet
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -396,10 +397,7 @@ fun CalendarHomeScreen(
     // 多选管理模式（纯 UI 状态）：选中日卡片页点击"管理"进入
     var manageMode by remember { mutableStateOf(false) }
     val selectedIds by viewModel.selectMode.collectAsState()
-    // 长按单卡片弹出的操作菜单：查看统计 / 编辑时长 / 删除
-    var menuPlan by remember { mutableStateOf<PlanEntity?>(null) }
-
-    // 计划投入统计弹层：点卡片打开
+    // 计划投入统计弹层：点卡片打开（原长按菜单的功能都并到这里）
     var insightPlan by remember { mutableStateOf<PlanEntity?>(null) }
     // 编辑今日时长对话框的目标计划
     var editPlan by remember { mutableStateOf<PlanEntity?>(null) }
@@ -827,13 +825,6 @@ fun CalendarHomeScreen(
                                         insightPlan = plan
                                     }
                                 },
-                                onPlanLongClick = { plan ->
-                                    if (manageMode) {
-                                        viewModel.toggleSelectPlan(plan.id)
-                                    } else {
-                                        menuPlan = plan
-                                    }
-                                },
                                 onTripClick = { trip -> onOpenTravel(trip.id) },
                                 onToggleTimer = { planId -> viewModel.toggleTimer(planId) },
                                 onToggleSelect = { planId -> viewModel.toggleSelectPlan(planId) },
@@ -961,126 +952,10 @@ fun CalendarHomeScreen(
         )
     }
 
-    // 长按单卡片操作菜单：编辑今日时长 / 删除该计划
-    menuPlan?.let { plan ->
-        AlertDialog(
-            onDismissRequest = { menuPlan = null },
-            title = { Text(plan.title) },
-            text = {
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.AspectRatio,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            "长按卡片拖动换位置，右下角拖动改大小",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                insightPlan = plan
-                                menuPlan = null
-                            }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Default.Insights, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text("查看投入统计", style = MaterialTheme.typography.bodyLarge)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                editPlan = plan
-                                menuPlan = null
-                            }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text("编辑今日已完成时长", style = MaterialTheme.typography.bodyLarge)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                val template = PlanTemplates.fromPlan(
-                                    title = plan.title,
-                                    icon = plan.icon,
-                                    dailyMinutes = plan.dailyGoalMinutes,
-                                    startAt = plan.startDate,
-                                    endAt = plan.endDate,
-                                    colorHex = plan.colorHex
-                                )
-                                menuPlan = null
-                                if (template == null) {
-                                    hintDialog = "计划模板" to "该计划没有名称，无法存为模板"
-                                } else {
-                                    rememberTemplate(template)
-                                    hintDialog = "计划模板" to
-                                        "已把「${template.title}」存为模板，下次添加时点一下就能复用"
-                                }
-                            }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text("存为模板（一键复用）", style = MaterialTheme.typography.bodyLarge)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                icsPlan = plan
-                                menuPlan = null
-                                icsLauncher.launch(Ics.fileNameOf(icsOf(plan)))
-                            }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Default.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text("导出到日历（.ics）", style = MaterialTheme.typography.bodyLarge)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-
-                                deleteConfirmPlan = plan
-                                menuPlan = null
-                            }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                        Text("删除该计划", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { menuPlan = null }) { Text("取消") } }
-        )
-    }
-
-    // 计划投入统计弹层：点卡片或长按菜单打开
+    // 计划投入统计弹层：点卡片打开。原长按菜单的四个功能都放进这里，
+    // 长按原地松手不再弹任何东西（长按仍然用于抓起卡片拖动）。
     insightPlan?.let { plan ->
+        val closeSheet = { insightPlan = null }
         PlanInsightSheet(
             plan = plan,
             todaySeconds = viewModel.daySecondsOf(
@@ -1089,7 +964,41 @@ fun CalendarHomeScreen(
                 dayStart = DateUtils.startOfDay(System.currentTimeMillis())
             ),
             repository = container.planRepository,
-            onDismiss = { insightPlan = null }
+            onDismiss = closeSheet,
+            actions = listOf(
+                PlanSheetAction(Icons.Default.Edit, "编辑今日时长") {
+                    closeSheet()
+                    editPlan = plan
+                },
+                PlanSheetAction(Icons.Default.Star, "存为模板") {
+                    closeSheet()
+                    val template = PlanTemplates.fromPlan(
+                        title = plan.title,
+                        icon = plan.icon,
+                        dailyMinutes = plan.dailyGoalMinutes,
+                        startAt = plan.startDate,
+                        endAt = plan.endDate,
+                        colorHex = plan.colorHex
+                    )
+                    if (template == null) {
+                        hintDialog = "计划模板" to "该计划没有名称，无法存为模板"
+                    } else {
+                        rememberTemplate(template)
+                        hintDialog = "计划模板" to
+                            "已把「${template.title}」存为模板，下次添加时点一下就能复用"
+                    }
+                },
+                PlanSheetAction(Icons.Default.DateRange, "导出日历") {
+                    closeSheet()
+                    icsPlan = plan
+                    icsLauncher.launch(Ics.fileNameOf(icsOf(plan)))
+                },
+                PlanSheetAction(Icons.Default.Delete, "删除计划", destructive = true) {
+                    closeSheet()
+                    deleteConfirmPlan = plan
+                }
+            ),
+            hint = "长按卡片拖动换位置，右下角拖动改大小"
         )
     }
 
@@ -1383,7 +1292,7 @@ private fun DayCellHome(
 
 /**
  * 选中日的渐变方形计划卡片：
- * - 非管理模式：右上角开始/暂停计时，长按弹操作菜单；
+ * - 非管理模式：右上角开始/暂停计时，点卡片看统计与各项操作；
  * - 管理模式：左上角勾选圈，点击/长按切换勾选。
  *
  * @param plan 计划实体

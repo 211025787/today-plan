@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,19 +64,40 @@ private val sheetDayFormat = SimpleDateFormat("M月d日", Locale.CHINA)
 private val sheetDayOfMonthFormat = SimpleDateFormat("d", Locale.CHINA)
 
 /**
+ * 统计弹层里的一个操作按钮。
+ *
+ * 原长按菜单的功能（编辑今日时长 / 存为模板 / 导出日历 / 删除计划）
+ * 由调用方以这种描述传进来，弹层只负责统一排版，不碰具体业务状态。
+ *
+ * @property icon 图标
+ * @property label 文案
+ * @property destructive 是否危险操作（用 error 色）
+ * @property onClick 点击回调
+ */
+data class PlanSheetAction(
+    val icon: ImageVector,
+    val label: String,
+    val destructive: Boolean = false,
+    val onClick: () -> Unit
+)
+
+/**
  * 计划投入统计弹层：点计划卡即打开，看这个计划最近的投入节奏。
  *
  * 内容从上到下：
  * 1. 头图（图标 + 名称 + 有效期与每日目标）；
- * 2. 今天的进度条（计划已结束时隐藏）；
- * 3. 连续达标 / 最长连续 / 达标率三个数字；
- * 4. 最近 14 天柱状图，点柱子看某天详情；
- * 5. 累计投入与活跃日日均。
+ * 2. 一排操作按钮（原来要长按卡片才出现的功能，现在点开统计就能用）；
+ * 3. 整体节奏 / 今天的进度条（计划已结束时隐藏）；
+ * 4. 连续达标 / 最长连续 / 达标率三个数字；
+ * 5. 最近 14 天柱状图，点柱子看某天详情；
+ * 6. 累计投入与活跃日日均。
  *
  * @param plan 计划实体
  * @param todaySeconds 今天的累计秒数（含未落库的运行段），由首页实时传入
  * @param repository 计划仓库（读逐日投入）
  * @param onDismiss 关闭回调
+ * @param actions 统计页内的操作按钮（空列表则整块不显示）
+ * @param hint 操作区下方的一行手势提示；null 则不显示
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,7 +105,9 @@ fun PlanInsightSheet(
     plan: PlanEntity,
     todaySeconds: Long,
     repository: PlanRepository,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    actions: List<PlanSheetAction> = emptyList(),
+    hint: String? = null
 ) {
     val today = remember { DateUtils.startOfDay(System.currentTimeMillis()) }
     val planColor = parseThemeColor(plan.colorHex)
@@ -132,6 +157,7 @@ fun PlanInsightSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             PlanHeader(plan = plan, color = planColor)
+            PlanActions(actions = actions, hint = hint)
             PaceBlock(pace = pace, color = planColor)
             insight.today?.let { point -> TodayProgress(point = point, insight = insight, color = planColor) }
             InsightCard(
@@ -180,6 +206,63 @@ private fun PlanHeader(plan: PlanEntity, color: Color) {
                     "${sheetRangeFormat.format(Date(plan.endDate))} · 每天 ${plan.dailyGoalMinutes} 分钟",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+/**
+ * 统计弹层的操作区：把四个功能排成一行小按钮，放在头图正下方。
+ *
+ * 以前这些功能藏在「长按卡片」弹出的菜单里，用户得先知道有长按才行；
+ * 现在单击卡片打开统计就能看到，长按只保留「抓起卡片拖动」这一件事。
+ *
+ * @param actions 操作列表；为空时整块不渲染
+ * @param hint 下方的一行手势提示；null 不显示
+ */
+@Composable
+private fun PlanActions(actions: List<PlanSheetAction>, hint: String?) {
+    if (actions.isEmpty()) return
+    val scheme = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            actions.forEach { action ->
+                val tint = if (action.destructive) scheme.error else scheme.primary
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(scheme.surfaceVariant.copy(alpha = 0.6f))
+                        .clickable(onClick = action.onClick)
+                        .padding(vertical = 10.dp)
+                ) {
+                    Icon(
+                        imageVector = action.icon,
+                        contentDescription = action.label,
+                        tint = tint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = action.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = tint,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        if (hint != null) {
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp)
             )
         }
