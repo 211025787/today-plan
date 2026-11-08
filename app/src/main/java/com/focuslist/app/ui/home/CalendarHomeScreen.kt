@@ -786,7 +786,9 @@ fun CalendarHomeScreen(
                             DayPlanCardData(
                                 plan = plan,
                                 todaySec = totalSec,
-                                running = state.timers[plan.id]?.running == true,
+                                // 秒表只对「今天」累计：看历史日期时不该显示「计时中」
+                                // 却给一个不会跳动的 00:00
+                                running = day == todayStart && state.timers[plan.id]?.running == true,
                                 paceText = paceText
                             )
                         }
