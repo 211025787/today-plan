@@ -213,8 +213,15 @@ fun DayCardBoard(
         }
     }
     val packed = remember(boxes) { CardBoard.pack(boxes) }
-    val planBoxes = packed.take(plans.size)
-    val tripBoxes = packed.drop(plans.size)
+    // 按「卡片 id」对号入座，不用 take/drop 按索引切：
+    // 只要 plans/trips 的顺序或数量有一次和 packed 对不齐（新增卡、过滤、
+    // 列表重排），index 取到的就会是别人的 box——那张卡的规格当场就变了，
+    // 表现正是「松手时其它卡片缩放抖一下」。
+    val packedByKey = remember(packed) {
+        packed.associateBy { if (it.trip) "t${it.key}" else "p${it.key}" }
+    }
+    val planBoxes = plans.mapNotNull { packedByKey["p${it.plan.id}"] }
+    val tripBoxes = trips.mapNotNull { packedByKey["t${it.trip.id}"] }
 
     // 松手落库到列表重新发射之间有一小段空窗。这期间如果直接按 packed 画，
     // 卡片会先弹回原位、再跳到新位置——看起来就像"拖了却没放对"。
@@ -402,9 +409,21 @@ fun DayCardBoard(
         val changed = arranged.indices.filter { arranged[it] != base[it] }
         if (changed.isEmpty()) return
         val anchorId = boxKeyOf(anchor)
-        // 先写被挤走的卡，最后写锚点卡：锚点拿到最新时间戳，整理完仍在最上层
+        // 先写被挤走的卡，最后写锚点卡：锚点拿到最新时间戳，整理完仍在最上层。
+        // 只有锚点允许改规格；邻居只改位置，规格一律沿用手势开始时的 DB 值。
+        // arrange 理论上不动尺寸，但只要中间任何一帧基准不干净，把 arranged 的
+        // 规格写回去就会让「没被碰过的卡」尺寸突变一次（且写进库后就成了永久值）。
         changed.filter { boxKeyOf(arranged[it]) != anchorId }
-            .forEach { commitOne(arranged[it], zOf(arranged[it])) }
+            .forEach { index ->
+                val moved = arranged[index]
+                val original = base.getOrNull(index)
+                val safe = if (original != null && boxKeyOf(original) == boxKeyOf(moved)) {
+                    moved.copy(cols = original.cols, rows = original.rows)
+                } else {
+                    moved
+                }
+                commitOne(safe, zOf(safe))
+            }
         changed.firstOrNull { boxKeyOf(arranged[it]) == anchorId }
             ?.let { commitOne(arranged[it], System.currentTimeMillis()) }
     }
@@ -652,8 +671,7 @@ fun DayCardBoard(
             // 被挤走的卡用弹簧滑过去，正在跟手 / 归位的那张逐帧直给
             val cardOffset = rememberCardOffset(
                 target = IntOffset(xPx.roundToInt(), yPx.roundToInt()),
-                active = active || settling,
-                gestureRunning = gesture != BoardGesture.NONE || settling
+                active = active || settling
             )
             // key()：卡片的组合身份必须跟着 id 走。少了它，置顶（cardZ 变化）会改变
             // forEach 顺序，Compose 按位置复用节点，手势节点就可能挂到另一张卡上——
@@ -746,8 +764,7 @@ fun DayCardBoard(
             )
             val cardOffset = rememberCardOffset(
                 target = IntOffset(xPx.roundToInt(), yPx.roundToInt()),
-                active = active || settling,
-                gestureRunning = gesture != BoardGesture.NONE || settling
+                active = active || settling
             )
             key(key) {
                 val corner = if (animW < 100.dp || animH < 100.dp) 16.dp else 20.dp
@@ -803,16 +820,18 @@ fun DayCardBoard(
 @Composable
 private fun rememberCardOffset(
     target: IntOffset,
-    active: Boolean,
-    gestureRunning: Boolean
+    active: Boolean
 ): IntOffset {
-    if (active || !gestureRunning) return target
+    // 动画 State 必须常驻组合树。以前用 `if (active || !gestureRunning) return target`
+    // 提前返回，松手那一帧 gestureRunning 变 false 会把 animateIntOffsetAsState
+    // 整个节点销毁，返回值也从「动画中间值」瞬切到 target——邻居就抖一下。
+    // 现在只有跟手/归位中的那张卡直给 target，其余永远走平滑动画。
     val animated by animateIntOffsetAsState(
         targetValue = target,
         animationSpec = CardMoveSpring,
         label = "cardOffset"
     )
-    return animated
+    return if (active) target else animated
 }
 
 /**
