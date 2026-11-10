@@ -673,26 +673,28 @@ fun DayCardBoard(
             val yPx = shown.y * stepPx + if (dragging) dragY else 0f
             val w = cellWidth * faceCols + spacing * (faceCols - 1)
             val h = cellWidth * faceRows + spacing * (faceRows - 1)
-            // 尺寸也走弹簧：跨格时和邻居一起弹过去，不会一格一格地"哆嗦"
-            val animW by animateDpAsState(
-                targetValue = w,
-                animationSpec = CardSizeSpring,
-                label = "cardW"
-            )
-            val animH by animateDpAsState(
-                targetValue = h,
-                animationSpec = CardSizeSpring,
-                label = "cardH"
-            )
-            // 被挤走的卡用弹簧滑过去，正在跟手 / 归位的那张逐帧直给
-            val cardOffset = rememberCardOffset(
-                target = IntOffset(xPx.roundToInt(), yPx.roundToInt()),
-                active = active || settling
-            )
-            // key()：卡片的组合身份必须跟着 id 走。少了它，置顶（cardZ 变化）会改变
-            // forEach 顺序，Compose 按位置复用节点，手势节点就可能挂到另一张卡上——
-            // 表现正是「点了这张卡的右下角，缩放的却是别的卡」。
+            // key()：卡片的组合身份必须跟着 id 走，而且**动画 State 也必须包进来**。
+            // 落库置顶（cardZ 变化）会改变 forEach 顺序：动画若按循环位置复用，
+            // 松手后 Room 刷新那一帧，每个位置的动画 State 就被错配给另一张卡——
+            // 那张卡会从「别人的动画中间值」滑向自己家，整块板子看着就像自动整理乱动。
+            // 包进 key 后动画身份跟卡走，顺序怎么变都不会串。
             key(key) {
+                // 尺寸也走弹簧：跨格时和邻居一起弹过去，不会一格一格地"哆嗦"
+                val animW by animateDpAsState(
+                    targetValue = w,
+                    animationSpec = CardSizeSpring,
+                    label = "cardW"
+                )
+                val animH by animateDpAsState(
+                    targetValue = h,
+                    animationSpec = CardSizeSpring,
+                    label = "cardH"
+                )
+                // 被挤走的卡用弹簧滑过去，正在跟手 / 归位的那张逐帧直给
+                val cardOffset = rememberCardOffset(
+                    target = IntOffset(xPx.roundToInt(), yPx.roundToInt()),
+                    active = active || settling
+                )
                 val corner = if (animW < 100.dp || animH < 100.dp) 16.dp else 20.dp
                 Box(
                     modifier = Modifier
@@ -767,22 +769,25 @@ fun DayCardBoard(
             val yPx = shown.y * stepPx + if (dragging) dragY else 0f
             val w = cellWidth * faceCols + spacing * (faceCols - 1)
             val h = cellWidth * faceRows + spacing * (faceRows - 1)
-            // 尺寸也走弹簧：跨格时和邻居一起弹过去，不会一格一格地"哆嗦"
-            val animW by animateDpAsState(
-                targetValue = w,
-                animationSpec = CardSizeSpring,
-                label = "cardW"
-            )
-            val animH by animateDpAsState(
-                targetValue = h,
-                animationSpec = CardSizeSpring,
-                label = "cardH"
-            )
-            val cardOffset = rememberCardOffset(
-                target = IntOffset(xPx.roundToInt(), yPx.roundToInt()),
-                active = active || settling
-            )
+            // key()：同计划卡——动画 State 必须跟卡片 id 绑定，不能按循环位置复用，
+            // 否则落库置顶改变顺序后，动画会错配到别的卡上（整块板子乱动）
             key(key) {
+                // 尺寸也走弹簧：跨格时和邻居一起弹过去，不会一格一格地"哆嗦"
+                val animW by animateDpAsState(
+                    targetValue = w,
+                    animationSpec = CardSizeSpring,
+                    label = "cardW"
+                )
+                val animH by animateDpAsState(
+                    targetValue = h,
+                    animationSpec = CardSizeSpring,
+                    label = "cardH"
+                )
+                // 被挤走的卡用弹簧滑过去，正在跟手 / 归位的那张逐帧直给
+                val cardOffset = rememberCardOffset(
+                    target = IntOffset(xPx.roundToInt(), yPx.roundToInt()),
+                    active = active || settling
+                )
                 val corner = if (animW < 100.dp || animH < 100.dp) 16.dp else 20.dp
                 Box(
                     modifier = Modifier
