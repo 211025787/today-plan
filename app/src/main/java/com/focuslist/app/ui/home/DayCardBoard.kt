@@ -80,6 +80,7 @@ import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.CardBoard
 import com.focuslist.app.util.CardBox
 import com.focuslist.app.util.CardShape
+import com.focuslist.app.util.DateUtils
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -617,8 +618,21 @@ fun DayCardBoard(
             // 松手后还在滑向格子的那张：它虽然不再是 active，但偏移仍由 dragX/dragY 驱动
             val settling = settlingKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
-            val faceCols = if (resizing) resizeShape?.cols ?: shown.cols else shown.cols
-            val faceRows = if (resizing) resizeShape?.rows ?: shown.rows else shown.rows
+            // 尺寸只让「当前手势那张卡」跟随 shown（乐观值 / 预览规格）；
+            // 其它卡一律用 packed 的规格。松手瞬间 shown 的来源会在
+            // pushed → pending → box 之间切换，三者只要有一帧规格不一致，
+            // 弹簧就会把整排卡的大小抖一下。arrange 本来就不改尺寸，
+            // 所以这里锁死是安全且确定的。
+            val faceCols = if (active) {
+                if (resizing) resizeShape?.cols ?: shown.cols else shown.cols
+            } else {
+                box.cols
+            }
+            val faceRows = if (active) {
+                if (resizing) resizeShape?.rows ?: shown.rows else shown.rows
+            } else {
+                box.rows
+            }
             val dragging = (active && gesture == BoardGesture.MOVE) || settling
             val xPx = shown.x * stepPx + if (dragging) dragX else 0f
             val yPx = shown.y * stepPx + if (dragging) dragY else 0f
@@ -699,8 +713,21 @@ fun DayCardBoard(
             // 松手后还在滑向格子的那张：它虽然不再是 active，但偏移仍由 dragX/dragY 驱动
             val settling = settlingKey == key
             val resizing = active && gesture == BoardGesture.RESIZE
-            val faceCols = if (resizing) resizeShape?.cols ?: shown.cols else shown.cols
-            val faceRows = if (resizing) resizeShape?.rows ?: shown.rows else shown.rows
+            // 尺寸只让「当前手势那张卡」跟随 shown（乐观值 / 预览规格）；
+            // 其它卡一律用 packed 的规格。松手瞬间 shown 的来源会在
+            // pushed → pending → box 之间切换，三者只要有一帧规格不一致，
+            // 弹簧就会把整排卡的大小抖一下。arrange 本来就不改尺寸，
+            // 所以这里锁死是安全且确定的。
+            val faceCols = if (active) {
+                if (resizing) resizeShape?.cols ?: shown.cols else shown.cols
+            } else {
+                box.cols
+            }
+            val faceRows = if (active) {
+                if (resizing) resizeShape?.rows ?: shown.rows else shown.rows
+            } else {
+                box.rows
+            }
             val dragging = (active && gesture == BoardGesture.MOVE) || settling
             val xPx = shown.x * stepPx + if (dragging) dragX else 0f
             val yPx = shown.y * stepPx + if (dragging) dragY else 0f
@@ -1019,18 +1046,50 @@ private fun PlanFace(
         // 窄卡（手机上 1 列）不能再按宽卡的 26dp 给右下角让位，否则
         // 「00:00」都会被挤成「00:」；窄卡把按钮挪到左边，右侧留给角标即可
         val narrow = w < 110.dp
+        // 高卡内容从顶部往下排，按钮由 weight 撑杆固定在底部。
+        // 以前把数值区也推到底，一旦多了「落后 N 天」这样的标签，
+        // 数值+进度条+按钮就全挤在卡片下沿、按钮贴着圆角被裁。
+        val stacked = !dense && h >= 150.dp
         val showTitle = !dense && w >= 96.dp
         val showShortTitle = !showTitle && !dense && w >= 70.dp
         val showDetail = !dense && w >= 130.dp
         val showChip = !dense && !manageMode && data.paceText != null && w >= 118.dp
         val showNote = !dense && h >= 140.dp && plan.note.isNotBlank()
-        // 高卡 / 大卡多一行「计划周期」，把原本空着的中段填上有效信息
-        val showRange = !dense && h >= 150.dp && w >= 110.dp &&
-            plan.startDate > 0 && plan.endDate >= plan.startDate
+        val hasRange = plan.startDate > 0 && plan.endDate >= plan.startDate
+        // 高卡 / 大卡多一行「计划周期 + 第几天」，把原本空着的中段填上有效信息
+        val showRange = !dense && h >= 130.dp && w >= 110.dp && hasRange
+        // 1×3 / 1×4 这类超高卡再补一行「每日目标 · 距结束」和一条计划周期进度，
+        // 都是用起止日期现算的，不需要额外查库，正好把中段空白填上
+        val showExtra = stacked && h >= 230.dp && w >= 110.dp && hasRange
         val showSecondary = !dense && h >= 82.dp
         val showProgress = !dense && h >= 92.dp
         val startPad = if (manageMode) 34.dp else if (narrow) 8.dp else 10.dp
         val endPad = if (manageMode) 10.dp else if (narrow) 12.dp else 26.dp
+
+        val today0 = remember { DateUtils.startOfDay(System.currentTimeMillis()) }
+        val rangeFmt = remember { SimpleDateFormat("M/d", Locale.CHINA) }
+        val totalDays = if (hasRange) {
+            (plan.endDate - plan.startDate) / 86_400_000L + 1
+        } else {
+            0L
+        }
+        val dayIndex = if (hasRange) {
+            ((today0 - plan.startDate) / 86_400_000L + 1).coerceIn(1, totalDays)
+        } else {
+            0L
+        }
+        val daysLeft = if (hasRange) {
+            ((plan.endDate - today0) / 86_400_000L).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        val cyclePercent = if (totalDays > 0) {
+            (dayIndex * 100 / totalDays).toInt().coerceIn(0, 100)
+        } else {
+            0
+        }
+        val rangeText = "${rangeFmt.format(Date(plan.startDate))}–" +
+            "${rangeFmt.format(Date(plan.endDate))} · 第 $dayIndex/$totalDays 天"
 
         Column(
             modifier = Modifier
@@ -1090,19 +1149,31 @@ private fun PlanFace(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (showChip && wide) {
-                    PaceChip(text = data.paceText!!)
+            }
+            // 节奏标签和周期信息合并成一行：有「落后 N 天」时也不会额外多占一行
+            if (showChip || showRange) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (showChip) {
+                        PaceChip(text = data.paceText!!)
+                    }
+                    if (showRange) {
+                        if (showChip) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = rangeText,
+                            color = Color.White.copy(alpha = 0.66f),
+                            fontSize = 8.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
                 }
             }
-            if (showChip && !wide) {
-                PaceChip(text = data.paceText!!)
-            }
-            if (showRange) {
-                val rangeFmt = remember { SimpleDateFormat("M/d", Locale.CHINA) }
-                val days = (plan.endDate - plan.startDate) / 86_400_000L + 1
+            if (showExtra) {
                 Text(
-                    text = "${rangeFmt.format(Date(plan.startDate))}–" +
-                        "${rangeFmt.format(Date(plan.endDate))} · 共 $days 天",
+                    text = "每日目标 ${plan.dailyGoalMinutes} 分 · 距结束还有 $daysLeft 天",
                     color = Color.White.copy(alpha = 0.66f),
                     fontSize = 8.5.sp,
                     maxLines = 1,
@@ -1119,6 +1190,8 @@ private fun PlanFace(
                 )
             }
 
+            // 头部与数值区之间一段弹性留白；高卡在数值区之后再来一段，
+            // 上下均分空白，信息落在卡片中段，按钮始终被撑杆固定在底部
             Spacer(modifier = Modifier.weight(1f))
 
             // 极紧凑档的秒值已经并进头部一行，这里不再重复画数值区
@@ -1168,6 +1241,29 @@ private fun PlanFace(
                 if (showProgress) {
                     ProgressBar(percent = percent, color = Color.White)
                 }
+                if (showExtra) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "计划周期",
+                                color = Color.White.copy(alpha = 0.66f),
+                                fontSize = 8.5.sp,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = "$cyclePercent%",
+                                color = Color.White.copy(alpha = 0.66f),
+                                fontSize = 8.5.sp,
+                                maxLines = 1
+                            )
+                        }
+                        ProgressBar(percent = cyclePercent, color = Color.White.copy(alpha = 0.7f))
+                    }
+                }
+            }
+            if (stacked) {
+                Spacer(modifier = Modifier.weight(1f))
             }
 
             // ── 底部计时状态栏 ──
@@ -1219,7 +1315,8 @@ private fun TimerBar(
         label = "pulse"
     )
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        // 再往里收 6dp：按钮右端和右下角的白色缩放角标之间留出明确空隙
+        modifier = Modifier.fillMaxWidth().padding(end = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (showLabel) {
