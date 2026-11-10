@@ -220,21 +220,24 @@ fun DayCardBoard(
     val packedByKey = remember(packed) {
         packed.associateBy { if (it.trip) "t${it.key}" else "p${it.key}" }
     }
-    val planBoxes = plans.mapNotNull { packedByKey["p${it.plan.id}"] }
-    val tripBoxes = trips.mapNotNull { packedByKey["t${it.trip.id}"] }
 
     // 松手落库到列表重新发射之间有一小段空窗。这期间如果直接按 packed 画，
     // 卡片会先弹回原位、再跳到新位置——看起来就像"拖了却没放对"。
     // 用一条乐观值顶住，等 packed 里出现同样的坐标再撤掉。
     var pending by remember { mutableStateOf<Map<String, CardBox>>(emptyMap()) }
+    val pendingNow = rememberUpdatedState(pending)
 
     // 旧卡 / 新卡第一次出现：自动补位并写回，从此位置固定；
     // 超出 1–4 格的脏数据由 normalize 夹回去，这里负责把夹过的结果写回数据库。
+    // 但**落库还没追平**时绝不写回：逐张 UPDATE 会让 Room 发射若干中间态，
+    // pack 拿到半新半旧的板子会重新「往上收」，autoplace 再把这份整理结果
+    // 写进库，用户的布局就被永久改掉了——这正是「松手后其它卡自动整理」。
     val autoPlaced = remember { mutableSetOf<String>() }
     LaunchedEffect(packed) {
-        plans.forEachIndexed { index, data ->
+        if (pendingNow.value.isEmpty()) {
+        plans.forEach { data ->
             val plan = data.plan
-            val box = planBoxes.getOrNull(index) ?: return@forEachIndexed
+            val box = packedByKey["p${plan.id}"] ?: return@forEach
             // 位置和 pack 算出来的不一致（没摆过、或历史重叠被往下让过）就写回
             val needsPlace = plan.cardX != box.x || plan.cardY != box.y
             val needsShape = plan.cardCols > 0 &&
@@ -246,9 +249,9 @@ fun DayCardBoard(
                 }
             }
         }
-        trips.forEachIndexed { index, data ->
+        trips.forEach { data ->
             val trip = data.trip
-            val box = tripBoxes.getOrNull(index) ?: return@forEachIndexed
+            val box = packedByKey["t${trip.id}"] ?: return@forEach
             val needsPlace = trip.cardX != box.x || trip.cardY != box.y
             val needsShape = trip.cardCols > 0 &&
                 (trip.cardCols != box.cols || trip.cardRows != box.rows)
@@ -259,12 +262,12 @@ fun DayCardBoard(
                 }
             }
         }
+        }
 
         // packed 里已经出现同样的坐标，对应的乐观值就可以撤了
         if (pending.isNotEmpty()) {
-            val actual = (planBoxes + tripBoxes).associateBy {
-                if (it.trip) "t${it.key}" else "p${it.key}"
-            }
+            // 直接用 packed 本身按 id 比对，不再经过任何按 index 切出来的中间列表
+            val actual = packed.associateBy { if (it.trip) "t${it.key}" else "p${it.key}" }
             val left = pending.filter { (key, want) -> actual[key] != want }
             if (left.size != pending.size) pending = left
         }
@@ -360,6 +363,11 @@ fun DayCardBoard(
     } else {
         null
     }
+    // 落库必须用「屏幕上最后一帧预览」的规格。手势回调可能来自旧组合，
+    // 若 endResize 自己按最新 State 再算一遍 snapShape，预览是 2×2、
+    // 落库却成 2×3，两次 arrange 结果不同，邻居就会在松手那帧被整体重排。
+    val resizeShapeNow = remember { mutableStateOf<CardShape?>(null) }
+    SideEffect { resizeShapeNow.value = resizeShape }
     // 移动中的目标格子：卡片视觉上跟手自由移动，但占位始终是它身下那个格子
     val moveAnchor: CardBox? = if (gesture == BoardGesture.MOVE) {
         activeStart?.copy(x = moveCell.x, y = moveCell.y)
@@ -408,6 +416,10 @@ fun DayCardBoard(
         val arranged = CardBoard.arrange(base, anchor)
         val changed = arranged.indices.filter { arranged[it] != base[it] }
         if (changed.isEmpty()) return
+        // 预览里被挤开的卡先用乐观值顶住。resetGesture 会立刻把 pushed 清空，
+        // 这些卡若只依赖 DB 就会先弹回旧位置、等逐张写库完成再滑回来——
+        // 用户看到的「松手瞬间其它卡突然自动整理一下」就是这段空窗。
+        pending = pending + pushed + arranged.associateBy { boxKeyOf(it) }
         val anchorId = boxKeyOf(anchor)
         // 先写被挤走的卡，最后写锚点卡：锚点拿到最新时间戳，整理完仍在最上层。
         // 只有锚点允许改规格；邻居只改位置，规格一律沿用手势开始时的 DB 值。
@@ -559,7 +571,9 @@ fun DayCardBoard(
         if (gesture == BoardGesture.RESIZE && start != null) {
             // 松手就按当前规格落定。占位和画出来的大小本来就一致，不再二次吸附，
             // 因此松手瞬间卡片尺寸不会跳、被挤走的卡也不用再挪第二次。
-            val shape = CardBoard.snapShape(
+            // 直接用最后一帧预览的规格：预览里邻居已经按它让好位了，
+            // 落库再算一次只会得到另一套 arrange 结果，松手就会「自动整理」
+            val shape = resizeShapeNow.value ?: CardBoard.snapShape(
                 cols = (liveWidthPx + spacingPx) / stepPx,
                 rows = (liveHeightPx + spacingPx) / stepPx,
                 maxCols = CardBoard.COLUMNS - start.x,
@@ -628,7 +642,9 @@ fun DayCardBoard(
 
         plans.indices.sortedBy { plans[it].plan.cardZ }.forEach { index ->
             val data = plans[index]
-            val box = planBoxes.getOrNull(index) ?: return@forEach
+            // 按 id 取，绝不按 index：落库过程中列表只要有一次长度/顺序变化，
+            // index 就会把别人的规格安到这张卡上，表现为「突然变大又缩回去」
+            val box = packedByKey["p${data.plan.id}"] ?: return@forEach
             val key = "p${data.plan.id}"
             // 刚落库、列表还没刷新时先用乐观值顶上，避免松手后闪一下原位；
             // 缩放中还要把「已经被挤到新位置的卡」画在预览位上
@@ -724,7 +740,7 @@ fun DayCardBoard(
 
         trips.indices.sortedBy { trips[it].trip.cardZ }.forEach { index ->
             val data = trips[index]
-            val box = tripBoxes.getOrNull(index) ?: return@forEach
+            val box = packedByKey["t${data.trip.id}"] ?: return@forEach
             val key = "t${data.trip.id}"
             val shown = pushed[key] ?: pending[key] ?: box
             val active = activeKey == key
