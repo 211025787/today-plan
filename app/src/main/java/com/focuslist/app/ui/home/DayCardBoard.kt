@@ -37,9 +37,11 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -1106,10 +1108,18 @@ private fun PlanFace(
         val dense = cols == 1 && rows == 1
         val narrow = cols == 1
         val stacked = rows >= 2
-        // 字号按「短边」等比缩放：宽扁卡的高度才是瓶颈，按宽度算会把字撑爆；
-        // 高卡则受宽度限制。宽屏不虚大，显示大小调大后也不挤爆。
+        // 一行高、横向很宽（2×1 / 3×1 / 4×1）：竖着堆「标题 + 数值 + 目标 + 进度条 + 按钮」
+        // 必然超过一格的高度，Column 会把末尾的按钮量成 0 高——卡底只剩一条胶囊底边，
+        // 图标和「开始」两个字全被裁掉。这类卡改横向分栏：左边信息，右边独立的按钮。
+        val wideShort = rows == 1 && cols >= 2
+        // 字号按真实可用高度缩放：一行高的卡高度才是瓶颈，按宽度算会把字撑爆；
+        // 高卡则受宽度限制。1×1 还要再收一档，一格里横竖都只有一格。
         val shortSide = minOf(w.value, h.value)
-        val scale = (shortSide / 148f).coerceIn(0.72f, 1.15f)
+        val scale = when {
+            dense -> (shortSide / 120f).coerceIn(0.75f, 0.95f)
+            rows == 1 -> (h.value / 88f).coerceIn(0.78f, 1.02f)
+            else -> (shortSide / 148f).coerceIn(0.72f, 1.15f)
+        }
         fun fs(base: Float) = (base * scale).sp
 
         // 只有两行以上才有空间放节奏标签 / 日期 / 备注；一行高的宽扁卡让位给数值区
@@ -1118,8 +1128,16 @@ private fun PlanFace(
         val hasRange = plan.startDate > 0 && plan.endDate >= plan.startDate
         val showRange = rows >= 2 && hasRange
         val showExtra = rows >= 3 && hasRange
-        val startPad = if (manageMode) 32.dp else 8.dp
-        val endPad = if (manageMode) 8.dp else if (narrow) 12.dp else 26.dp
+        val startPad = when {
+            manageMode -> 32.dp
+            dense -> 10.dp
+            else -> 8.dp
+        }
+        val endPad = when {
+            manageMode -> 8.dp
+            dense || narrow -> 12.dp
+            else -> 26.dp
+        }
 
         val today0 = remember { DateUtils.startOfDay(System.currentTimeMillis()) }
         val rangeFmt = remember { SimpleDateFormat("M/d", Locale.CHINA) }
@@ -1151,117 +1169,184 @@ private fun PlanFace(
                 "${rangeFmt.format(Date(plan.endDate))} · 第 $dayIndex/$totalDays 天"
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    start = startPad,
-                    end = endPad,
-                    top = if (dense) 6.dp else 7.dp,
-                    bottom = if (dense) 6.dp else 7.dp
-                ),
-            verticalArrangement = Arrangement.spacedBy(if (dense) 1.dp else 3.dp)
+        CompositionLocalProvider(
+            // MaterialTheme 的 bodyLarge 自带 24.sp 行高：只改 fontSize 不改 lineHeight，
+            // 再小的字也会撑出 24dp 一行。1×1 / 2×1 / 3×1 就是被这个隐形的行高把按钮挤出卡片的。
+            LocalTextStyle provides LocalTextStyle.current.copy(lineHeight = TextUnit.Unspecified)
         ) {
-            // ── 头部：图标 + 标题（宽扁卡把秒值也放这一行） ──
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = plan.icon,
-                    fontSize = fs(if (dense) 12f else if (stacked) 18f else 20f)
-                )
-                Spacer(modifier = Modifier.width(if (dense) 3.dp else 5.dp))
-                Text(
-                    text = plan.title,
-                    color = Color.White,
-                    fontSize = fs(if (dense) 9.5f else 12.5f),
-                    fontWeight = FontWeight.Bold,
-                    maxLines = if (dense) 1 else if (h >= 170.dp) 2 else 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                if (dense && !narrow) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = elapsedText,
-                        color = Color.White,
-                        fontSize = fs(13f),
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                }
-            }
-            // 节奏标签和周期信息合并成一行，有「落后 N 天」时也不额外占行
-            if (showChip || showRange) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (showChip) {
-                        PaceChip(text = data.paceText!!, fontSize = fs(8f))
-                    }
-                    if (showRange) {
-                        if (showChip) {
-                            Spacer(modifier = Modifier.width(5.dp))
+            if (wideShort) {
+                // ── 一行高的宽扁卡：横向分栏，按钮单独占一列，永远不会被内容挤掉 ──
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            start = if (manageMode) 32.dp else 12.dp,
+                            end = if (manageMode) 8.dp else 12.dp,
+                            top = 6.dp,
+                            bottom = 6.dp
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = plan.icon, fontSize = fs(14f))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = plan.title,
+                                color = Color.White,
+                                fontSize = fs(11.5f),
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                text = elapsedText,
+                                color = Color.White,
+                                fontSize = fs(19f),
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = "$percent%",
+                                color = Color.White.copy(alpha = 0.86f),
+                                fontSize = fs(8.5f),
+                                maxLines = 1
+                            )
                         }
                         Text(
-                            text = rangeText,
-                            color = Color.White.copy(alpha = 0.66f),
-                            fontSize = fs(8f),
+                            text = "目标 $goalText · $remainText",
+                            color = Color.White.copy(alpha = 0.72f),
+                            fontSize = fs(7.5f),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        ProgressBar(percent = percent, color = Color.White)
+                    }
+                    if (!manageMode) {
+                        Spacer(modifier = Modifier.width(10.dp))
+                        TimerBar(
+                            running = data.running,
+                            todaySec = todaySec,
+                            accent = parseThemeColor(plan.colorHex),
+                            showLabel = false,
+                            alignEnd = false,
+                            compact = cols == 2,
+                            scale = scale,
+                            expand = false,
+                            modifier = Modifier,
+                            onToggleTimer = onToggleTimer
                         )
                     }
                 }
-            }
-            if (showExtra) {
-                Text(
-                    text = "第 $dayIndex/$totalDays 天 · 每日目标 ${plan.dailyGoalMinutes} 分",
-                    color = Color.White.copy(alpha = 0.66f),
-                    fontSize = fs(8f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (showNote) {
-                Text(
-                    text = plan.note,
-                    color = Color.White.copy(alpha = 0.72f),
-                    fontSize = fs(8.5f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                return@CompositionLocalProvider
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        start = startPad,
+                        end = endPad,
+                        top = if (dense) 5.dp else 7.dp,
+                        bottom = if (dense) 5.dp else 7.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(if (dense) 2.dp else 3.dp)
+            ) {
+                // ── 头部：图标 + 标题 ──
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = plan.icon,
+                        fontSize = fs(if (dense) 11f else if (stacked) 18f else 20f)
+                    )
+                    Spacer(modifier = Modifier.width(if (dense) 3.dp else 5.dp))
+                    Text(
+                        text = plan.title,
+                        color = Color.White,
+                        fontSize = fs(if (dense) 9f else 12.5f),
+                        fontWeight = FontWeight.Bold,
+                        maxLines = if (h >= 170.dp) 2 else 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // 节奏标签和周期信息合并成一行，有「落后 N 天」时也不额外占行
+                if (showChip || showRange) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (showChip) {
+                            PaceChip(text = data.paceText!!, fontSize = fs(8f))
+                        }
+                        if (showRange) {
+                            if (showChip) {
+                                Spacer(modifier = Modifier.width(5.dp))
+                            }
+                            Text(
+                                text = rangeText,
+                                color = Color.White.copy(alpha = 0.66f),
+                                fontSize = fs(8f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                        }
+                    }
+                }
+                if (showExtra) {
+                    Text(
+                        text = "第 $dayIndex/$totalDays 天 · 每日目标 ${plan.dailyGoalMinutes} 分",
+                        color = Color.White.copy(alpha = 0.66f),
+                        fontSize = fs(8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (showNote) {
+                    Text(
+                        text = plan.note,
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontSize = fs(8.5f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
-            // ── 主数值：今日累计 mm:ss（计时中每秒刷新） ──
-            // 宽扁卡（2×1 / 3×1）横向很宽，只有一行高也放得下这一整块；
-            // 1×1 缩到最小字号，但同样给时间、目标和进度条，不再只留一个 00:00。
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = elapsedText,
-                    color = Color.White,
-                    fontSize = fs(if (dense) 14f else if (stacked) 20f else 18f),
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
                 Spacer(modifier = Modifier.weight(1f))
-                if (!dense) {
+
+                // ── 主数值：今日累计 mm:ss（计时中每秒刷新） ──
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = elapsedText,
+                        color = Color.White,
+                        fontSize = fs(if (dense) 13f else if (stacked) 20f else 18f),
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "$percent%",
                         color = Color.White.copy(alpha = 0.86f),
-                        fontSize = fs(9.5f),
+                        fontSize = fs(if (dense) 8f else 9.5f),
                         maxLines = 1
                     )
                 }
-            }
-            Text(
-                text = if (dense) "目标 $goalText" else "目标 $goalText · $remainText",
-                color = Color.White.copy(alpha = 0.72f),
-                fontSize = fs(if (dense) 7.5f else 8f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            ProgressBar(percent = percent, color = Color.White)
-            if (!dense) {
+                // 1×1 一格高，只留「时间 + 百分比 + 进度条 + 按钮」，目标数字交给进度条表达
+                if (!dense) {
+                    Text(
+                        text = "目标 $goalText · $remainText",
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontSize = fs(8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                ProgressBar(percent = percent, color = Color.White)
                 if (showExtra) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1282,23 +1367,30 @@ private fun PlanFace(
                         ProgressBar(percent = cyclePercent, color = Color.White.copy(alpha = 0.7f))
                     }
                 }
-            }
-            if (stacked) {
-                Spacer(modifier = Modifier.weight(1f))
-            }
+                if (stacked) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
 
-            // ── 底部计时状态栏 ──
-            if (!manageMode) {
-                TimerBar(
-                    running = data.running,
-                    todaySec = todaySec,
-                    accent = parseThemeColor(plan.colorHex),
-                    showLabel = !dense && !narrow,
-                    alignEnd = !narrow && !dense,
-                    compact = dense || narrow,
-                    scale = scale,
-                    onToggleTimer = onToggleTimer
-                )
+                // ── 底部计时状态栏 ──
+                if (!manageMode) {
+                    TimerBar(
+                        running = data.running,
+                        todaySec = todaySec,
+                        accent = parseThemeColor(plan.colorHex),
+                        showLabel = !dense && !narrow,
+                        alignEnd = !narrow && !dense,
+                        compact = dense || narrow,
+                        scale = scale,
+                        // 1×1：整个卡底铺满胶囊，「开始 / 暂停」不会再被挤出可视区
+                        stretch = dense,
+                        modifier = if (dense) {
+                            Modifier.fillMaxWidth()
+                        } else {
+                            Modifier.fillMaxWidth().padding(end = 6.dp)
+                        },
+                        onToggleTimer = onToggleTimer
+                    )
+                }
             }
         }
     }
@@ -1317,6 +1409,11 @@ private fun PlanFace(
  * @param showLabel 是否显示左侧状态文字
  * @param alignEnd 按钮靠右；窄卡传 false 让按钮靠左，把右下角留给缩放手柄
  * @param compact 紧凑模式（更小的内边距与图标，但**始终保留文字**）
+ * @param scale 字号 / 内边距的等比缩放系数
+ * @param expand 撑满可用宽度（用 weight 占位把按钮顶到一侧）；横向分栏里必须传 false，
+ *               否则 weight 子项会把整行撑满、把左边的信息列挤成 0 宽
+ * @param stretch 胶囊按钮自己铺满整行（1×1 卡用它，把整个卡底变成点击区）
+ * @param modifier 外部修饰符
  * @param onToggleTimer 开始 / 暂停回调
  */
 @Composable
@@ -1328,6 +1425,9 @@ private fun TimerBar(
     alignEnd: Boolean,
     compact: Boolean,
     scale: Float,
+    expand: Boolean = true,
+    stretch: Boolean = false,
+    modifier: Modifier = Modifier,
     onToggleTimer: () -> Unit
 ) {
     val pulse by rememberInfiniteTransition(label = "timerPulse").animateFloat(
@@ -1337,8 +1437,7 @@ private fun TimerBar(
         label = "pulse"
     )
     Row(
-        // 再往里收 6dp：按钮右端和右下角的白色缩放角标之间留出明确空隙
-        modifier = Modifier.fillMaxWidth().padding(end = 6.dp),
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (showLabel) {
@@ -1364,12 +1463,14 @@ private fun TimerBar(
                 )
             }
         }
-        if (alignEnd) {
+        if (expand && alignEnd) {
             Spacer(modifier = Modifier.weight(1f))
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (stretch) Arrangement.Center else Arrangement.Start,
             modifier = Modifier
+                .then(if (stretch) Modifier.fillMaxWidth() else Modifier)
                 .clip(RoundedCornerShape(50))
                 .background(if (running) Color.White else Color.White.copy(alpha = 0.16f))
                 .border(
@@ -1399,7 +1500,7 @@ private fun TimerBar(
                 maxLines = 1
             )
         }
-        if (!alignEnd) {
+        if (expand && !alignEnd) {
             Spacer(modifier = Modifier.weight(1f))
         }
     }
