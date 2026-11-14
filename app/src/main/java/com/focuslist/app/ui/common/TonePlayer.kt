@@ -19,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
+import kotlin.math.pow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -195,21 +196,52 @@ object TonePlayer {
         if (vib?.hasVibrator() == true) {
             vibrator = vib
         }
+        // 震动用整首音频的绝对位置查包络，而不是片段内相对位置
+        val trackMs = runCatching { mp.duration.toLong() }.getOrDefault(0L)
+            .coerceAtLeast(endMs)
+        // 先看选中片段自身的响度分布，再把安静段和副歌拉开，否则振幅几乎不变
+        val (clipLow, clipHigh) = run {
+            val samples = 48
+            val values = FloatArray(samples) { index ->
+                AudioWaveform.amplitudeAt(
+                    peaks,
+                    startMs + (endMs - startMs) * index / samples,
+                    trackMs
+                )
+            }.sortedArray()
+            val low = values[(samples * 0.1f).toInt().coerceIn(0, samples - 1)]
+            val high = values[(samples * 0.95f).toInt().coerceIn(0, samples - 1)]
+                .coerceAtLeast(low + 0.01f)
+            low to high
+        }
         while (currentCoroutineContext().isActive) {
-            delay(90L)
+            delay(70L)
             val elapsed = SystemClock.elapsedRealtime() - beginElapsed
             if (stopAtMs > 0L && elapsed >= stopAtMs) {
                 break
             }
             val position = runCatching { mp.currentPosition.toLong() }.getOrDefault(startMs)
             if (vib != null && vib.hasVibrator()) {
-                // 震动强度跟着当前波形走；60ms 的短脉冲连起来就是"随音乐起伏"
-                val amplitude = AudioWaveform.amplitudeAt(peaks, position - startMs, length)
+                val raw = AudioWaveform.amplitudeAt(peaks, position, trackMs)
+                val ratio = ((raw - clipLow) / (clipHigh - clipLow)).coerceIn(0f, 1f)
+                // 幂次压缩：让中等音量也有明显强弱差异
+                val shaped = ratio.pow(0.55f)
                 if (canAmplitude) {
-                    val level = (amplitude * 255f).toInt().coerceIn(20, 255)
-                    runCatching { vib.vibrate(VibrationEffect.createOneShot(80L, level)) }
+                    // 安静段跳过，响的地方给 30-255 的振幅，能听出/摸出起伏
+                    if (shaped > 0.06f) {
+                        val level = (30 + shaped * 225f).toInt().coerceIn(1, 255)
+                        runCatching { vib.vibrate(VibrationEffect.createOneShot(70L, level)) }
+                    }
                 } else {
-                    runCatching { vib.vibrate(VibrationEffect.createOneShot(55L, VibrationEffect.DEFAULT_AMPLITUDE)) }
+                    // 不支持振幅分级的设备：用「有/无 + 脉冲长度」表达节奏
+                    if (shaped > 0.35f) {
+                        val duration = (25 + shaped * 45f).toLong()
+                        runCatching {
+                            vib.vibrate(
+                                VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE)
+                            )
+                        }
+                    }
                 }
             }
             if (position >= endMs - 40L) {

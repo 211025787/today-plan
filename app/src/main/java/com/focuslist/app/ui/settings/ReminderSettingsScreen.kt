@@ -176,9 +176,9 @@ fun ReminderSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                             toneStartMs = settings.planAlertToneStartMs.toLong(),
                             toneEndMs = settings.planAlertToneEndMs.toLong(),
                             toneDurationMs = settings.planAlertToneDurationMs.toLong(),
-                            // 测试时只播一遍，避免把 10 分钟的循环真的放满
-                            loop = false,
-                            loopDurationSec = 0
+                            // 测试只响 3 秒，避免把整首片段或很长的循环真的放满
+                            loop = true,
+                            loopDurationSec = 3
                         )
                     }) { Text("测试") }
                 }
