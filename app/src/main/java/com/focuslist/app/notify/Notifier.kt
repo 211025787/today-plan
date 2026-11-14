@@ -1,4 +1,4 @@
-package com.focuslist.app.notify
+﻿package com.focuslist.app.notify
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -35,7 +35,14 @@ class Notifier(private val context: Context) {
             setShowBadge(false)
             setSound(null, null)
         }
-        manager.createNotificationChannels(listOf(reminder, timer))
+        // 计划提醒自己播放可选铃声（可能是整首歌），渠道静音避免和 AlertPlayer 叠音；
+        // 习惯 / 任务提醒仍走「任务提醒」渠道，保留系统提示音。
+        val plan = NotificationChannel(CHANNEL_PLAN, "计划提醒", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "计划还差几分钟达标与达成目标的提醒"
+            setSound(null, null)
+            enableVibration(false)
+        }
+        manager.createNotificationChannels(listOf(reminder, timer, plan))
     }
 
     /**
@@ -78,21 +85,44 @@ class Notifier(private val context: Context) {
     /**
      * 发送计划到达每日目标提醒。
      *
+     * @param planId 计划 ID（用于区分多个计划的通知）
      * @param title 计划标题
      */
-    fun showPlanGoal(title: String) {
+    fun showPlanGoal(planId: Long, title: String) {
         val intent = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDER)
+        val notification = NotificationCompat.Builder(context, CHANNEL_PLAN)
             .setSmallIcon(R.drawable.ic_widget_circle_checked)
             .setContentTitle("计划达成今日目标")
             .setContentText(title)
             .setAutoCancel(true)
             .setContentIntent(intent)
             .build()
-        manager.notify(NOTIFY_PLAN_GOAL, notification)
+        manager.notify((NOTIFY_PLAN_GOAL_BASE + planId.coerceAtLeast(0L)).toInt(), notification)
+    }
+
+    /**
+     * 发送「计划还差 N 分钟达标」提前提醒。
+     *
+     * @param planId 计划 ID
+     * @param title 计划标题
+     * @param leadMinutes 提前分钟数
+     */
+    fun showPlanLead(planId: Long, title: String, leadMinutes: Int) {
+        val intent = PendingIntent.getActivity(
+            context, 0, Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_PLAN)
+            .setSmallIcon(R.drawable.ic_widget_circle_checked)
+            .setContentTitle("计划还差 $leadMinutes 分钟达标")
+            .setContentText(title)
+            .setAutoCancel(true)
+            .setContentIntent(intent)
+            .build()
+        manager.notify((NOTIFY_PLAN_LEAD_BASE + planId.coerceAtLeast(0L)).toInt(), notification)
     }
 
     /**
@@ -215,6 +245,9 @@ class Notifier(private val context: Context) {
         /** 计时渠道 ID */
         const val CHANNEL_TIMER = "channel_timer"
 
+        /** 计划提醒渠道 ID（渠道静音，铃声由 AlertPlayer 播放） */
+        const val CHANNEL_PLAN = "channel_plan"
+
         /** 计时服务前台通知 ID */
         const val NOTIFY_TIMER_RUNNING = 1001
 
@@ -224,8 +257,11 @@ class Notifier(private val context: Context) {
         /** 计划秒表前台通知 ID */
         const val NOTIFY_PLAN_STOPWATCH = 1003
 
-        /** 计划达成目标提醒 ID */
-        const val NOTIFY_PLAN_GOAL = 1004
+        /** 计划达成目标提醒 ID 基数（叠加计划 ID） */
+        const val NOTIFY_PLAN_GOAL_BASE = 1100L
+
+        /** 计划提前提醒 ID 基数（叠加计划 ID） */
+        const val NOTIFY_PLAN_LEAD_BASE = 1200L
 
         /** 任务提醒通知 ID 基数（叠加任务 ID） */
         const val NOTIFY_TASK_BASE = 2000L

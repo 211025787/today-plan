@@ -246,6 +246,11 @@ class HomeViewModel(
         }
         // 冷启动恢复（进程重启场景）
         PlanTimerHolder.restore(appContext)
+        // 恢复出运行中的计时后必须把前台服务拉起来：否则秒表只在本进程里走，
+        // 通知、悬浮胶囊、提醒闹钟都不会工作（重装/强停后再打开最容易踩到）
+        if (PlanTimerHolder.hasActive()) {
+            PlanTimerService.ensureStarted(appContext)
+        }
     }
 
     /** 月偏移对应的 1 号 0 点 */

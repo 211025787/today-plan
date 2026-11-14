@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -157,6 +158,55 @@ fun SettingsSwitchRow(
             }
         }
         Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/**
+ * 数值步进行：左侧文案 + 可选说明，右侧「− 数值 单位 +」。
+ *
+ * @param label 主文案
+ * @param description 副文案，留空则不显示
+ * @param value 当前值
+ * @param unit 单位文案
+ * @param range 取值范围（含两端）
+ * @param onChange 变更回调
+ */
+@Composable
+fun SettingsStepperRow(
+    label: String,
+    description: String? = null,
+    value: Int,
+    unit: String,
+    range: IntRange,
+    onChange: (Int) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(text = label, style = MaterialTheme.typography.bodyMedium)
+            if (!description.isNullOrBlank()) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+        TextButton(onClick = { onChange((value - 1).coerceAtLeast(range.first)) }, enabled = value > range.first) {
+            Text("−", style = MaterialTheme.typography.titleMedium)
+        }
+        Text(
+            text = "$value $unit",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 2.dp)
+        )
+        TextButton(onClick = { onChange((value + 1).coerceAtMost(range.last)) }, enabled = value < range.last) {
+            Text("+", style = MaterialTheme.typography.titleMedium)
+        }
     }
 }
 

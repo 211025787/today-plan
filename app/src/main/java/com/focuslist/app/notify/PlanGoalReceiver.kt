@@ -3,8 +3,8 @@ package com.focuslist.app.notify
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.focuslist.app.FocusListApp
-import com.focuslist.app.ui.common.AlertPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -12,9 +12,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * 计划到达每日目标广播接收器：播放提示音/震动并发通知。
+ * 计划提醒广播接收器：闹钟到点时播放提示音/震动并发送通知。
  *
- * 由 [PlanGoalAlarms] 在目标时刻触发，进程未运行时也会被系统唤起执行。
+ * 由 [PlanGoalAlarms] 在「提前 N 分钟」或「到达每日目标」时刻触发，
+ * 进程未运行时也会被系统唤起执行。正常前台计时时由 [PlanAlert] 的服务侧路径先触发，
+ * 这里再触发会被去重表挡掉，不会响两遍。
  */
 class PlanGoalReceiver : BroadcastReceiver() {
 
@@ -23,23 +25,16 @@ class PlanGoalReceiver : BroadcastReceiver() {
             return
         }
         val title = intent.getStringExtra(PlanGoalAlarms.EXTRA_TITLE) ?: "计划"
+        val planId = intent.getLongExtra(PlanGoalAlarms.EXTRA_PLAN_ID, 0L)
+        val kind = intent.getStringExtra(PlanGoalAlarms.EXTRA_KIND) ?: PlanGoalAlarms.KIND_GOAL
+        val leadMinutes = intent.getIntExtra(PlanGoalAlarms.EXTRA_LEAD_MINUTES, 0)
+        Log.d("FocusAlarm", "fire kind=$kind plan=$planId lead=$leadMinutes")
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
                 val app = context.applicationContext as FocusListApp
                 val settings = app.container.settingsStore.settings.first()
-                if (settings.planReachGoalSound || settings.planReachGoalVibrate) {
-                    AlertPlayer.play(
-                        context = context,
-                        chime = settings.chimeType,
-                        sound = settings.planReachGoalSound,
-                        vibrate = settings.planReachGoalVibrate,
-                        soundSec = settings.alertSoundSec,
-                        vibrateSec = settings.alertVibrateSec
-                    )
-                }
-                Notifier(context).ensureChannels()
-                Notifier(context).showPlanGoal(title)
+                PlanAlert.fire(context, settings, planId, title, kind, leadMinutes)
             } catch (_: Exception) {
                 // 任何异常都不能让广播崩溃
             } finally {

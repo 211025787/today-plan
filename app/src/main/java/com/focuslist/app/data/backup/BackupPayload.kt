@@ -165,6 +165,15 @@ data class BackupSettings(
     val whiteNoiseType: String = "NONE",
     val planReachGoalSound: Boolean = true,
     val planReachGoalVibrate: Boolean = true,
+    val planReachGoalLeadMinutes: Int = 5,
+    val planAlertToneKind: String = "CHIME",
+    val planAlertToneValue: String = "",
+    val planAlertToneName: String = "",
+    val planAlertToneStartMs: Int = 0,
+    val planAlertToneEndMs: Int = 0,
+    val planAlertToneDurationMs: Int = 0,
+    val planAlertLoop: Boolean = false,
+    val planAlertDurationSec: Int = 0,
     val dailyGoalMinutes: Int = 30
 )
 

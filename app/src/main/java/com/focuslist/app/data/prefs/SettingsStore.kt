@@ -12,13 +12,27 @@ import com.focuslist.app.data.backup.BackupSettings
 import com.focuslist.app.data.backup.toTimerSettings
 import com.focuslist.app.util.Achievements
 import com.focuslist.app.util.Goal
+import com.focuslist.app.util.PlanLead
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanTemplates
+import com.focuslist.app.util.RingtoneClip
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "focus_settings")
+
+/** 计划提醒铃声来源：内置音色 */
+const val PLAN_TONE_CHIME = "CHIME"
+
+/** 计划提醒铃声来源：本地音频文件（在线热歌下载后的缓存，或系统铃声复制到应用目录） */
+const val PLAN_TONE_FILE = "FILE"
+
+/** 计划提醒铃声来源：系统铃声 URI */
+const val PLAN_TONE_SYSTEM = "SYSTEM"
+
+/** 合法的铃声来源取值 */
+private val PLAN_TONE_KINDS = setOf(PLAN_TONE_CHIME, PLAN_TONE_FILE, PLAN_TONE_SYSTEM)
 
 /**
  * 计时器与用户偏好设置，全部由 DataStore 离线持久化。
@@ -51,6 +65,15 @@ private val Context.dataStore by preferencesDataStore(name = "focus_settings")
  * @property whiteNoiseType 专注时白噪音类型：NONE 关闭、WHITE 白噪声、BROWN 棕噪声
  * @property planReachGoalSound 计划倒计时到达目标时是否响铃
  * @property planReachGoalVibrate 计划倒计时到达目标时是否震动
+ * @property planReachGoalLeadMinutes 计划还差多少分钟时提前提醒，0 表示关闭，取值 0-60，默认 5
+ * @property planAlertToneKind 计划提醒铃声来源：CHIME 内置音色 / FILE 本地音频 / SYSTEM 系统铃声
+ * @property planAlertToneValue 铃声取值：内置音色标识、本地音频绝对路径或系统铃声 URI
+ * @property planAlertToneName 铃声显示名（用于设置页与通知摘要）
+ * @property planAlertToneStartMs 铃声片段起点（毫秒）
+ * @property planAlertToneEndMs 铃声片段终点（毫秒），0 表示到音频结尾
+ * @property planAlertToneDurationMs 音频总时长（毫秒），0 表示未知
+ * @property planAlertLoop 是否循环播放铃声
+ * @property planAlertDurationSec 循环播放总时长（秒），0 配合 [planAlertLoop] 关闭表示只播一遍
  * @property dailyGoalMinutes 每日专注目标（分钟），取值 5-480 且为 5 的倍数，默认 30
  */
 data class TimerSettings(
@@ -82,6 +105,15 @@ data class TimerSettings(
     val whiteNoiseType: String = "NONE",
     val planReachGoalSound: Boolean = true,
     val planReachGoalVibrate: Boolean = true,
+    val planReachGoalLeadMinutes: Int = PlanLead.DEFAULT_MINUTES,
+    val planAlertToneKind: String = PLAN_TONE_CHIME,
+    val planAlertToneValue: String = "",
+    val planAlertToneName: String = "",
+    val planAlertToneStartMs: Int = 0,
+    val planAlertToneEndMs: Int = 0,
+    val planAlertToneDurationMs: Int = 0,
+    val planAlertLoop: Boolean = false,
+    val planAlertDurationSec: Int = 0,
     val dailyGoalMinutes: Int = 30
 )
 
@@ -177,6 +209,33 @@ class SettingsStore(private val context: Context) {
         /** 计划到目标震动 key */
         val PLAN_REACH_VIBRATE = booleanPreferencesKey("plan_reach_goal_vibrate")
 
+        /** 计划提前提醒分钟 key */
+        val PLAN_LEAD_MINUTES = intPreferencesKey("plan_reach_goal_lead_minutes")
+
+        /** 计划提醒铃声来源 key */
+        val PLAN_TONE_KIND = stringPreferencesKey("plan_alert_tone_kind")
+
+        /** 计划提醒铃声取值 key */
+        val PLAN_TONE_VALUE = stringPreferencesKey("plan_alert_tone_value")
+
+        /** 计划提醒铃声显示名 key */
+        val PLAN_TONE_NAME = stringPreferencesKey("plan_alert_tone_name")
+
+        /** 铃声片段起点 key */
+        val PLAN_TONE_START = intPreferencesKey("plan_alert_tone_start_ms")
+
+        /** 铃声片段终点 key */
+        val PLAN_TONE_END = intPreferencesKey("plan_alert_tone_end_ms")
+
+        /** 铃声总时长 key */
+        val PLAN_TONE_DURATION = intPreferencesKey("plan_alert_tone_duration_ms")
+
+        /** 铃声循环开关 key */
+        val PLAN_TONE_LOOP = booleanPreferencesKey("plan_alert_loop")
+
+        /** 循环播放时长 key */
+        val PLAN_TONE_LOOP_SEC = intPreferencesKey("plan_alert_loop_sec")
+
         /** 每日专注目标 key */
         val DAILY_GOAL = intPreferencesKey("daily_goal_minutes")
 
@@ -236,6 +295,17 @@ class SettingsStore(private val context: Context) {
             whiteNoiseType = prefs[Keys.WHITE_NOISE] ?: "NONE",
             planReachGoalSound = prefs[Keys.PLAN_REACH_SOUND] ?: true,
             planReachGoalVibrate = prefs[Keys.PLAN_REACH_VIBRATE] ?: true,
+            planReachGoalLeadMinutes = PlanLead.coerce(
+                prefs[Keys.PLAN_LEAD_MINUTES] ?: PlanLead.DEFAULT_MINUTES
+            ),
+            planAlertToneKind = prefs[Keys.PLAN_TONE_KIND]?.takeIf { it in PLAN_TONE_KINDS } ?: PLAN_TONE_CHIME,
+            planAlertToneValue = prefs[Keys.PLAN_TONE_VALUE] ?: "",
+            planAlertToneName = prefs[Keys.PLAN_TONE_NAME] ?: "",
+            planAlertToneStartMs = (prefs[Keys.PLAN_TONE_START] ?: 0).coerceAtLeast(0),
+            planAlertToneEndMs = (prefs[Keys.PLAN_TONE_END] ?: 0).coerceAtLeast(0),
+            planAlertToneDurationMs = (prefs[Keys.PLAN_TONE_DURATION] ?: 0).coerceAtLeast(0),
+            planAlertLoop = prefs[Keys.PLAN_TONE_LOOP] ?: false,
+            planAlertDurationSec = RingtoneClip.clampDurationSec(prefs[Keys.PLAN_TONE_LOOP_SEC] ?: 0),
             dailyGoalMinutes = prefs[Keys.DAILY_GOAL] ?: 30
         )
     }
@@ -405,6 +475,64 @@ class SettingsStore(private val context: Context) {
     }
 
     /**
+     * 更新计划「还差几分钟达标」的提前提醒分钟数。
+     *
+     * @param minutes 提前分钟数，0 表示关闭，越界值收敛到 0-60
+     */
+    suspend fun updatePlanLeadMinutes(minutes: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.PLAN_LEAD_MINUTES] = PlanLead.coerce(minutes)
+        }
+    }
+
+    /**
+     * 更新计划提醒铃声。
+     *
+     * @param kind 来源：CHIME 内置音色 / FILE 本地音频 / SYSTEM 系统铃声
+     * @param value 内置音色标识、本地音频路径或系统铃声 URI
+     * @param name 显示名
+     */
+    suspend fun updatePlanAlertTone(kind: String, value: String, name: String, durationMs: Int = 0) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.PLAN_TONE_KIND] = kind.takeIf { it in PLAN_TONE_KINDS } ?: PLAN_TONE_CHIME
+            prefs[Keys.PLAN_TONE_VALUE] = value
+            prefs[Keys.PLAN_TONE_NAME] = name
+            // 换铃声后旧的片段范围不再适用，重置为整首
+            prefs[Keys.PLAN_TONE_START] = 0
+            prefs[Keys.PLAN_TONE_END] = 0
+            prefs[Keys.PLAN_TONE_DURATION] = durationMs.coerceAtLeast(0)
+        }
+    }
+
+    /**
+     * 更新铃声片段范围。
+     *
+     * @param startMs 起点毫秒
+     * @param endMs 终点毫秒，0 表示到结尾
+     * @param durationMs 音频总时长
+     */
+    suspend fun updatePlanAlertClip(startMs: Int, endMs: Int, durationMs: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.PLAN_TONE_START] = startMs.coerceAtLeast(0)
+            prefs[Keys.PLAN_TONE_END] = endMs.coerceAtLeast(0)
+            prefs[Keys.PLAN_TONE_DURATION] = durationMs.coerceAtLeast(0)
+        }
+    }
+
+    /**
+     * 更新循环播放设置。
+     *
+     * @param loop 是否循环
+     * @param durationSec 循环总时长（秒），0 表示只播一遍
+     */
+    suspend fun updatePlanAlertLoop(loop: Boolean, durationSec: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.PLAN_TONE_LOOP] = loop
+            prefs[Keys.PLAN_TONE_LOOP_SEC] = RingtoneClip.clampDurationSec(durationSec)
+        }
+    }
+
+    /**
      * 更新每日专注目标（分钟）。
      *
      * 写入前统一约束到 5-480 且为 5 的倍数，避免非法值让进度环失真。
@@ -537,6 +665,15 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.WHITE_NOISE] = safe.whiteNoiseType
             prefs[Keys.PLAN_REACH_SOUND] = safe.planReachGoalSound
             prefs[Keys.PLAN_REACH_VIBRATE] = safe.planReachGoalVibrate
+            prefs[Keys.PLAN_LEAD_MINUTES] = PlanLead.coerce(safe.planReachGoalLeadMinutes)
+            prefs[Keys.PLAN_TONE_KIND] = safe.planAlertToneKind.takeIf { it in PLAN_TONE_KINDS } ?: PLAN_TONE_CHIME
+            prefs[Keys.PLAN_TONE_VALUE] = safe.planAlertToneValue
+            prefs[Keys.PLAN_TONE_NAME] = safe.planAlertToneName
+            prefs[Keys.PLAN_TONE_START] = safe.planAlertToneStartMs
+            prefs[Keys.PLAN_TONE_END] = safe.planAlertToneEndMs
+            prefs[Keys.PLAN_TONE_DURATION] = safe.planAlertToneDurationMs
+            prefs[Keys.PLAN_TONE_LOOP] = safe.planAlertLoop
+            prefs[Keys.PLAN_TONE_LOOP_SEC] = RingtoneClip.clampDurationSec(safe.planAlertDurationSec)
             prefs[Keys.DAILY_GOAL] = Goal.coerce(safe.dailyGoalMinutes)
         }
     }

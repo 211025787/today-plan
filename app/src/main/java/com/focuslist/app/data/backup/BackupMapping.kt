@@ -115,6 +115,15 @@ fun BackupSettings.toTimerSettings(): TimerSettings = TimerSettings(
     whiteNoiseType = whiteNoiseType,
     planReachGoalSound = planReachGoalSound,
     planReachGoalVibrate = planReachGoalVibrate,
+    planReachGoalLeadMinutes = planReachGoalLeadMinutes,
+    planAlertToneKind = planAlertToneKind,
+    planAlertToneValue = planAlertToneValue,
+    planAlertToneName = planAlertToneName,
+    planAlertToneStartMs = planAlertToneStartMs,
+    planAlertToneEndMs = planAlertToneEndMs,
+    planAlertToneDurationMs = planAlertToneDurationMs,
+    planAlertLoop = planAlertLoop,
+    planAlertDurationSec = planAlertDurationSec,
     dailyGoalMinutes = dailyGoalMinutes
 )
 
@@ -148,6 +157,15 @@ fun TimerSettings.toBackupSettings(): BackupSettings = BackupSettings(
     whiteNoiseType = whiteNoiseType,
     planReachGoalSound = planReachGoalSound,
     planReachGoalVibrate = planReachGoalVibrate,
+    planReachGoalLeadMinutes = planReachGoalLeadMinutes,
+    planAlertToneKind = planAlertToneKind,
+    planAlertToneValue = planAlertToneValue,
+    planAlertToneName = planAlertToneName,
+    planAlertToneStartMs = planAlertToneStartMs,
+    planAlertToneEndMs = planAlertToneEndMs,
+    planAlertToneDurationMs = planAlertToneDurationMs,
+    planAlertLoop = planAlertLoop,
+    planAlertDurationSec = planAlertDurationSec,
     dailyGoalMinutes = dailyGoalMinutes
 )
 

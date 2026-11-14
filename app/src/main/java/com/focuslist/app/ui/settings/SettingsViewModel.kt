@@ -157,6 +157,56 @@ class SettingsViewModel(
     }
 
     /**
+     * 保存计划提前提醒分钟数（0 表示关闭）。
+     *
+     * @param minutes 提前分钟数
+     */
+    fun savePlanLeadMinutes(minutes: Int) {
+        viewModelScope.launch {
+            settingsStore.updatePlanLeadMinutes(minutes)
+        }
+    }
+
+    /**
+     * 保存计划提醒铃声。
+     *
+     * @param kind 来源：CHIME / FILE / SYSTEM
+     * @param value 音色标识、文件路径或系统铃声 URI
+     * @param name 显示名
+     * @param durationMs 音频总时长（毫秒）
+     */
+    fun savePlanAlertTone(kind: String, value: String, name: String, durationMs: Int = 0) {
+        viewModelScope.launch {
+            settingsStore.updatePlanAlertTone(kind, value, name, durationMs)
+        }
+    }
+
+    /**
+     * 保存铃声片段范围。
+     *
+     * @param startMs 起点毫秒
+     * @param endMs 终点毫秒
+     * @param durationMs 音频总时长
+     */
+    fun savePlanAlertClip(startMs: Int, endMs: Int, durationMs: Int) {
+        viewModelScope.launch {
+            settingsStore.updatePlanAlertClip(startMs, endMs, durationMs)
+        }
+    }
+
+    /**
+     * 保存循环播放设置。
+     *
+     * @param loop 是否循环
+     * @param durationSec 循环总时长（秒），0 表示只播一遍
+     */
+    fun savePlanAlertLoop(loop: Boolean, durationSec: Int) {
+        viewModelScope.launch {
+            settingsStore.updatePlanAlertLoop(loop, durationSec)
+        }
+    }
+
+    /**
      * 保存每日专注目标（分钟）。
      *
      * @param minutes 目标分钟数，越界值由 [SettingsStore] 统一收敛

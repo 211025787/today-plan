@@ -93,7 +93,12 @@ fun SettingsScreen(
         listOfNotNull(
             "响铃".takeIf { settings.planReachGoalSound },
             "震动".takeIf { settings.planReachGoalVibrate }
-        ).joinToString("、") + " · 计划达标时提醒"
+        ).joinToString("、") +
+            if (settings.planReachGoalLeadMinutes > 0) {
+                " · 提前 ${settings.planReachGoalLeadMinutes} 分钟提醒"
+            } else {
+                " · 计划达标时提醒"
+            }
     } else {
         "已关闭，计划达标时不会提醒"
     }
