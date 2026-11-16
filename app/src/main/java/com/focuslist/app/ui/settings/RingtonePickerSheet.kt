@@ -46,11 +46,26 @@ import com.focuslist.app.data.music.RingtoneStore
 import com.focuslist.app.data.prefs.PLAN_TONE_CHIME
 import com.focuslist.app.data.prefs.PLAN_TONE_FILE
 import com.focuslist.app.data.prefs.PLAN_TONE_SYSTEM
-import com.focuslist.app.data.prefs.TimerSettings
+
 import com.focuslist.app.ui.common.ChimePlayer
 import com.focuslist.app.ui.common.TonePlayer
 import java.io.File
 import kotlinx.coroutines.launch
+
+/**
+ * 一个铃声选择：来源 / 取值 / 显示名 / 内置音色兜底。
+ *
+ * @property kind CHIME / FILE / SYSTEM
+ * @property value 音色标识、文件路径或系统铃声 URI
+ * @property name 显示名
+ * @property fallbackChime 内置音色兜底（未单独选音色时用全局设置）
+ */
+data class ToneState(
+    val kind: String,
+    val value: String,
+    val name: String,
+    val fallbackChime: String
+)
 
 /**
  * 计划提醒铃声选择弹层：内置音色 / 在线热歌榜 / 关键词搜索 / 系统铃声。
@@ -65,9 +80,19 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RingtonePickerSheet(
-    settings: TimerSettings,
+    tone: ToneState,
     onPick: (kind: String, value: String, name: String, durationMs: Int) -> Unit,
     onDismiss: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        RingtonePickerContent(tone = tone, onPick = onPick)
+    }
+}
+
+@Composable
+fun RingtonePickerContent(
+    tone: ToneState,
+    onPick: (kind: String, value: String, name: String, durationMs: Int) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -116,9 +141,8 @@ fun RingtonePickerSheet(
         }
     }
 
-    val activeChime = settings.planAlertToneValue.ifBlank { settings.chimeType }
+    val activeChime = tone.value.ifBlank { tone.fallbackChime }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -128,22 +152,22 @@ fun RingtonePickerSheet(
         ) {
             item {
                 Text(
-                    "计划提醒铃声",
+                    "提醒铃声",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                 )
                 Text(
-                    text = "当前：${planToneLabel(settings)}",
+                    text = "当前：${toneLabel(tone)}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 TextButton(onClick = {
-                    when (settings.planAlertToneKind) {
+                    when (tone.kind) {
                         PLAN_TONE_CHIME -> ChimePlayer.play(context, activeChime)
                         else -> TonePlayer.preview(
                             context,
-                            settings.planAlertToneKind,
-                            settings.planAlertToneValue
+                            tone.kind,
+                            tone.value
                         )
                     }
                 }) { Text("▶ 试听当前铃声") }
@@ -160,7 +184,7 @@ fun RingtonePickerSheet(
             item { SectionTitle("内置音色") }
             items(ChimePlayer.options.size) { index ->
                 val (type, name, icon) = ChimePlayer.options[index]
-                val selected = settings.planAlertToneKind == PLAN_TONE_CHIME && activeChime == type
+                val selected = tone.kind == PLAN_TONE_CHIME && activeChime == type
                 ToneRow(
                     title = "$icon $name",
                     subtitle = if (selected) "当前使用" else null,
@@ -242,8 +266,8 @@ fun RingtonePickerSheet(
                 }
             } else {
                 items(list, key = { it.id }) { song ->
-                    val selected = settings.planAlertToneKind == PLAN_TONE_FILE &&
-                        settings.planAlertToneName == song.displayName
+                    val selected = tone.kind == PLAN_TONE_FILE &&
+                        tone.name == song.displayName
                     ToneRow(
                         title = song.name,
                         subtitle = buildString {
@@ -297,7 +321,7 @@ fun RingtonePickerSheet(
                 ToneRow(
                     title = "从系统闹钟铃声里选",
                     subtitle = "会复制一份到本机，避免权限失效后不响",
-                    selected = settings.planAlertToneKind == PLAN_TONE_SYSTEM,
+                    selected = tone.kind == PLAN_TONE_SYSTEM,
                     actionText = "选择",
                     onRowClick = { launchSystemPicker(systemPicker) { hint = it } },
                     onAction = { launchSystemPicker(systemPicker) { hint = it } }
@@ -311,7 +335,6 @@ fun RingtonePickerSheet(
             }
         }
     }
-}
 
 /**
  * 打开系统闹钟铃声选择器，打不开时回传提示文案。
@@ -338,12 +361,12 @@ private fun launchSystemPicker(
  * @param settings 设置快照
  * @return 中文描述
  */
-internal fun planToneLabel(settings: TimerSettings): String {
-    return when (settings.planAlertToneKind) {
-        PLAN_TONE_FILE -> settings.planAlertToneName.ifBlank { "本地音频" }
-        PLAN_TONE_SYSTEM -> settings.planAlertToneName.ifBlank { "系统铃声" }
+internal fun toneLabel(tone: ToneState): String {
+    return when (tone.kind) {
+        PLAN_TONE_FILE -> tone.name.ifBlank { "本地音频" }
+        PLAN_TONE_SYSTEM -> tone.name.ifBlank { "系统铃声" }
         else -> {
-            val active = settings.planAlertToneValue.ifBlank { settings.chimeType }
+            val active = tone.value.ifBlank { tone.fallbackChime }
             ChimePlayer.options.firstOrNull { it.first == active }
                 ?.let { "${it.third} ${it.second}" }
                 ?: "内置音色"

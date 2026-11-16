@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -66,11 +66,6 @@
             android:name=".notify.PlanGoalReceiver"
             android:exported="false" />
 
-        <!-- 习惯每日提醒广播接收器 -->
-        <receiver
-            android:name=".notify.HabitReminderReceiver"
-            android:exported="false" />
-
         <!-- 任务到期提醒广播接收器 -->
         <receiver
             android:name=".notify.ReminderReceiver"
@@ -86,69 +81,38 @@
             </intent-filter>
         </receiver>
 
-        <!-- 桌面小组件：今日任务列表 -->
+        <!-- 计划提醒「停止响铃」广播 -->
         <receiver
-            android:name=".widget.task.TaskListWidgetProvider"
+            android:name=".notify.PlanAlertStopReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.focuslist.app.action.STOP_PLAN_ALERT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 桌面小组件：今日计划（2x1 横向） -->
+        <receiver
+            android:name=".widget.plan.PlanWidgetWideProvider"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.focuslist.app.action.WIDGET_TOGGLE_TASK" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/task_list_widget_info" />
+                android:resource="@xml/plan_widget_wide_info" />
         </receiver>
 
-        <!-- 桌面小组件：任务列表远程数据服务 -->
-        <service
-            android:name=".widget.task.TaskListWidgetService"
-            android:permission="android.permission.BIND_REMOTEVIEWS" />
-
-        <!-- 桌面小组件：番茄钟快捷卡片 -->
+        <!-- 桌面小组件：今日计划（1x2 纵向） -->
         <receiver
-            android:name=".widget.timer.TimerWidgetProvider"
+            android:name=".widget.plan.PlanWidgetTallProvider"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.focuslist.app.action.WIDGET_TIMER_START" />
-                <action android:name="com.focuslist.app.action.WIDGET_TIMER_PAUSE" />
-                <action android:name="com.focuslist.app.action.WIDGET_TIMER_STOP" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/timer_widget_info" />
+                android:resource="@xml/plan_widget_tall_info" />
         </receiver>
-
-        <!-- 桌面小组件：专注统计卡片 -->
-        <receiver
-            android:name=".widget.stats.StatsWidgetProvider"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.focuslist.app.action.WIDGET_STATS_REFRESH" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/stats_widget_info" />
-        </receiver>
-
-        <!-- 桌面小组件：习惯打卡列表 -->
-        <receiver
-            android:name=".widget.habit.HabitWidgetProvider"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.focuslist.app.action.WIDGET_CHECK_HABIT" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/habit_widget_info" />
-        </receiver>
-
-        <!-- 桌面小组件：习惯列表远程数据服务 -->
-        <service
-            android:name=".widget.habit.HabitWidgetService"
-            android:permission="android.permission.BIND_REMOTEVIEWS" />
 
     </application>
 

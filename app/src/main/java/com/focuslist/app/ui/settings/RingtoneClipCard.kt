@@ -69,12 +69,15 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun RingtoneClipCard(
-    settings: TimerSettings,
+    toneValue: String,
+    startMs: Int,
+    endMs: Int,
+    durationMs: Int,
     onClipChange: (startMs: Int, endMs: Int, durationMs: Int) -> Unit
 ) {
     val context = LocalContext.current
-    val path = settings.planAlertToneValue
-    val totalMs = settings.planAlertToneDurationMs.toLong()
+    val path = toneValue
+    val totalMs = durationMs.toLong()
     if (path.isBlank() || totalMs <= 0L) {
         return
     }
@@ -93,9 +96,9 @@ fun RingtoneClipCard(
     val displayPeaks = remember(peaks) { normalizeWave(peaks) }
 
     val totalSec = (totalMs / 1000L).coerceAtLeast(1L).toFloat()
-    val initialStart = (settings.planAlertToneStartMs / 1000f).coerceIn(0f, totalSec - 1f)
+    val initialStart = (startMs / 1000f).coerceIn(0f, totalSec - 1f)
     val initialEnd = (RingtoneClip.effectiveEnd(
-        settings.planAlertToneEndMs.toLong(),
+        endMs.toLong(),
         totalMs
     ) / 1000f).coerceIn(initialStart + 1f, totalSec)
     // 只用 path 做 key：保存后 settings 会回流，若把它算进 key 会重建 state，

@@ -1,4 +1,4 @@
-package com.focuslist.app.data.backup
+﻿package com.focuslist.app.data.backup
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -17,15 +17,13 @@ class BackupPayloadTest {
             planLogs = List(30) { BackupPlanLog(id = it.toLong()) },
             notes = List(5) { BackupNote(id = it.toLong()) },
             noteAttachments = List(3) { BackupAttachment(id = it.toLong()) },
-            habits = List(1) { BackupHabit(id = it.toLong()) },
-            habitChecks = List(10) { BackupHabitCheck(id = it.toLong()) },
             tasks = List(4) { BackupTask(id = it.toLong()) },
             subTasks = List(6) { BackupSubTask(id = it.toLong()) },
             focusRecords = List(8) { BackupFocusRecord(id = it.toLong()) },
             categories = List(1) { BackupCategory(id = it.toLong()) },
             tags = List(2) { BackupTag(id = it.toLong()) }
         )
-        assertEquals(2 + 30 + 5 + 3 + 1 + 10 + 4 + 6 + 8 + 1 + 2, payload.totalCount())
+        assertEquals(2 + 30 + 5 + 3 + 4 + 6 + 8 + 1 + 2, payload.totalCount())
     }
 
     @Test

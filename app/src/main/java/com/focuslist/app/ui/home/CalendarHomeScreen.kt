@@ -656,9 +656,10 @@ fun CalendarHomeScreen(
                             )
                         }
                     }
+                    // 固定行高：收工入口是条件出现的，不能让它出现时把下面内容顶下去
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                        modifier = Modifier.fillMaxWidth().height(28.dp).padding(horizontal = 16.dp)
                     ) {
                         Text(
                             text = "‹ 返回日历",

@@ -1,4 +1,4 @@
-package com.focuslist.app.ui.focus
+﻿package com.focuslist.app.ui.focus
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -7,6 +7,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -42,6 +44,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -64,6 +67,16 @@ import com.focuslist.app.AppContainer
 import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.timer.FocusTimerService
 import com.focuslist.app.ui.common.ChimePlayer
+import com.focuslist.app.data.prefs.PLAN_TONE_CHIME
+import com.focuslist.app.data.prefs.PLAN_TONE_FILE
+import com.focuslist.app.ui.common.TonePlayer
+import com.focuslist.app.ui.settings.RingtoneClipCard
+import com.focuslist.app.ui.settings.RingtonePickerSheet
+import com.focuslist.app.ui.settings.RingtonePickerContent
+import com.focuslist.app.ui.settings.ToneState
+import com.focuslist.app.ui.settings.toneLabel
+import com.focuslist.app.util.RingtoneClip
+import java.io.File
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.common.antiBurnInDrift
 import com.focuslist.app.ui.plan.PlanTimerHolder
@@ -97,8 +110,10 @@ fun FocusScreen(container: AppContainer, onOpenStats: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
 
     var showTaskPicker by remember { mutableStateOf(false) }
-    // 专注设置弹层（番茄参数 / 铃声震动 / 自动化）
+    // 专注设置弹层（番茄参数 / 铃声震动）
     var showSettings by remember { mutableStateOf(false) }
+    // 完成提示音选择弹层
+    var showTonePicker by remember { mutableStateOf(false) }
 
     // 计时状态联动白噪音：WORK 运行中播放，其余停止
     LaunchedEffect(timer.phase, timer.running, settings.whiteNoiseType) {
@@ -336,51 +351,99 @@ fun FocusScreen(container: AppContainer, onOpenStats: () -> Unit = {}) {
         )
     }
 
-    // 专注设置弹层：番茄参数步进调整、结束时提醒（铃声/震动动画开关）、自动化开关
+    // 专注设置弹层：设置页与铃声选择页在同一个弹层内左右切换
     if (showSettings) {
-        FocusSettingsSheet(
-            settings = settings,
-            onUpdateDurations = { focus, shortBreak, longBreak, interval ->
-                scope.launch { container.settingsStore.updateDurations(focus, shortBreak, longBreak, interval) }
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = {
+                showSettings = false
+                showTonePicker = false
             },
-            onUpdateSwitches = { autoBreak, autoPomo, sound, vibrate, strict ->
-                scope.launch { container.settingsStore.updateSwitches(autoBreak, autoPomo, sound, vibrate, strict) }
-            },
-            onUpdateChime = { type ->
-                scope.launch { container.settingsStore.updateChime(type) }
-            },
-            onUpdateAlertDurations = { soundSec, vibrateSec ->
-                scope.launch { container.settingsStore.updateAlertDurations(soundSec, vibrateSec) }
-            },
-            onDismiss = { showSettings = false }
-        )
+            sheetState = sheetState
+        ) {
+            AnimatedContent(
+                targetState = showTonePicker,
+                transitionSpec = {
+                    if (targetState) {
+                        // 进入铃声页：设置页向左淡出，铃声页从右侧滑入
+                        (slideInHorizontally(tween(260)) { it } + fadeIn(tween(260))) togetherWith
+                            (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(200)))
+                    } else {
+                        // 选完返回：铃声页向右淡出，设置页从左侧回来
+                        (slideInHorizontally(tween(260)) { -it } + fadeIn(tween(260))) togetherWith
+                            (slideOutHorizontally(tween(260)) { it } + fadeOut(tween(200)))
+                    }
+                },
+                label = "focusTonePage"
+            ) { tonePage ->
+                if (tonePage) {
+                    RingtonePickerContent(
+                        tone = ToneState(
+                            settings.focusAlertToneKind,
+                            settings.focusAlertToneValue,
+                            settings.focusAlertToneName,
+                            settings.chimeType
+                        ),
+                        onPick = { kind, value, name, durationMs ->
+                            scope.launch {
+                                container.settingsStore.updateFocusAlertTone(kind, value, name, durationMs)
+                            }
+                            showTonePicker = false
+                        }
+                    )
+                } else {
+                    FocusSettingsContent(
+                        settings = settings,
+                        onUpdateDurations = { focus, shortBreak, longBreak, interval ->
+                            scope.launch {
+                                container.settingsStore.updateDurations(focus, shortBreak, longBreak, interval)
+                            }
+                        },
+                        onUpdateSwitches = { autoBreak, autoPomo, sound, vibrate, strict ->
+                            scope.launch {
+                                container.settingsStore.updateSwitches(autoBreak, autoPomo, sound, vibrate, strict)
+                            }
+                        },
+                        onOpenTonePicker = { showTonePicker = true },
+                        onUpdateClip = { startMs, endMs, durationMs ->
+                            scope.launch {
+                                container.settingsStore.updateFocusAlertClip(startMs, endMs, durationMs)
+                            }
+                        },
+                        onUpdateAlertDurations = { soundSec, vibrateSec ->
+                            scope.launch { container.settingsStore.updateAlertDurations(soundSec, vibrateSec) }
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 
 /**
- * 专注设置弹层：番茄参数（步进器）、结束时提醒（铃声/震动动画开关）、提示音音色、自动化开关。
+ * 专注设置弹层：番茄参数（步进器）、结束时提醒（铃声/震动动画开关）、完成提示音、严格模式。
  *
  * @param settings 当前设置快照
  * @param onUpdateDurations 保存时长参数回调（专注、短休息、长休息、长休息间隔）
  * @param onUpdateSwitches 保存开关回调（自动休息、自动下一番茄、铃声、震动、严格模式）
- * @param onUpdateChime 保存提示音音色回调
+ * @param onOpenTonePicker 打开完成提示音选择器
+ * @param onUpdateClip 保存完成提示音片段
  * @param onUpdateAlertDurations 保存提醒时长回调（响铃秒数, 震动秒数）
  * @param onDismiss 关闭弹层回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FocusSettingsSheet(
+private fun FocusSettingsContent(
     settings: TimerSettings,
     onUpdateDurations: (Int, Int, Int, Int) -> Unit,
     onUpdateSwitches: (Boolean, Boolean, Boolean, Boolean, Boolean) -> Unit,
-    onUpdateChime: (String) -> Unit,
-    onUpdateAlertDurations: (Int, Int) -> Unit,
-    onDismiss: () -> Unit
+    onOpenTonePicker: () -> Unit,
+    onUpdateClip: (Int, Int, Int) -> Unit,
+    onUpdateAlertDurations: (Int, Int) -> Unit
 ) {
     val context = LocalContext.current
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
+    Column(
+        modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
@@ -396,16 +459,6 @@ private fun FocusSettingsSheet(
                 label = "短休息", value = settings.shortBreakMinutes, unit = "分钟", range = 1..30
             ) { v ->
                 onUpdateDurations(settings.focusMinutes, v, settings.longBreakMinutes, settings.longBreakInterval)
-            }
-            StepperRow(
-                label = "长休息", value = settings.longBreakMinutes, unit = "分钟", range = 5..60
-            ) { v ->
-                onUpdateDurations(settings.focusMinutes, settings.shortBreakMinutes, v, settings.longBreakInterval)
-            }
-            StepperRow(
-                label = "长休息间隔", value = settings.longBreakInterval, unit = "个番茄", range = 2..8
-            ) { v ->
-                onUpdateDurations(settings.focusMinutes, settings.shortBreakMinutes, settings.longBreakMinutes, v)
             }
 
             Text(
@@ -431,33 +484,64 @@ private fun FocusSettingsSheet(
                 }
             }
 
-            Text(
-                "提示音",
+                        Text(
+                "完成提示音",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 16.dp, bottom = 2.dp)
             )
-            // 音色选择：点一下即试听并保存
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.horizontalScroll(rememberScrollState())
-            ) {
-                ChimePlayer.options.forEach { (type, name, icon) ->
-                    FilterChip(
-                        selected = settings.chimeType == type,
-                        onClick = {
-                            onUpdateChime(type)
-                            ChimePlayer.play(context, type)
-                        },
-                        label = { Text("$icon $name") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = toneLabel(
+                            ToneState(
+                                settings.focusAlertToneKind,
+                                settings.focusAlertToneValue,
+                                settings.focusAlertToneName,
+                                settings.chimeType
+                            )
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "支持内置音色、在线热歌与系统铃声，计时结束时播放",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
+                TextButton(onClick = {
+                    when (settings.focusAlertToneKind) {
+                        PLAN_TONE_CHIME -> ChimePlayer.play(
+                            context,
+                            settings.focusAlertToneValue.ifBlank { settings.chimeType }
+                        )
+                        PLAN_TONE_FILE -> TonePlayer.previewClip(
+                            context = context,
+                            file = File(settings.focusAlertToneValue),
+                            startMs = settings.focusAlertToneStartMs.toLong(),
+                            endMs = RingtoneClip.effectiveEnd(
+                                settings.focusAlertToneEndMs.toLong(),
+                                settings.focusAlertToneDurationMs.toLong()
+                            )
+                        )
+                        else -> TonePlayer.preview(
+                            context,
+                            settings.focusAlertToneKind,
+                            settings.focusAlertToneValue
+                        )
+                    }
+                }) { Text("试听") }
+                TextButton(onClick = onOpenTonePicker) { Text("更换") }
             }
-            Text(
-                text = "点击试听，选中的音色用于番茄与计划计时结束提醒",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp)
-            )
+            if (settings.focusAlertToneKind == PLAN_TONE_FILE) {
+                RingtoneClipCard(
+                    toneValue = settings.focusAlertToneValue,
+                    startMs = settings.focusAlertToneStartMs,
+                    endMs = settings.focusAlertToneEndMs,
+                    durationMs = settings.focusAlertToneDurationMs,
+                    onClipChange = onUpdateClip
+                )
+            }
 
             Text(
                 "提醒时长",
@@ -481,19 +565,7 @@ private fun FocusSettingsSheet(
                 modifier = Modifier.padding(top = 2.dp)
             )
 
-            Text("自动化", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
-            FocusSwitchRow(
-                label = "番茄结束后自动开始休息",
-                checked = settings.autoStartBreak
-            ) { checked ->
-                onUpdateSwitches(checked, settings.autoStartNextPomo, settings.soundEnabled, settings.vibrateEnabled, settings.strictMode)
-            }
-            FocusSwitchRow(
-                label = "休息结束后自动开始下一番茄",
-                checked = settings.autoStartNextPomo
-            ) { checked ->
-                onUpdateSwitches(settings.autoStartBreak, checked, settings.soundEnabled, settings.vibrateEnabled, settings.strictMode)
-            }
+            Text("其他", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
             FocusSwitchRow(
                 label = "严格模式（计时期间勿退出）",
                 checked = settings.strictMode
@@ -501,7 +573,6 @@ private fun FocusSettingsSheet(
                 onUpdateSwitches(settings.autoStartBreak, settings.autoStartNextPomo, settings.soundEnabled, settings.vibrateEnabled, checked)
             }
         }
-    }
 }
 
 /**

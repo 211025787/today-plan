@@ -1,4 +1,4 @@
-package com.focuslist.app.data.prefs
+﻿package com.focuslist.app.data.prefs
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -59,6 +59,12 @@ private val PLAN_TONE_KINDS = setOf(PLAN_TONE_CHIME, PLAN_TONE_FILE, PLAN_TONE_S
  * @property capsuleProgressAlpha 进度条不透明度百分比，取值 10-100
  * @property capsuleX 胶囊拖动后的 X 坐标（px）；-1 表示默认顶部居中
  * @property capsuleY 胶囊拖动后的 Y 坐标（px）；-1 表示默认顶部居中
+ * @property focusAlertToneKind 番茄结束铃声来源：CHIME 内置音色 / FILE 本地音频 / SYSTEM 系统铃声
+ * @property focusAlertToneValue 番茄结束铃声取值
+ * @property focusAlertToneName 番茄结束铃声显示名
+ * @property focusAlertToneStartMs 番茄结束铃声片段起点
+ * @property focusAlertToneEndMs 番茄结束铃声片段终点，0 表示到结尾
+ * @property focusAlertToneDurationMs 番茄结束铃声总时长
  * @property strictMode 严格模式：开启后计时期间离开页面视为放弃
  * @property themeMode 主题模式：SYSTEM 跟随系统、LIGHT 浅色、DARK 深色
  * @property themeColor 主题色，格式 "#RRGGBB"，默认滴答蓝 #4772FA
@@ -99,6 +105,12 @@ data class TimerSettings(
     val capsuleProgressAlpha: Int = 100,
     val capsuleX: Int = -1,
     val capsuleY: Int = -1,
+    val focusAlertToneKind: String = PLAN_TONE_CHIME,
+    val focusAlertToneValue: String = "",
+    val focusAlertToneName: String = "",
+    val focusAlertToneStartMs: Int = 0,
+    val focusAlertToneEndMs: Int = 0,
+    val focusAlertToneDurationMs: Int = 0,
     val strictMode: Boolean = false,
     val themeMode: String = "SYSTEM",
     val themeColor: String = "#4772FA",
@@ -236,6 +248,24 @@ class SettingsStore(private val context: Context) {
         /** 循环播放时长 key */
         val PLAN_TONE_LOOP_SEC = intPreferencesKey("plan_alert_loop_sec")
 
+        /** 番茄结束铃声来源 key */
+        val FOCUS_TONE_KIND = stringPreferencesKey("focus_alert_tone_kind")
+
+        /** 番茄结束铃声取值 key */
+        val FOCUS_TONE_VALUE = stringPreferencesKey("focus_alert_tone_value")
+
+        /** 番茄结束铃声显示名 key */
+        val FOCUS_TONE_NAME = stringPreferencesKey("focus_alert_tone_name")
+
+        /** 番茄结束铃声片段起点 key */
+        val FOCUS_TONE_START = intPreferencesKey("focus_alert_tone_start_ms")
+
+        /** 番茄结束铃声片段终点 key */
+        val FOCUS_TONE_END = intPreferencesKey("focus_alert_tone_end_ms")
+
+        /** 番茄结束铃声总时长 key */
+        val FOCUS_TONE_DURATION = intPreferencesKey("focus_alert_tone_duration_ms")
+
         /** 每日专注目标 key */
         val DAILY_GOAL = intPreferencesKey("daily_goal_minutes")
 
@@ -289,6 +319,12 @@ class SettingsStore(private val context: Context) {
             capsuleProgressAlpha = prefs[Keys.CAPSULE_PROGRESS_ALPHA] ?: 100,
             capsuleX = prefs[Keys.CAPSULE_X] ?: -1,
             capsuleY = prefs[Keys.CAPSULE_Y] ?: -1,
+            focusAlertToneKind = prefs[Keys.FOCUS_TONE_KIND]?.takeIf { it in PLAN_TONE_KINDS } ?: PLAN_TONE_CHIME,
+            focusAlertToneValue = prefs[Keys.FOCUS_TONE_VALUE] ?: "",
+            focusAlertToneName = prefs[Keys.FOCUS_TONE_NAME] ?: "",
+            focusAlertToneStartMs = (prefs[Keys.FOCUS_TONE_START] ?: 0).coerceAtLeast(0),
+            focusAlertToneEndMs = (prefs[Keys.FOCUS_TONE_END] ?: 0).coerceAtLeast(0),
+            focusAlertToneDurationMs = (prefs[Keys.FOCUS_TONE_DURATION] ?: 0).coerceAtLeast(0),
             strictMode = prefs[Keys.STRICT] ?: false,
             themeMode = prefs[Keys.THEME] ?: "SYSTEM",
             themeColor = prefs[Keys.THEME_COLOR] ?: "#4772FA",
@@ -520,6 +556,40 @@ class SettingsStore(private val context: Context) {
     }
 
     /**
+     * 更新番茄结束铃声。
+     *
+     * @param kind 来源：CHIME / FILE / SYSTEM
+     * @param value 音色标识、文件路径或系统铃声 URI
+     * @param name 显示名
+     * @param durationMs 音频总时长（毫秒）
+     */
+    suspend fun updateFocusAlertTone(kind: String, value: String, name: String, durationMs: Int = 0) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.FOCUS_TONE_KIND] = kind.takeIf { it in PLAN_TONE_KINDS } ?: PLAN_TONE_CHIME
+            prefs[Keys.FOCUS_TONE_VALUE] = value
+            prefs[Keys.FOCUS_TONE_NAME] = name
+            prefs[Keys.FOCUS_TONE_START] = 0
+            prefs[Keys.FOCUS_TONE_END] = 0
+            prefs[Keys.FOCUS_TONE_DURATION] = durationMs.coerceAtLeast(0)
+        }
+    }
+
+    /**
+     * 更新番茄结束铃声片段。
+     *
+     * @param startMs 起点毫秒
+     * @param endMs 终点毫秒，0 表示到结尾
+     * @param durationMs 音频总时长
+     */
+    suspend fun updateFocusAlertClip(startMs: Int, endMs: Int, durationMs: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.FOCUS_TONE_START] = startMs.coerceAtLeast(0)
+            prefs[Keys.FOCUS_TONE_END] = endMs.coerceAtLeast(0)
+            prefs[Keys.FOCUS_TONE_DURATION] = durationMs.coerceAtLeast(0)
+        }
+    }
+
+    /**
      * 更新循环播放设置。
      *
      * @param loop 是否循环
@@ -659,6 +729,12 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.CAPSULE_PROGRESS_ALPHA] = safe.capsuleProgressAlpha.coerceIn(10, 100)
             prefs[Keys.CAPSULE_X] = safe.capsuleX
             prefs[Keys.CAPSULE_Y] = safe.capsuleY
+            prefs[Keys.FOCUS_TONE_KIND] = safe.focusAlertToneKind.takeIf { it in PLAN_TONE_KINDS } ?: PLAN_TONE_CHIME
+            prefs[Keys.FOCUS_TONE_VALUE] = safe.focusAlertToneValue
+            prefs[Keys.FOCUS_TONE_NAME] = safe.focusAlertToneName
+            prefs[Keys.FOCUS_TONE_START] = safe.focusAlertToneStartMs
+            prefs[Keys.FOCUS_TONE_END] = safe.focusAlertToneEndMs
+            prefs[Keys.FOCUS_TONE_DURATION] = safe.focusAlertToneDurationMs
             prefs[Keys.STRICT] = safe.strictMode
             prefs[Keys.THEME] = if (safe.themeMode in THEME_MODES) safe.themeMode else "SYSTEM"
             prefs[Keys.THEME_COLOR] = safe.themeColor

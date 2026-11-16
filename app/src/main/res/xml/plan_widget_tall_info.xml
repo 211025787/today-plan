@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 今日计划 · 纵向 1×2 小组件配置 -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="40dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="1"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="900000"
+    android:initialLayout="@layout/widget_plan_tall"
+    android:previewLayout="@layout/widget_plan_tall_preview"
+    android:description="@string/widget_plan_tall_desc"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen" />

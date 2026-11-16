@@ -1,4 +1,4 @@
-package com.focuslist.app
+﻿package com.focuslist.app
 
 import android.app.Activity
 import android.app.Application
@@ -10,7 +10,6 @@ import com.focuslist.app.data.prefs.SettingsStore
 import com.focuslist.app.data.prefs.TimerSettings
 import com.focuslist.app.data.repo.CategoryRepository
 import com.focuslist.app.data.repo.FocusRepository
-import com.focuslist.app.data.repo.HabitRepository
 import com.focuslist.app.data.repo.NoteRepository
 import com.focuslist.app.data.repo.PlanRepository
 import com.focuslist.app.data.repo.TagRepository
@@ -42,9 +41,6 @@ class AppContainer(private val appContext: Context) {
 
     /** 专注记录仓库单例 */
     val focusRepository: FocusRepository by lazy { FocusRepository(database.focusRecordDao()) }
-
-    /** 习惯仓库单例 */
-    val habitRepository: HabitRepository by lazy { HabitRepository(database.habitDao()) }
 
     /** 清单仓库单例 */
     val categoryRepository: CategoryRepository by lazy { CategoryRepository(database.categoryDao()) }

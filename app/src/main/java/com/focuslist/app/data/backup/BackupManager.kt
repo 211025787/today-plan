@@ -1,4 +1,4 @@
-package com.focuslist.app.data.backup
+﻿package com.focuslist.app.data.backup
 
 import androidx.room.withTransaction
 import com.focuslist.app.data.local.AppDatabase
@@ -50,7 +50,6 @@ class BackupManager(
             ?.let { BackupAchievements.snapshot(it) } ?: emptyList()
         database.withTransaction {
             val taskDao = database.taskDao()
-            val habitDao = database.habitDao()
             val planDao = database.planDao()
             val noteDao = database.noteDao()
             val tripDao = database.tripDao()
@@ -76,16 +75,6 @@ class BackupManager(
                         id = it.id, taskId = it.taskId, startAt = it.startAt, endAt = it.endAt,
                         durationSec = it.durationSec, phase = it.phase, completed = it.completed
                     )
-                },
-                habits = habitDao.getAllHabits().map {
-                    BackupHabit(
-                        id = it.id, name = it.name, colorHex = it.colorHex, icon = it.icon,
-                        reminderAt = it.reminderAt, archived = it.archived, sortOrder = it.sortOrder,
-                        createdAt = it.createdAt
-                    )
-                },
-                habitChecks = habitDao.getAllChecks().map {
-                    BackupHabitCheck(id = it.id, habitId = it.habitId, date = it.date, createdAt = it.createdAt)
                 },
                 categories = database.categoryDao().getAll().map {
                     BackupCategory(id = it.id, name = it.name, colorHex = it.colorHex, sortOrder = it.sortOrder, isDefault = it.isDefault)
@@ -163,10 +152,6 @@ class BackupManager(
                     insertSubTasks(payload.subTasks.map { it.toEntity() })
                 }
                 database.focusRecordDao().insertAll(payload.focusRecords.map { it.toEntity() })
-                database.habitDao().apply {
-                    insertHabits(payload.habits.map { it.toEntity() })
-                    insertChecks(payload.habitChecks.map { it.toEntity() })
-                }
                 database.categoryDao().insertAll(payload.categories.map { it.toEntity() })
                 database.tagDao().insertAll(payload.tags.map { it.toEntity() })
                 database.planDao().apply {
@@ -212,10 +197,6 @@ class BackupManager(
             clearTasks()
         }
         database.focusRecordDao().clearAll()
-        database.habitDao().apply {
-            clearChecks()
-            clearHabits()
-        }
         database.categoryDao().clearAll()
         database.tagDao().clearAll()
         database.planDao().apply {

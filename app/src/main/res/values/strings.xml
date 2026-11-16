@@ -1,9 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">暖历</string>
     <string name="tab_tasks">任务</string>
     <string name="tab_focus">专注</string>
     <string name="tab_stats">统计</string>
-    <string name="tab_habits">习惯</string>
     <string name="tab_mine">我的</string>
+
+    <!-- 今日计划小组件选择器里的说明 -->
+    <string name="widget_plan_wide_desc">今日计划 · 横版 2×1：多条计划 + 今日完成度</string>
+    <string name="widget_plan_tall_desc">今日计划 · 竖版 1×2：多条计划一览</string>
 </resources>

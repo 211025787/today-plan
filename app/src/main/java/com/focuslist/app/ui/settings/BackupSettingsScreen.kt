@@ -1,4 +1,4 @@
-package com.focuslist.app.ui.settings
+﻿package com.focuslist.app.ui.settings
 
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -239,7 +239,7 @@ fun BackupSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     scope.launch {
                         backupMessage = runCatching {
                             val result = container.backupManager.restore(payload, overwrite = true)
-                            WidgetRefresher.refreshAll(context)
+                            WidgetRefresher.refreshPlans(context)
                             "已覆盖导入 ${result.recordCount} 条数据" +
                                 if (result.achievementsTotal > 0) {
                                     "，徽章 ${result.achievementsTotal} 枚按备份还原"
@@ -259,7 +259,7 @@ fun BackupSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                         scope.launch {
                             backupMessage = runCatching {
                                 val result = container.backupManager.restore(payload, overwrite = false)
-                                WidgetRefresher.refreshAll(context)
+                                WidgetRefresher.refreshPlans(context)
                                 "已合并导入 ${result.recordCount} 条数据" +
                                     if (result.achievementsAdded > 0) {
                                         "，补充 ${result.achievementsAdded} 枚徽章"

@@ -1,4 +1,4 @@
-package com.focuslist.app.data.backup
+﻿package com.focuslist.app.data.backup
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,8 +51,6 @@ class BackupCodecTest {
             BackupNote(id = 3, title = "周会纪要", content = "# 要点\n- 备份功能", date = 1_762_500_000_000L)
         ),
         noteAttachments = listOf(BackupAttachment(id = 5, noteId = 3, type = "IMAGE", uri = "content://media/1")),
-        habits = listOf(BackupHabit(id = 2, name = "喝水", colorHex = "#38B6FF", icon = "💧")),
-        habitChecks = listOf(BackupHabitCheck(id = 9, habitId = 2, date = 1_762_500_000_000L)),
         tasks = listOf(BackupTask(id = 1, title = "写周报", priority = 3, dueDate = 1_762_600_000_000L, hasTime = true)),
         subTasks = listOf(BackupSubTask(id = 4, taskId = 1, title = "整理数据", isDone = true, sortOrder = 2)),
         focusRecords = listOf(
@@ -83,8 +81,6 @@ class BackupCodecTest {
         assertEquals(original.planLogs, restored.planLogs)
         assertEquals(original.notes, restored.notes)
         assertEquals(original.noteAttachments, restored.noteAttachments)
-        assertEquals(original.habits, restored.habits)
-        assertEquals(original.habitChecks, restored.habitChecks)
         assertEquals(original.tasks, restored.tasks)
         assertEquals(original.subTasks, restored.subTasks)
         assertEquals(original.focusRecords, restored.focusRecords)

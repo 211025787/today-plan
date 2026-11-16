@@ -1,9 +1,7 @@
-package com.focuslist.app.data.backup
+﻿package com.focuslist.app.data.backup
 
 import com.focuslist.app.data.local.entity.CategoryEntity
 import com.focuslist.app.data.local.entity.FocusRecordEntity
-import com.focuslist.app.data.local.entity.HabitCheckEntity
-import com.focuslist.app.data.local.entity.HabitEntity
 import com.focuslist.app.data.local.entity.NoteAttachmentEntity
 import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.data.local.entity.PlanLogEntity
@@ -34,14 +32,6 @@ fun BackupFocusRecord.toEntity(): FocusRecordEntity = FocusRecordEntity(
     id = id, taskId = taskId, startAt = startAt, endAt = endAt,
     durationSec = durationSec, phase = phase, completed = completed
 )
-
-fun BackupHabit.toEntity(): HabitEntity = HabitEntity(
-    id = id, name = name, colorHex = colorHex, icon = icon, reminderAt = reminderAt,
-    archived = archived, sortOrder = sortOrder, createdAt = createdAt
-)
-
-fun BackupHabitCheck.toEntity(): HabitCheckEntity =
-    HabitCheckEntity(id = id, habitId = habitId, date = date, createdAt = createdAt)
 
 fun BackupCategory.toEntity(): CategoryEntity =
     CategoryEntity(id = id, name = name, colorHex = colorHex, sortOrder = sortOrder, isDefault = isDefault)
@@ -124,6 +114,12 @@ fun BackupSettings.toTimerSettings(): TimerSettings = TimerSettings(
     planAlertToneDurationMs = planAlertToneDurationMs,
     planAlertLoop = planAlertLoop,
     planAlertDurationSec = planAlertDurationSec,
+    focusAlertToneKind = focusAlertToneKind,
+    focusAlertToneValue = focusAlertToneValue,
+    focusAlertToneName = focusAlertToneName,
+    focusAlertToneStartMs = focusAlertToneStartMs,
+    focusAlertToneEndMs = focusAlertToneEndMs,
+    focusAlertToneDurationMs = focusAlertToneDurationMs,
     dailyGoalMinutes = dailyGoalMinutes
 )
 
@@ -166,6 +162,12 @@ fun TimerSettings.toBackupSettings(): BackupSettings = BackupSettings(
     planAlertToneDurationMs = planAlertToneDurationMs,
     planAlertLoop = planAlertLoop,
     planAlertDurationSec = planAlertDurationSec,
+    focusAlertToneKind = focusAlertToneKind,
+    focusAlertToneValue = focusAlertToneValue,
+    focusAlertToneName = focusAlertToneName,
+    focusAlertToneStartMs = focusAlertToneStartMs,
+    focusAlertToneEndMs = focusAlertToneEndMs,
+    focusAlertToneDurationMs = focusAlertToneDurationMs,
     dailyGoalMinutes = dailyGoalMinutes
 )
 

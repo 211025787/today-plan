@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
-import com.focuslist.app.ACTION_OPEN_HABITS
 import com.focuslist.app.MainActivity
 import com.focuslist.app.R
 
@@ -28,7 +27,7 @@ class Notifier(private val context: Context) {
      */
     fun ensureChannels() {
         val reminder = NotificationChannel(CHANNEL_REMINDER, "任务提醒", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "任务到期与习惯打卡提醒"
+            description = "任务到期提醒"
         }
         val timer = NotificationChannel(CHANNEL_TIMER, "计时", NotificationManager.IMPORTANCE_DEFAULT).apply {
             description = "计划秒表与番茄钟运行状态常驻通知"
@@ -36,7 +35,7 @@ class Notifier(private val context: Context) {
             setSound(null, null)
         }
         // 计划提醒自己播放可选铃声（可能是整首歌），渠道静音避免和 AlertPlayer 叠音；
-        // 习惯 / 任务提醒仍走「任务提醒」渠道，保留系统提示音。
+        // 任务提醒仍走「任务提醒」渠道，保留系统提示音。
         val plan = NotificationChannel(CHANNEL_PLAN, "计划提醒", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "计划还差几分钟达标与达成目标的提醒"
             setSound(null, null)
@@ -93,14 +92,18 @@ class Notifier(private val context: Context) {
             context, 0, Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val notifyId = (NOTIFY_PLAN_GOAL_BASE + planId.coerceAtLeast(0L)).toInt()
+        val stop = stopPendingIntent(notifyId)
         val notification = NotificationCompat.Builder(context, CHANNEL_PLAN)
             .setSmallIcon(R.drawable.ic_widget_circle_checked)
             .setContentTitle("计划达成今日目标")
             .setContentText(title)
             .setAutoCancel(true)
             .setContentIntent(intent)
+            .addAction(0, "停止响铃", stop)
+            .setDeleteIntent(stop)
             .build()
-        manager.notify((NOTIFY_PLAN_GOAL_BASE + planId.coerceAtLeast(0L)).toInt(), notification)
+        manager.notify(notifyId, notification)
     }
 
     /**
@@ -115,39 +118,37 @@ class Notifier(private val context: Context) {
             context, 0, Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val notifyId = (NOTIFY_PLAN_LEAD_BASE + planId.coerceAtLeast(0L)).toInt()
+        val stop = stopPendingIntent(notifyId)
         val notification = NotificationCompat.Builder(context, CHANNEL_PLAN)
             .setSmallIcon(R.drawable.ic_widget_circle_checked)
             .setContentTitle("计划还差 $leadMinutes 分钟达标")
             .setContentText(title)
             .setAutoCancel(true)
             .setContentIntent(intent)
+            .addAction(0, "停止响铃", stop)
+            .setDeleteIntent(stop)
             .build()
-        manager.notify((NOTIFY_PLAN_LEAD_BASE + planId.coerceAtLeast(0L)).toInt(), notification)
+        manager.notify(notifyId, notification)
     }
 
     /**
-     * 发送习惯打卡提醒。
+     * 构造「停止响铃」广播：停掉铃声 / 震动并取消对应通知。
      *
-     * 点通知直接进习惯页（MainActivity 按 action 选起始路由）。
-     *
-     * @param habitId 习惯 ID（用作通知 ID，避免互相覆盖）
-     * @param name 习惯名称
+     * @param notifyId 通知 ID
+     * @return PendingIntent
      */
-    fun showHabitReminder(habitId: Long, name: String) {
-        val intent = PendingIntent.getActivity(
-            context, 0,
-            Intent(context, MainActivity::class.java)
-                .setAction(ACTION_OPEN_HABITS),
+    private fun stopPendingIntent(notifyId: Int): PendingIntent {
+        val intent = Intent(context, PlanAlertStopReceiver::class.java).apply {
+            action = PlanAlertStopReceiver.ACTION
+            putExtra(PlanAlertStopReceiver.EXTRA_NOTIFY_ID, notifyId)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            notifyId,
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDER)
-            .setSmallIcon(R.drawable.ic_widget_circle_checked)
-            .setContentTitle("该打卡了")
-            .setContentText(name)
-            .setAutoCancel(true)
-            .setContentIntent(intent)
-            .build()
-        manager.notify((NOTIFY_HABIT_BASE + habitId).toInt(), notification)
     }
 
     /**
@@ -266,7 +267,5 @@ class Notifier(private val context: Context) {
         /** 任务提醒通知 ID 基数（叠加任务 ID） */
         const val NOTIFY_TASK_BASE = 2000L
 
-        /** 习惯提醒通知 ID 基数（叠加习惯 ID） */
-        const val NOTIFY_HABIT_BASE = 3000L
     }
 }

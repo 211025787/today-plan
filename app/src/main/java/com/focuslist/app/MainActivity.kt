@@ -1,4 +1,4 @@
-package com.focuslist.app
+﻿package com.focuslist.app
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -54,12 +54,12 @@ import com.focuslist.app.util.WarmQuotes
 import com.focuslist.app.timer.TimerPhase
 import com.focuslist.app.timer.TimerStateHolder
 import com.focuslist.app.ui.common.BottomFadeEdge
+import com.focuslist.app.ui.common.AlertPlayer
 import com.focuslist.app.ui.common.DayDetailState
 import com.focuslist.app.ui.common.DockItem
 import com.focuslist.app.ui.common.GlassBackground
 import com.focuslist.app.ui.common.GlassDockBar
 import com.focuslist.app.ui.focus.FocusScreen
-import com.focuslist.app.ui.habits.HabitsScreen
 import com.focuslist.app.ui.home.CalendarHomeScreen
 import com.focuslist.app.ui.note.NoteScreen
 import com.focuslist.app.ui.note.NotesScreen
@@ -80,6 +80,7 @@ import com.focuslist.app.ui.stats.PlanStatsScreen
 import com.focuslist.app.ui.stats.StatsScreen
 import com.focuslist.app.ui.theme.FocusListTheme
 import com.focuslist.app.ui.travel.TravelScreen
+import com.focuslist.app.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -87,7 +88,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 底部 Dock 导航目标：首页（日历）、专注、习惯、我的，共四项。
+ * 底部 Dock 导航目标：首页（日历）、专注、我的，共三项。
  * 旅游规划不在 Dock，从首页 FAB「添加旅游规划」进入。
  *
  * @property route 路由名
@@ -100,9 +101,6 @@ enum class Destinations(val route: String, val label: String, val icon: ImageVec
 
     /** 专注页 */
     FOCUS("focus", "专注", Icons.Default.CheckCircle),
-
-    /** 习惯打卡页 */
-    HABITS("habits", "习惯", Icons.Default.Star),
 
     /** 我的页 */
     MINE("mine", "我的", Icons.Default.Person)
@@ -121,9 +119,6 @@ private val travelPopEnter = travelFadeIn + scaleIn(tween(durationMillis = 300),
 private val travelPopExit = travelFadeOut + scaleOut(tween(durationMillis = 260), targetScale = 0.96f)
 
 /** 主 Tab 路由集合：仅这些路由显示 Dock 悬浮栏 */
-/** 通知点击直达习惯页 */
-const val ACTION_OPEN_HABITS = "com.focuslist.app.action.OPEN_HABITS"
-
 private val mainRoutes = Destinations.entries.map { it.route }.toSet()
 
 /**
@@ -159,15 +154,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         // 小组件点击"番茄钟"快捷入口：跳到专注页
-        val startRoute = if (intent?.action == ACTION_OPEN_HABITS) {
-            Destinations.HABITS.route
-        } else if (intent?.action == "com.focuslist.app.action.OPEN_TIMER") {
+        val startRoute = if (intent?.action == "com.focuslist.app.action.OPEN_TIMER") {
             Destinations.FOCUS.route
         } else {
             Destinations.HOME.route
         }
-        val skipSplash = intent?.action == ACTION_OPEN_HABITS ||
-            intent?.action == "com.focuslist.app.action.OPEN_TIMER"
+        val skipSplash = intent?.action == "com.focuslist.app.action.OPEN_TIMER"
 
         // 切刷新率要改 window.attributes（会触发一次窗口重排），排在 setContent 前面
         // 就会把开屏首帧往后推——表现出来正是「图标已经在那儿了，字要过一会儿才浮出来」。
@@ -266,6 +258,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 打开应用即视为已看到提醒，停掉还在循环的铃声与震动
+        AlertPlayer.stop()
+    }
+
     override fun onStop() {
         super.onStop()
         // 兜底：退到后台把全部未落库段写库（运行中的不清表继续跑），再持久化防杀
@@ -281,6 +279,8 @@ class MainActivity : ComponentActivity() {
         } else {
             PlanTimerHolder.persist(applicationContext)
         }
+        // 退到后台时把最新进度推给桌面卡片
+        WidgetRefresher.refreshPlans(this)
     }
 }
 
@@ -392,7 +392,6 @@ fun AppScaffold(container: AppContainer, startRoute: String) {
                         onOpenStats = { navController.navigate(SettingsRoutes.STATS) }
                     )
                 }
-                composable(Destinations.HABITS.route) { HabitsScreen(container) }
                 composable(Destinations.MINE.route) {
                     SettingsScreen(
                         container = container,

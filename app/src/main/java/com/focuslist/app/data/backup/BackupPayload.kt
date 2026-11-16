@@ -1,4 +1,4 @@
-package com.focuslist.app.data.backup
+﻿package com.focuslist.app.data.backup
 
 /** 备份文件结构版本；结构变更时递增，导入时据此判断是否兼容 */
 const val BACKUP_SCHEMA_VERSION: Int = 5
@@ -43,26 +43,6 @@ data class BackupFocusRecord(
     val durationSec: Int = 0,
     val phase: String = "WORK",
     val completed: Boolean = false
-)
-
-/** 习惯 */
-data class BackupHabit(
-    val id: Long = 0,
-    val name: String = "",
-    val colorHex: String = "#E94B3C",
-    val icon: String = "✅",
-    val reminderAt: Long? = null,
-    val archived: Boolean = false,
-    val sortOrder: Int = 0,
-    val createdAt: Long = 0
-)
-
-/** 习惯打卡 */
-data class BackupHabitCheck(
-    val id: Long = 0,
-    val habitId: Long = 0,
-    val date: Long = 0,
-    val createdAt: Long = 0
 )
 
 /** 清单 */
@@ -174,6 +154,12 @@ data class BackupSettings(
     val planAlertToneDurationMs: Int = 0,
     val planAlertLoop: Boolean = false,
     val planAlertDurationSec: Int = 0,
+    val focusAlertToneKind: String = "CHIME",
+    val focusAlertToneValue: String = "",
+    val focusAlertToneName: String = "",
+    val focusAlertToneStartMs: Int = 0,
+    val focusAlertToneEndMs: Int = 0,
+    val focusAlertToneDurationMs: Int = 0,
     val dailyGoalMinutes: Int = 30
 )
 
@@ -314,8 +300,6 @@ data class BackupPayload(
     val tasks: List<BackupTask> = emptyList(),
     val subTasks: List<BackupSubTask> = emptyList(),
     val focusRecords: List<BackupFocusRecord> = emptyList(),
-    val habits: List<BackupHabit> = emptyList(),
-    val habitChecks: List<BackupHabitCheck> = emptyList(),
     val categories: List<BackupCategory> = emptyList(),
     val tags: List<BackupTag> = emptyList(),
     val plans: List<BackupPlan> = emptyList(),
@@ -331,8 +315,7 @@ data class BackupPayload(
 ) {
 
     /** 备份中包含的记录总条数（用于导出结果提示）。 */
-    fun totalCount(): Int = tasks.size + subTasks.size + focusRecords.size + habits.size +
-        habitChecks.size + categories.size + tags.size + plans.size + planLogs.size +
+    fun totalCount(): Int = tasks.size + subTasks.size + focusRecords.size + categories.size + tags.size + plans.size + planLogs.size +
         notes.size + noteAttachments.size + templates.size + achievements.size +
         trips.size + tripStops.size + tripLegs.size
 
@@ -352,8 +335,6 @@ data class BackupPayload(
             if (plans.isNotEmpty()) add("计划 ${plans.size}")
             if (planLogs.isNotEmpty()) add("投入记录 ${planLogs.size}")
             if (focusRecords.isNotEmpty()) add("番茄 ${focusRecords.size}")
-            if (habits.isNotEmpty()) add("习惯 ${habits.size}")
-            if (habitChecks.isNotEmpty()) add("打卡 ${habitChecks.size}")
             if (notes.isNotEmpty()) add("备注 ${notes.size}")
             if (noteAttachments.isNotEmpty()) add("附件 ${noteAttachments.size}")
             if (tasks.isNotEmpty()) add("任务 ${tasks.size}")

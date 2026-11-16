@@ -13,6 +13,7 @@ import com.focuslist.app.notify.PlanAlert
 import com.focuslist.app.notify.PlanGoalAlarms
 import com.focuslist.app.util.AppForeground
 import com.focuslist.app.util.PlanLead
+import com.focuslist.app.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -157,6 +158,7 @@ class PlanTimerService : Service() {
                         PlanTimerHolder.persist(this@PlanTimerService)
                         syncGoalAlarms(map)
                         updateCapsule(map)
+                        WidgetRefresher.refreshPlansThrottled(this@PlanTimerService)
                     }
                 } catch (_: Exception) {
                     // 数据库或系统限制导致单次刷新失败时保持监听

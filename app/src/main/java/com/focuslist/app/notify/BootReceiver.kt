@@ -1,4 +1,4 @@
-package com.focuslist.app.notify
+﻿package com.focuslist.app.notify
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -10,7 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * 开机广播接收器：设备重启后重新注册任务提醒与习惯每日提醒。
+ * 开机广播接收器：设备重启后重新注册任务提醒。
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -29,13 +29,6 @@ class BootReceiver : BroadcastReceiver() {
                         }
                     }
 
-                    // 习惯是每天重复的：重启后按当前时分重排下一天
-                    val habitScheduler = HabitReminderScheduler(context)
-                    app.container.database.habitDao().getActiveSync().forEach { habit ->
-                        habit.reminderAt?.let { reminderAt ->
-                            habitScheduler.schedule(habit.id, habit.name, reminderAt)
-                        }
-                    }
                 } finally {
                     pendingResult.finish()
                 }

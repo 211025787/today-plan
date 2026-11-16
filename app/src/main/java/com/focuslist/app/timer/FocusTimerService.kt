@@ -1,4 +1,4 @@
-package com.focuslist.app.timer
+﻿package com.focuslist.app.timer
 
 import android.app.Service
 import android.content.Context
@@ -11,7 +11,6 @@ import com.focuslist.app.notify.Notifier
 import com.focuslist.app.ui.common.AlertPlayer
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.util.DateUtils
-import com.focuslist.app.widget.WidgetRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -240,7 +239,6 @@ class FocusTimerService : Service() {
         TimerStateHolder.set(TimerUiState(cyclePomos = current.cyclePomos))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
-        WidgetRefresher.refreshTimer(this)
     }
 
     /**
@@ -253,8 +251,7 @@ class FocusTimerService : Service() {
             TimerStateHolder.set(TimerUiState(cyclePomos = current.cyclePomos))
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
-            WidgetRefresher.refreshTimer(this)
-        }
+            }
     }
 
     /**
@@ -287,11 +284,16 @@ class FocusTimerService : Service() {
             }
 
             playAlarm(
-                settings.soundEnabled,
-                settings.vibrateEnabled,
-                settings.chimeType,
-                settings.alertSoundSec,
-                settings.alertVibrateSec
+                sound = settings.soundEnabled,
+                vibrate = settings.vibrateEnabled,
+                chime = settings.chimeType,
+                soundSec = settings.alertSoundSec,
+                vibrateSec = settings.alertVibrateSec,
+                toneKind = settings.focusAlertToneKind,
+                toneValue = settings.focusAlertToneValue,
+                toneStartMs = settings.focusAlertToneStartMs.toLong(),
+                toneEndMs = settings.focusAlertToneEndMs.toLong(),
+                toneDurationMs = settings.focusAlertToneDurationMs.toLong()
             )
 
             val newCycle = if (finished.phase == TimerPhase.WORK) {
@@ -302,11 +304,15 @@ class FocusTimerService : Service() {
 
             when (finished.phase) {
                 TimerPhase.WORK -> {
-                    val isLongBreak = newCycle % settings.longBreakInterval == 0
-                    val nextPhase = if (isLongBreak) TimerPhase.LONG_BREAK else TimerPhase.SHORT_BREAK
                     notifier.showTimerFinished("番茄完成", "休息一下，喝口水吧")
                     if (settings.autoStartBreak) {
-                        startBreak(nextPhase, settings.shortBreakMinutes, settings.longBreakMinutes, newCycle, finished)
+                        startBreak(
+                            TimerPhase.SHORT_BREAK,
+                            settings.shortBreakMinutes,
+                            settings.longBreakMinutes,
+                            newCycle,
+                            finished
+                        )
                     } else {
                         idleWithCycle(newCycle)
                     }
@@ -321,7 +327,6 @@ class FocusTimerService : Service() {
                 }
                 TimerPhase.IDLE -> idleWithCycle(newCycle)
             }
-            WidgetRefresher.refreshAll(this@FocusTimerService)
         }
     }
 
@@ -386,7 +391,6 @@ class FocusTimerService : Service() {
             TimerPhase.IDLE -> "准备专注"
         }
         notifier.updateTimerNotification(phaseText, DateUtils.formatCountdown(state.remainSec))
-        WidgetRefresher.refreshTimer(this)
     }
 
     /**
@@ -398,14 +402,30 @@ class FocusTimerService : Service() {
      * @param soundSec 响铃持续秒数
      * @param vibrateSec 震动持续秒数
      */
-    private fun playAlarm(sound: Boolean, vibrate: Boolean, chime: String, soundSec: Int, vibrateSec: Int) {
+    private fun playAlarm(
+        sound: Boolean,
+        vibrate: Boolean,
+        chime: String,
+        soundSec: Int,
+        vibrateSec: Int,
+        toneKind: String,
+        toneValue: String,
+        toneStartMs: Long,
+        toneEndMs: Long,
+        toneDurationMs: Long
+    ) {
         AlertPlayer.play(
             context = this,
             chime = chime,
             sound = sound,
             vibrate = vibrate,
             soundSec = soundSec,
-            vibrateSec = vibrateSec
+            vibrateSec = vibrateSec,
+            toneKind = toneKind,
+            toneValue = toneValue,
+            toneStartMs = toneStartMs,
+            toneEndMs = toneEndMs,
+            toneDurationMs = toneDurationMs
         )
     }
 

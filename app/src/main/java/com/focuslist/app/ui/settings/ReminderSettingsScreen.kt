@@ -122,7 +122,14 @@ fun ReminderSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("提醒铃声", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            text = planToneLabel(settings),
+                            text = toneLabel(
+                                ToneState(
+                                    settings.planAlertToneKind,
+                                    settings.planAlertToneValue,
+                                    settings.planAlertToneName,
+                                    settings.chimeType
+                                )
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 2.dp)
@@ -188,7 +195,12 @@ fun ReminderSettingsScreen(container: AppContainer, onBack: () -> Unit) {
         // 选中在线歌曲后，展示波形与可拖动的片段范围
         if (settings.planAlertToneKind == PLAN_TONE_FILE) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
-                RingtoneClipCard(settings = settings) { startMs, endMs, durationMs ->
+                RingtoneClipCard(
+                    toneValue = settings.planAlertToneValue,
+                    startMs = settings.planAlertToneStartMs,
+                    endMs = settings.planAlertToneEndMs,
+                    durationMs = settings.planAlertToneDurationMs
+                ) { startMs, endMs, durationMs ->
                     viewModel.savePlanAlertClip(startMs, endMs, durationMs)
                 }
             }
@@ -271,7 +283,7 @@ fun ReminderSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                             text = if (notificationsOn) {
                                 "已允许，提醒可以正常送达。"
                             } else {
-                                "已关闭，习惯提醒与到期提醒都不会出现。"
+                                "已关闭，到期提醒不会出现。"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = if (notificationsOn) {
@@ -302,8 +314,7 @@ fun ReminderSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                 Text("还有这些提醒", style = MaterialTheme.typography.titleSmall)
                 Text(
                     text = "· 提前提醒只在计划正在计时时生效，暂停期间不会响\n" +
-                        "· 番茄结束的提示音与音色：在「番茄」页底部设置\n" +
-                        "· 每个习惯的每日提醒时间：在「习惯」页为单个习惯设置",
+                        "· 番茄结束的提示音与音色：在「番茄」页底部设置",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp)
@@ -314,7 +325,12 @@ fun ReminderSettingsScreen(container: AppContainer, onBack: () -> Unit) {
 
     if (showTonePicker) {
         RingtonePickerSheet(
-            settings = settings,
+            tone = ToneState(
+                settings.planAlertToneKind,
+                settings.planAlertToneValue,
+                settings.planAlertToneName,
+                settings.chimeType
+            ),
             onPick = { kind, value, name, durationMs ->
                 viewModel.savePlanAlertTone(kind, value, name, durationMs)
                 showTonePicker = false

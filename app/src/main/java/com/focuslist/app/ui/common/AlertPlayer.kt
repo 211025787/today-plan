@@ -32,6 +32,14 @@ object AlertPlayer {
     /** 震动波形：等待 0ms，震动 500ms，间隔 350ms */
     private val vibrationPattern = longArrayOf(0L, 500L, 350L)
 
+    /** 当前内置音色的音频流 ID（用于停止） */
+    @Volatile
+    private var chimeStreamId = 0
+
+    /** 当前震动的 Vibrator 引用（用于停止） */
+    @Volatile
+    private var vibratorRef: Vibrator? = null
+
     /** 内置音色「播放一遍」的近似时长 */
     private const val CHIME_ONCE_MS = 2_500L
 
@@ -128,9 +136,13 @@ object AlertPlayer {
         try {
             val streamId = ChimePlayer.playLoop(context, chime)
             if (streamId != 0) {
+                chimeStreamId = streamId
                 scope.launch {
                     delay(millis.coerceAtLeast(500L))
-                    ChimePlayer.stop(streamId)
+                    if (chimeStreamId == streamId) {
+                        ChimePlayer.stop(streamId)
+                        chimeStreamId = 0
+                    }
                 }
             }
         } catch (_: Exception) {
@@ -148,6 +160,7 @@ object AlertPlayer {
         try {
             val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             if (!vibrator.hasVibrator()) return
+            vibratorRef = vibrator
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createWaveform(vibrationPattern, 0))
             } else {
@@ -162,4 +175,23 @@ object AlertPlayer {
             // 无马达或被系统限制时忽略
         }
     }
+
+    /**
+     * 立即停止响铃与震动。
+     *
+     * 由通知上的「停止响铃」按钮、通知划掉、以及打开应用时调用，
+     * 避免提醒一直响下去却找不到关掉的地方。
+     */
+    @Synchronized
+    fun stop() {
+        val chime = chimeStreamId
+        if (chime != 0) {
+            runCatching { ChimePlayer.stop(chime) }
+            chimeStreamId = 0
+        }
+        TonePlayer.stop()
+        runCatching { vibratorRef?.cancel() }
+        vibratorRef = null
+    }
 }
+

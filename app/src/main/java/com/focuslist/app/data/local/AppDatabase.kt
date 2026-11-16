@@ -1,4 +1,4 @@
-package com.focuslist.app.data.local
+﻿package com.focuslist.app.data.local
 
 import android.content.Context
 import androidx.room.Database
@@ -8,7 +8,6 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.focuslist.app.data.local.dao.CategoryDao
 import com.focuslist.app.data.local.dao.FocusRecordDao
-import com.focuslist.app.data.local.dao.HabitDao
 import com.focuslist.app.data.local.dao.NoteDao
 import com.focuslist.app.data.local.dao.PlanDao
 import com.focuslist.app.data.local.dao.TagDao
@@ -16,8 +15,6 @@ import com.focuslist.app.data.local.dao.TaskDao
 import com.focuslist.app.data.local.dao.TripDao
 import com.focuslist.app.data.local.entity.CategoryEntity
 import com.focuslist.app.data.local.entity.FocusRecordEntity
-import com.focuslist.app.data.local.entity.HabitCheckEntity
-import com.focuslist.app.data.local.entity.HabitEntity
 import com.focuslist.app.data.local.entity.NoteAttachmentEntity
 import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.data.local.entity.PlanLogEntity
@@ -147,6 +144,16 @@ private val MIGRATION_8_9 = object : Migration(8, 9) {
  * v9 → v10：卡片增加叠放时间戳，缩放/移动后最新操作的卡片保持在最上层；
  * 旧数据默认 0（按原顺序绘制）。
  */
+/**
+ * v10 → v11：移除习惯打卡功能，直接删掉习惯与打卡两张表，其余数据保留。
+ */
+private val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS `habit_checks`")
+        db.execSQL("DROP TABLE IF EXISTS `habits`")
+    }
+}
+
 private val MIGRATION_9_10 = object : Migration(9, 10) {
     override fun migrate(db: SupportSQLiteDatabase) {
         listOf("plans", "trips").forEach { table ->
@@ -162,7 +169,7 @@ private val MIGRATION_9_10 = object : Migration(9, 10) {
  * 行程 / 站点 / 交通（含缓存的路线折线）同样只写本机数据库。
  *
  * 版本历史：
- * - v1：任务/子任务/专注记录/习惯/打卡/清单
+ * - v1：任务/子任务/专注记录/清单
  * - v2：任务增加标签、软删除（垃圾桶）、含时刻截止时间；新增标签表
  * - v3：新增计划表（时间范围 + 每日目标时长）、计划当日累计表、快速备注表
  * - v4：备注增加标题、关联日期；新增备注附件表（图片/视频）
@@ -172,14 +179,13 @@ private val MIGRATION_9_10 = object : Migration(9, 10) {
  * - v8：行程增加卡片尺寸，旅游规划卡片同样可自定义大小
  * - v9：卡片改为自由画布：占列/占行（1-4）与左上角坐标（列/行）
  * - v10：卡片增加叠放时间戳，缩放/移动后保持最新卡片置顶
+ * - v11：移除习惯打卡页，删除习惯与打卡表
  */
 @Database(
     entities = [
         TaskEntity::class,
         SubTaskEntity::class,
         FocusRecordEntity::class,
-        HabitEntity::class,
-        HabitCheckEntity::class,
         CategoryEntity::class,
         TagEntity::class,
         PlanEntity::class,
@@ -190,7 +196,7 @@ private val MIGRATION_9_10 = object : Migration(9, 10) {
         TripStopEntity::class,
         TripLegEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -208,13 +214,6 @@ abstract class AppDatabase : RoomDatabase() {
      * @return 专注记录数据访问对象
      */
     abstract fun focusRecordDao(): FocusRecordDao
-
-    /**
-     * 获取习惯 DAO。
-     *
-     * @return 习惯数据访问对象
-     */
-    abstract fun habitDao(): HabitDao
 
     /**
      * 获取清单 DAO。
@@ -267,7 +266,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, DB_NAME)
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }
