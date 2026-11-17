@@ -71,6 +71,10 @@ data class BackupPlan(
     val dailyGoalMinutes: Int = 30,
     val startDate: Long = 0,
     val endDate: Long = 0,
+    /** 周几执行掩码，0 表示每天；老备份文件没有这个字段，按每天恢复 */
+    val weekdaysMask: Int = 0,
+    /** 执行日类型：0=按周几, 1=仅工作日, 2=仅休息日 */
+    val dayRule: Int = 0,
     val note: String = "",
     val archived: Boolean = false,
     val sortOrder: Int = 0,

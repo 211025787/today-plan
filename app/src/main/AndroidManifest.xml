@@ -81,6 +81,26 @@
             </intent-filter>
         </receiver>
 
+        <!-- 番茄完成通知的快捷按钮（开始休息 / 再来一个 / 稍后提醒） -->
+        <receiver
+            android:name=".notify.TimerActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.focuslist.app.action.TIMER_START_BREAK" />
+                <action android:name="com.focuslist.app.action.TIMER_START_NEXT" />
+                <action android:name="com.focuslist.app.action.TIMER_SNOOZE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 稍后提醒到点 -->
+        <receiver
+            android:name=".notify.TimerSnoozeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.focuslist.app.action.TIMER_SNOOZE_FIRE" />
+            </intent-filter>
+        </receiver>
+
         <!-- 计划提醒「停止响铃」广播 -->
         <receiver
             android:name=".notify.PlanAlertStopReceiver"

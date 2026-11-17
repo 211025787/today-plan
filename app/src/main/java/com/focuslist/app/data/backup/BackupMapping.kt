@@ -42,6 +42,7 @@ fun BackupTag.toEntity(): TagEntity =
 fun BackupPlan.toEntity(): PlanEntity = PlanEntity(
     id = id, title = title, icon = icon, colorHex = colorHex,
     dailyGoalMinutes = dailyGoalMinutes, startDate = startDate, endDate = endDate,
+    weekdaysMask = weekdaysMask, dayRule = dayRule,
     note = note, archived = archived, sortOrder = sortOrder,
     cardSize = cardSize, cardCols = cardCols, cardRows = cardRows,
     cardX = cardX, cardY = cardY, createdAt = createdAt

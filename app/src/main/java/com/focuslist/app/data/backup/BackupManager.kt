@@ -86,6 +86,7 @@ class BackupManager(
                     BackupPlan(
                         id = it.id, title = it.title, icon = it.icon, colorHex = it.colorHex,
                         dailyGoalMinutes = it.dailyGoalMinutes, startDate = it.startDate, endDate = it.endDate,
+                        weekdaysMask = it.weekdaysMask, dayRule = it.dayRule,
                         note = it.note, archived = it.archived, sortOrder = it.sortOrder,
                         cardSize = it.cardSize, cardCols = it.cardCols, cardRows = it.cardRows,
                         cardX = it.cardX, cardY = it.cardY, createdAt = it.createdAt

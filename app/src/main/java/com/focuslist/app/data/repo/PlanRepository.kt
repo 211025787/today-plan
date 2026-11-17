@@ -4,7 +4,9 @@ import com.focuslist.app.data.local.dao.PlanDao
 import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.data.local.entity.PlanLogEntity
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.PlanSchedule
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 /**
  * 计划仓库：计划 CRUD 与当日累计时长的原子累加。
@@ -14,12 +16,17 @@ import kotlinx.coroutines.flow.Flow
 class PlanRepository(private val planDao: PlanDao) {
 
     /**
-     * 观察今天生效中的计划。
+     * 观察今天生效中的计划（区间覆盖今天，且今天符合周几/工作日/休息日规则）。
+     *
+     * SQL 只筛区间，执行日规则交给 [PlanSchedule] 在内存里判——
+     * 规则里含法定节假日，没法用一条 WHERE 表达。
      *
      * @return 计划流
      */
     fun observeActiveToday(): Flow<List<PlanEntity>> {
-        return planDao.observeActiveToday(DateUtils.startOfDay(System.currentTimeMillis()))
+        val today = DateUtils.startOfDay(System.currentTimeMillis())
+        return planDao.observeInRange(today, today)
+            .map { plans -> plans.filter { PlanSchedule.isActive(it, today) } }
     }
 
     /**

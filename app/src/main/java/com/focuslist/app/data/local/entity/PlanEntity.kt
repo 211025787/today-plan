@@ -14,6 +14,8 @@ import androidx.room.PrimaryKey
  * @property dailyGoalMinutes 每日目标投入时长（分钟），取值 5-480
  * @property startDate 生效起始日期（当天 0 点时间戳，含）
  * @property endDate 生效截止日期（当天 0 点时间戳，含）
+ * @property weekdaysMask 周几执行掩码：bit0=周一 … bit6=周日；0 表示每天
+ * @property dayRule 执行日类型：0=按周几（掩码全选即每天）, 1=仅工作日, 2=仅休息日
  * @property note 计划备注说明，可为空串
  * @property archived 是否归档（归档后不再出现在首页）
  * @property sortOrder 排序权重，数值越小越靠前
@@ -34,6 +36,8 @@ data class PlanEntity(
     val dailyGoalMinutes: Int = 30,
     val startDate: Long,
     val endDate: Long,
+    val weekdaysMask: Int = 0,
+    val dayRule: Int = 0,
     val note: String = "",
     val archived: Boolean = false,
     val sortOrder: Int = 0,

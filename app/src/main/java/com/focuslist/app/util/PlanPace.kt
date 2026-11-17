@@ -127,6 +127,8 @@ object PlanPaces {
      * @param goalMinutes 每日目标分钟数，非正数表示不设目标
      * @param totalSeconds 计划开始至今的累计投入秒数
      * @param today 今天（任意时刻，内部归一到 0 点）
+     * @param activeTotalDays 实际执行日总数（只在部分日期执行时传入）；0 表示每天都执行
+     * @param activeElapsedDays 截至今天的执行日数（含今天若今天是执行日）；-1 表示按日历天算
      * @return 节奏快照
      */
     fun of(
@@ -134,12 +136,17 @@ object PlanPaces {
         planEnd: Long,
         goalMinutes: Int,
         totalSeconds: Long,
-        today: Long
+        today: Long,
+        activeTotalDays: Int = 0,
+        activeElapsedDays: Int = -1
     ): PlanPace {
         val start = DateUtils.startOfDay(planStart)
         val end = DateUtils.startOfDay(planEnd)
         val todayStart = DateUtils.startOfDay(today)
-        val totalDays = (daysBetween(start, end) + 1).coerceAtLeast(1)
+        // 「只在周末执行」这类计划的分母是执行日，不是日历天；
+        // 按日历天算会让它从周一就显示落后好几天
+        val calendarDays = (daysBetween(start, end) + 1).coerceAtLeast(1)
+        val totalDays = if (activeTotalDays > 0) activeTotalDays else calendarDays
         val goal = goalMinutes.coerceAtLeast(0)
         val actualSeconds = totalSeconds.coerceAtLeast(0L)
 
@@ -157,7 +164,12 @@ object PlanPaces {
         }
 
         val lastActiveDay = minOf(todayStart, end)
-        val elapsedDays = (daysBetween(start, lastActiveDay) + 1).coerceIn(1, totalDays)
+        val elapsedDays = if (activeElapsedDays >= 0) {
+            // 今天可能不是执行日（例如「只在周末」的周三），已过执行日数允许为 0
+            activeElapsedDays.coerceIn(0, totalDays)
+        } else {
+            (daysBetween(start, lastActiveDay) + 1).coerceIn(1, totalDays)
+        }
         val remainingDays = totalDays - elapsedDays
         val totalGoalSeconds = totalDays.toLong() * goal * 60L
         val expectedSeconds = elapsedDays.toLong() * goal * 60L

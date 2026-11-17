@@ -71,14 +71,125 @@ class Notifier(private val context: Context) {
      * @param title 标题
      * @param text 正文
      */
-    fun showTimerFinished(title: String, text: String) {
-        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDER)
+    fun showTimerFinished(
+        title: String,
+        text: String,
+        primary: String = "",
+        taskId: Long = 0L,
+        taskTitle: String = "",
+        durationMin: Int = 0,
+        planId: Long = 0L,
+        cycle: Int = 0
+    ) {
+        val builder = NotificationCompat.Builder(context, CHANNEL_REMINDER)
             .setSmallIcon(R.drawable.ic_widget_circle_checked)
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
-            .build()
-        manager.notify(NOTIFY_TIMER_FINISH, notification)
+            .setContentIntent(openAppIntent())
+
+        // 番茄结束给「开始休息」，休息结束给「再来一个」；两种情况都可以稍后 5 分钟
+        val primaryLabel = when (primary) {
+            TimerActions.PRIMARY_BREAK -> "开始休息"
+            TimerActions.PRIMARY_NEXT -> "再来一个"
+            else -> ""
+        }
+        val primaryAction = when (primary) {
+            TimerActions.PRIMARY_BREAK -> TimerActions.ACTION_START_BREAK
+            TimerActions.PRIMARY_NEXT -> TimerActions.ACTION_START_NEXT
+            else -> ""
+        }
+        if (primaryLabel.isNotEmpty()) {
+            builder.addAction(
+                0,
+                primaryLabel,
+                actionIntent(
+                    action = primaryAction,
+                    title = title,
+                    text = text,
+                    primary = primary,
+                    taskId = taskId,
+                    taskTitle = taskTitle,
+                    durationMin = durationMin,
+                    planId = planId,
+                    cycle = cycle
+                )
+            )
+        }
+        builder.addAction(
+            0,
+            "稍后 5 分钟",
+            actionIntent(
+                action = TimerActions.ACTION_SNOOZE,
+                title = title,
+                text = text,
+                primary = primary,
+                taskId = taskId,
+                taskTitle = taskTitle,
+                durationMin = durationMin,
+                planId = planId,
+                cycle = cycle
+            )
+        )
+        manager.notify(NOTIFY_TIMER_FINISH, builder.build())
+    }
+
+    /**
+     * 打开应用并直达专注页。
+     *
+     * @return PendingIntent
+     */
+    private fun openAppIntent(): PendingIntent {
+        return PendingIntent.getActivity(
+            context,
+            10,
+            Intent(context, MainActivity::class.java).setAction("com.focuslist.app.action.OPEN_TIMER"),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    /**
+     * 构造通知按钮的广播意图。
+     *
+     * @param action 接收器动作
+     * @param title 通知标题
+     * @param text 通知正文
+     * @param primary 主按钮类型
+     * @param taskId 任务 ID
+     * @param taskTitle 任务标题
+     * @param durationMin 番茄时长
+     * @param planId 计划 ID
+     * @param cycle 连续番茄数
+     * @return PendingIntent
+     */
+    private fun actionIntent(
+        action: String,
+        title: String,
+        text: String,
+        primary: String,
+        taskId: Long,
+        taskTitle: String,
+        durationMin: Int,
+        planId: Long,
+        cycle: Int
+    ): PendingIntent {
+        val intent = Intent(context, TimerActionReceiver::class.java).apply {
+            this.action = action
+            putExtra(TimerActions.EXTRA_TITLE, title)
+            putExtra(TimerActions.EXTRA_TEXT, text)
+            putExtra(TimerActions.EXTRA_PRIMARY, primary)
+            putExtra(TimerActions.EXTRA_TASK_ID, taskId)
+            putExtra(TimerActions.EXTRA_TASK_TITLE, taskTitle)
+            putExtra(TimerActions.EXTRA_DURATION, durationMin)
+            putExtra(TimerActions.EXTRA_PLAN_ID, planId)
+            putExtra(TimerActions.EXTRA_CYCLE, cycle)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            action.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     /**
@@ -158,19 +269,28 @@ class Notifier(private val context: Context) {
      * @param timeText 剩余时间文案，如"25:00"
      * @return 前台服务通知
      */
-    fun buildTimerNotification(phaseText: String, timeText: String): Notification {
-        val intent = PendingIntent.getActivity(
-            context, 0,
-            Intent(context, MainActivity::class.java).setAction("com.focuslist.app.action.OPEN_TIMER"),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(context, CHANNEL_TIMER)
+    fun buildTimerNotification(
+        phaseText: String,
+        timeText: String,
+        progressMax: Int = 0,
+        progress: Int = 0,
+        subText: String? = null
+    ): Notification {
+        val builder = NotificationCompat.Builder(context, CHANNEL_TIMER)
             .setSmallIcon(R.drawable.ic_widget_play)
             .setContentTitle(phaseText)
             .setContentText(timeText)
             .setOngoing(true)
-            .setContentIntent(intent)
-            .build()
+            .setOnlyAlertOnce(true)
+            .setContentIntent(openAppIntent())
+        if (progressMax > 0) {
+            // 锁屏/通知栏都能看到剩余进度条
+            builder.setProgress(progressMax, progress.coerceIn(0, progressMax), false)
+        }
+        if (!subText.isNullOrBlank()) {
+            builder.setSubText(subText)
+        }
+        return builder.build()
     }
 
     /**
@@ -178,9 +298,21 @@ class Notifier(private val context: Context) {
      *
      * @param phaseText 阶段文案
      * @param timeText 剩余时间文案
+     * @param progressMax 进度上限（秒），0 表示不显示进度
+     * @param progress 当前剩余（秒）
+     * @param subText 副文本（如今日专注摘要）
      */
-    fun updateTimerNotification(phaseText: String, timeText: String) {
-        manager.notify(NOTIFY_TIMER_RUNNING, buildTimerNotification(phaseText, timeText))
+    fun updateTimerNotification(
+        phaseText: String,
+        timeText: String,
+        progressMax: Int = 0,
+        progress: Int = 0,
+        subText: String? = null
+    ) {
+        manager.notify(
+            NOTIFY_TIMER_RUNNING,
+            buildTimerNotification(phaseText, timeText, progressMax, progress, subText)
+        )
     }
 
     /**

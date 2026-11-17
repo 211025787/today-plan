@@ -145,6 +145,7 @@ import com.focuslist.app.util.NowKind
 import com.focuslist.app.util.NowPlan
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanPaces
+import com.focuslist.app.util.PlanSchedule
 import com.focuslist.app.util.PlanTemplates
 import com.focuslist.app.util.WeekStrip
 import com.focuslist.app.util.WrapPlan
@@ -368,7 +369,9 @@ fun CalendarHomeScreen(
             note = plan.note,
             start = plan.startDate,
             end = plan.endDate,
-            dailyGoalMinutes = plan.dailyGoalMinutes
+            dailyGoalMinutes = plan.dailyGoalMinutes,
+            weekdaysMask = plan.weekdaysMask,
+            dayRule = plan.dayRule
         )
     }
     val icsLauncher = rememberLauncherForActivityResult(
@@ -778,7 +781,11 @@ fun CalendarHomeScreen(
                                         planEnd = plan.endDate,
                                         goalMinutes = plan.dailyGoalMinutes,
                                         totalSeconds = allSec,
-                                        today = todayStart
+                                        today = todayStart,
+                                        // 只在周末 / 工作日执行时，进度分母是执行日，
+                                        // 否则周一的卡片上就会写着「落后 2 天」
+                                        activeTotalDays = PlanSchedule.countActive(plan),
+                                        activeElapsedDays = PlanSchedule.activeIndexUntil(plan, todayStart)
                                     )
                                 )
                             } else {
@@ -805,8 +812,15 @@ fun CalendarHomeScreen(
                                 .padding(bottom = if (manageMode) 200.dp else 170.dp)
                         ) {
                             if (planCards.isEmpty() && tripCards.isEmpty()) {
+                                // 区间覆盖今天、但今天不是执行日（只在周末 / 工作日 / 某些周几）
+                                // 时，说清楚是「按规则今天不做」，而不是让人以为计划丢了
+                                val idleCount = state.plans.count { it.startDate <= day && it.endDate >= day }
                                 Text(
-                                    text = "这一天没有生效中的计划，点右下角圆点添加",
+                                    text = if (idleCount > 0) {
+                                        "按重复规则今天不执行 · $idleCount 个计划在这段日期里，但不在今天"
+                                    } else {
+                                        "这一天没有生效中的计划，点右下角圆点添加"
+                                    },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(vertical = 16.dp, horizontal = 4.dp)
@@ -915,7 +929,20 @@ fun CalendarHomeScreen(
             onRemember = rememberTemplate,
             onDeleteTemplate = forgetTemplate,
             onSave = { plan ->
-                scope.launch { container.planRepository.save(plan) }
+                scope.launch {
+                    container.planRepository.save(plan)
+                    // 今天若不是执行日（例如只在周末执行），日历当场看不到新卡片，
+                    // 容易以为没保存成功：直接翻到首个执行日并说明一句
+                    val today0 = DateUtils.startOfDay(System.currentTimeMillis())
+                    if (!PlanSchedule.isActive(plan, today0)) {
+                        PlanSchedule.nextActive(plan, plan.startDate)?.let { first ->
+                            viewModel.selectDayAnywhere(first)
+                            hintDialog = "计划已添加" to
+                                "「${plan.title}」按规则在 ${dayTitleFormat.format(Date(first))} 首次执行，" +
+                                "已帮你切到那一天"
+                        }
+                    }
+                }
                 showAddPlan = false
             }
         )
@@ -1773,9 +1800,16 @@ private fun RangeDeleteDialog(
     /** 已勾选的计划 ID */
     val selectedPlans = remember { mutableStateListOf<Long>() }
 
-    // 范围内生效的计划：计划生效区间与选择区间有交集
+    // 范围内生效的计划：区间有交集，且交集里至少有一个执行日
+    // （只在周末执行的计划，不该出现在只框住工作日的范围里）
     val filteredPlans = if (rangeStart != null && rangeEnd != null) {
-        plans.filter { it.startDate <= rangeEnd!! && it.endDate >= rangeStart!! }
+        plans.filter { plan ->
+            val from = maxOf(plan.startDate, rangeStart!!)
+            val to = minOf(plan.endDate, rangeEnd!!)
+            from <= to && PlanSchedule.countActive(
+                from, to, plan.weekdaysMask, plan.dayRule
+            ) > 0
+        }
     } else {
         emptyList()
     }
@@ -1845,7 +1879,13 @@ private fun RangeDeleteDialog(
                         val s = rangeStart
                         val e = rangeEnd
                         if (s != null && e != null) {
-                            val validIds = plans.filter { it.startDate <= e && it.endDate >= s }.map { it.id }
+                            val validIds = plans.filter { plan ->
+                                val from = maxOf(plan.startDate, s)
+                                val to = minOf(plan.endDate, e)
+                                from <= to && PlanSchedule.countActive(
+                                    from, to, plan.weekdaysMask, plan.dayRule
+                                ) > 0
+                            }.map { it.id }
                             selectedPlans.retainAll(validIds)
                         } else {
                             selectedPlans.clear()

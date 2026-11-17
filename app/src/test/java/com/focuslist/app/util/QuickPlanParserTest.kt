@@ -1,4 +1,4 @@
-package com.focuslist.app.util
+﻿package com.focuslist.app.util
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -264,4 +264,67 @@ class QuickPlanParserTest {
         assertEquals("读书", d.title)
         assertEquals(90, d.days)
     }
+
+    @Test
+    fun repeat_everyDay_keepsDefaultRule() {
+        val d = draft("每天读书 30 分钟")
+        assertEquals(WeekdayMask.NONE, d.weekdaysMask)
+        assertEquals(DayRule.EVERY_DAY, d.dayRule)
+        assertEquals(d.days, d.activeDays)
+    }
+
+    @Test
+    fun repeat_weekdayChain() {
+        val d = draft("每周一三五 跑步 20 分钟 坚持 30 天")
+        assertEquals(WeekdayMask.MON or WeekdayMask.WED or WeekdayMask.FRI, d.weekdaysMask)
+        assertEquals("跑步", d.title)
+        assertTrue(d.activeDays in 1..d.days)
+    }
+
+    @Test
+    fun repeat_weekdayDelimited() {
+        val d = draft("每周一、三、五 练琴 20 分钟")
+        assertEquals(WeekdayMask.MON or WeekdayMask.WED or WeekdayMask.FRI, d.weekdaysMask)
+        assertEquals("练琴", d.title)
+    }
+
+    @Test
+    fun repeat_weekdayRange() {
+        val d = draft("每周一到周五 学英语 30 分钟")
+        assertEquals(WeekdayMask.WEEKDAYS, d.weekdaysMask)
+        assertEquals("学英语", d.title)
+    }
+
+    @Test
+    fun repeat_workdayRule() {
+        val d = draft("工作日 健身 45 分钟 坚持 30 天")
+        assertEquals(DayRule.WORKDAY, d.dayRule)
+        assertEquals("健身", d.title)
+        assertTrue(d.activeDays in 1..d.days)
+    }
+
+    @Test
+    fun repeat_restAndWeekend() {
+        val rest = draft("休息日 读书 30 分钟")
+        assertEquals(DayRule.REST_DAY, rest.dayRule)
+        val weekend = draft("只在周末 冥想 10 分钟")
+        assertEquals(WeekdayMask.WEEKEND, weekend.weekdaysMask)
+        assertEquals("冥想", weekend.title)
+    }
+
+    @Test
+    fun repeat_singleWeekday() {
+        val d = draft("每周日 复盘 15 分钟")
+        assertEquals(WeekdayMask.SUN, d.weekdaysMask)
+        assertEquals("复盘", d.title)
+    }
+
+    @Test
+    fun plainWeekday_isDateNotRepeat() {
+        val d = draft("周一读书 30 分钟")
+        assertEquals(WeekdayMask.NONE, d.weekdaysMask)
+        assertEquals(DayRule.EVERY_DAY, d.dayRule)
+    }
+
+
 }

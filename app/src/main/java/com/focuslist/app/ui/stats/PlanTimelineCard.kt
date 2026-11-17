@@ -34,6 +34,7 @@ import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
 import com.focuslist.app.util.PlanSpan
+import com.focuslist.app.util.PlanSchedule
 import com.focuslist.app.util.PlanTimeline
 import com.focuslist.app.util.TimelineBar
 import com.focuslist.app.util.TimelineWindow
@@ -142,7 +143,11 @@ fun PlanTimelineCard(plans: List<PlanEntity>, modifier: Modifier = Modifier) {
                 val plan = plans.firstOrNull { it.id == bar.plan.id }
                 Text(
                     text = "${bar.plan.title} · ${PlanTimeline.barRangeText(window, bar)}" +
-                        if (plan != null) " · 每天 ${plan.dailyGoalMinutes} 分钟" else "",
+                        if (plan != null) {
+                            " · ${PlanSchedule.ruleText(plan)} ${plan.dailyGoalMinutes} 分钟"
+                        } else {
+                            ""
+                        },
                     style = MaterialTheme.typography.labelSmall,
                     color = scheme.primary
                 )

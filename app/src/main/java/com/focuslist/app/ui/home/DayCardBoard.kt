@@ -84,6 +84,7 @@ import com.focuslist.app.util.CardBoard
 import com.focuslist.app.util.CardBox
 import com.focuslist.app.util.CardShape
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.PlanSchedule
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1141,18 +1142,23 @@ private fun PlanFace(
 
         val today0 = remember { DateUtils.startOfDay(System.currentTimeMillis()) }
         val rangeFmt = remember { SimpleDateFormat("M/d", Locale.CHINA) }
+        // 「第几天 / 共几天」按真实执行日算：只在周末执行时，周三不该显示成「第 3 天」。
+        // 每天执行的老计划这里会退化成日历天数，数字与升级前一致。
+        val scheduleDays = remember(plan.startDate, plan.endDate, plan.weekdaysMask, plan.dayRule) {
+            PlanSchedule.countActive(plan) to PlanSchedule.activeIndexUntil(plan, today0)
+        }
         val totalDays = if (hasRange) {
-            (plan.endDate - plan.startDate) / 86_400_000L + 1
+            scheduleDays.first.coerceAtLeast(1).toLong()
         } else {
             0L
         }
         val dayIndex = if (hasRange) {
-            ((today0 - plan.startDate) / 86_400_000L + 1).coerceIn(1, totalDays)
+            scheduleDays.second.coerceIn(1, totalDays.toInt()).toLong()
         } else {
             0L
         }
         val daysLeft = if (hasRange) {
-            ((plan.endDate - today0) / 86_400_000L).coerceAtLeast(0L)
+            (totalDays - dayIndex).coerceAtLeast(0L)
         } else {
             0L
         }

@@ -16,15 +16,6 @@ import kotlinx.coroutines.flow.Flow
 interface PlanDao {
 
     /**
-     * 观察当前生效中的计划（今天落在 [startDate, endDate] 内且未归档）。
-     *
-     * @param today 今天 0 点时间戳
-     * @return 生效计划流
-     */
-    @Query("SELECT * FROM plans WHERE archived = 0 AND startDate <= :today AND endDate >= :today ORDER BY sortOrder ASC, id ASC")
-    fun observeActiveToday(today: Long): Flow<List<PlanEntity>>
-
-    /**
      * 观察全部未归档计划（管理用）。
      *
      * @return 计划流

@@ -1,4 +1,4 @@
-package com.focuslist.app.ui.plan
+﻿package com.focuslist.app.ui.plan
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,6 +40,7 @@ import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.PlanSchedule
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanTemplates
 import com.focuslist.app.util.QuickPlanDraft
@@ -52,7 +53,9 @@ import java.util.Locale
 private val QUICK_SAMPLES = listOf(
     "每天读书 30 分钟 📚 到年底",
     "11月1日-11月30日 每天健身 45 分钟 💪",
-    "冥想 10 分钟 🧘 坚持 21 天"
+    "每周一三五 跑步 20 分钟 🏃 坚持 30 天",
+    "工作日 健身 45 分钟 💪 到年底",
+    "只在周末 冥想 10 分钟 🧘"
 )
 
 /** 月日格式 */
@@ -165,10 +168,11 @@ fun QuickPlanSheet(
                             maxLines = 1
                         )
                         Text(
-                            text = "每天 ${draft.dailyGoalMinutes} 分钟 · " +
+                            text = "${PlanSchedule.describe(draft.weekdaysMask, draft.dayRule)} · " +
+                                "每天 ${draft.dailyGoalMinutes} 分钟 · " +
                                 "${quickDayFormat.format(Date(draft.startDate))} - " +
                                 "${quickDayFormat.format(Date(draft.endDate))} · " +
-                                "共 ${draft.days} 天",
+                                "${draft.activeDays} 个执行日",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 2.dp)
@@ -195,7 +199,8 @@ fun QuickPlanSheet(
             }
 
             Text(
-                text = "支持：30 分钟 / 1小时30分 / 今天起 / 到年底 / 11月1日-11月30日 / 坚持 21 天",
+                text = "支持：30 分钟 / 1小时30分 / 今天起 / 到年底 / 11月1日-11月30日 / 坚持 21 天\n" +
+                    "重复：每天 / 每周一三五 / 每周一、三、五 / 工作日 / 休息日 / 周末",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -228,6 +233,8 @@ private fun QuickPlanDraft.toPlan(colorHex: String): PlanEntity {
         colorHex = colorHex,
         dailyGoalMinutes = dailyGoalMinutes,
         startDate = startDate,
-        endDate = endDate
+        endDate = endDate,
+        weekdaysMask = weekdaysMask,
+        dayRule = dayRule
     )
 }

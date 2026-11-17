@@ -14,6 +14,7 @@ import com.focuslist.app.ui.plan.PlanTimerEntry
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.ui.plan.PlanTimerService
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.PlanSchedule
 import com.focuslist.app.util.Search
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -389,13 +390,23 @@ class HomeViewModel(
     }
 
     /**
-     * 搜索结果跳计划：把日历翻到该计划生效期内离今天最近的一天并展开日卡片。
+     * 搜索结果跳计划：把日历翻到该计划生效期内离今天最近的一个执行日并展开日卡片。
+     *
+     * 只在周末执行、或跳过了节假日时，区间内的「今天」本身可能是空档，
+     * 所以先往后找下一个执行日，再往前找上一个，都没有才退回区间端点。
      *
      * @param plan 命中的计划
      */
     fun focusPlan(plan: PlanEntity) {
         val today = DateUtils.startOfDay(System.currentTimeMillis())
-        val day = today.coerceIn(plan.startDate, plan.endDate)
+        val day = when {
+            PlanSchedule.isActive(plan, today) -> today
+            today < plan.startDate -> PlanSchedule.nextActive(plan, plan.startDate) ?: plan.startDate
+            today > plan.endDate -> PlanSchedule.lastActive(plan, plan.endDate) ?: plan.endDate
+            else -> PlanSchedule.nextActive(plan, today)
+                ?: PlanSchedule.lastActive(plan, today)
+                ?: today.coerceIn(plan.startDate, plan.endDate)
+        }
         monthOffset.value = monthDeltaOf(day)
         selectedDay.value = day
         query.value = ""
@@ -483,7 +494,7 @@ class HomeViewModel(
     }
 
     /**
-     * 计算某天生效的计划列表。
+     * 计算结果某天生效的计划列表（区间覆盖该天，且该天符合周几 / 工作日 / 休息日规则）。
      *
      * @param state 当前 UI 状态
      * @param dayStart 当天 0 点时间戳
@@ -491,7 +502,7 @@ class HomeViewModel(
      */
     fun plansOfDay(state: HomeUiState, dayStart: Long): List<PlanEntity> {
         // 保持原始顺序（按创建时间），不按卡片尺寸重排，避免调整大小后位置跳变
-        return state.plans.filter { it.startDate <= dayStart && it.endDate >= dayStart }
+        return state.plans.filter { PlanSchedule.isActive(it, dayStart) }
     }
 
     /**
@@ -658,7 +669,7 @@ class HomeViewModel(
                 planRepository.deleteInRange(id, rangeStart, rangeEnd)
                 // 计划已整体删除，或今天已不在剩余生效期内时，停掉对应计时
                 val plan = planRepository.getPlan(id)
-                if (plan == null || today < plan.startDate || today > plan.endDate) {
+                if (plan == null || !PlanSchedule.isActive(plan, today)) {
                     PlanTimerHolder.remove(id)
                 }
             }

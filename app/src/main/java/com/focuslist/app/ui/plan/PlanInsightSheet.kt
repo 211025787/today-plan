@@ -56,6 +56,7 @@ import com.focuslist.app.util.PlanInsight
 import com.focuslist.app.util.PlanInsights
 import com.focuslist.app.util.PlanPace
 import com.focuslist.app.util.PlanPaces
+import com.focuslist.app.util.PlanSchedule
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -161,7 +162,9 @@ fun PlanInsightSheet(
             planEnd = plan.endDate,
             goalMinutes = plan.dailyGoalMinutes,
             totalSeconds = daily.values.sum(),
-            today = today
+            today = today,
+            activeTotalDays = PlanSchedule.countActive(plan),
+            activeElapsedDays = PlanSchedule.activeIndexUntil(plan, today)
         )
     }
 
@@ -233,7 +236,8 @@ private fun PlanHeader(plan: PlanEntity, color: Color) {
             )
             Text(
                 text = "${sheetRangeFormat.format(Date(plan.startDate))} - " +
-                    "${sheetRangeFormat.format(Date(plan.endDate))} · 每天 ${plan.dailyGoalMinutes} 分钟",
+                    "${sheetRangeFormat.format(Date(plan.endDate))} · " +
+                    "${PlanSchedule.ruleText(plan)} · 每日 ${plan.dailyGoalMinutes} 分钟",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp)

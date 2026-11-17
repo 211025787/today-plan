@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import com.focuslist.app.FocusListApp
 import com.focuslist.app.data.local.entity.FocusRecordEntity
 import com.focuslist.app.notify.Notifier
+import com.focuslist.app.notify.TimerActions
 import com.focuslist.app.ui.common.AlertPlayer
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.util.DateUtils
@@ -51,6 +52,9 @@ class FocusTimerService : Service() {
     private val notifier by lazy { Notifier(this) }
     private val container by lazy { (application as FocusListApp).container }
 
+    /** 今日专注摘要（通知副文本，进入计时时刷新一次） */
+    private var todaySummaryText: String = ""
+
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
@@ -73,6 +77,48 @@ class FocusTimerService : Service() {
                 // 关联计划 ID：番茄完成时给计划当日累计加时长
                 val planId = intent.getLongExtra(EXTRA_PLAN_ID, 0L).takeIf { it > 0 }
                 startWork(taskId, title, durationMin, planId)
+            }
+            TimerActions.ACTION_START_BREAK -> {
+                // 从完成通知点「开始休息」：先挂占位通知，再进短休息
+                try {
+                    startForeground(
+                        Notifier.NOTIFY_TIMER_RUNNING,
+                        notifier.buildTimerNotification("准备休息", "--:--")
+                    )
+                } catch (_: Exception) {
+                }
+                val taskId = intent.getLongExtra(TimerActions.EXTRA_TASK_ID, 0L)
+                val taskTitle = intent.getStringExtra(TimerActions.EXTRA_TASK_TITLE).orEmpty()
+                val cycle = intent.getIntExtra(TimerActions.EXTRA_CYCLE, 0)
+                serviceScope.launch {
+                    val settings = container.settingsStore.settings.first()
+                    startBreak(
+                        TimerPhase.SHORT_BREAK,
+                        settings.shortBreakMinutes,
+                        settings.longBreakMinutes,
+                        cycle,
+                        TimerUiState(
+                            taskId = taskId.takeIf { it > 0 },
+                            taskTitle = taskTitle,
+                            cyclePomos = cycle
+                        )
+                    )
+                }
+            }
+            TimerActions.ACTION_START_NEXT -> {
+                // 从完成通知点「再来一个」：沿用上一个任务与时长
+                try {
+                    startForeground(
+                        Notifier.NOTIFY_TIMER_RUNNING,
+                        notifier.buildTimerNotification("准备专注", "--:--")
+                    )
+                } catch (_: Exception) {
+                }
+                val taskId = intent.getLongExtra(TimerActions.EXTRA_TASK_ID, 0L).takeIf { it > 0 }
+                val taskTitle = intent.getStringExtra(TimerActions.EXTRA_TASK_TITLE).orEmpty()
+                val durationMin = intent.getIntExtra(TimerActions.EXTRA_DURATION, 0)
+                val planId = intent.getLongExtra(TimerActions.EXTRA_PLAN_ID, 0L).takeIf { it > 0 }
+                startWork(taskId, taskTitle, durationMin, planId)
             }
             ACTION_PAUSE -> pauseTick()
             ACTION_RESUME -> resumeTick()
@@ -133,8 +179,15 @@ class FocusTimerService : Service() {
                 PlanTimerHolder.start(it)
                 PlanTimerHolder.persist(this@FocusTimerService)
             }
-            // 占位通知更新为真实倒计时
-            notifier.updateTimerNotification("专注中", DateUtils.formatCountdown(totalSec))
+            refreshTodaySummary()
+            // 占位通知更新为真实倒计时（带进度条与今日摘要）
+            notifier.updateTimerNotification(
+                "专注中",
+                DateUtils.formatCountdown(totalSec),
+                progressMax = totalSec.toInt(),
+                progress = totalSec.toInt(),
+                subText = todaySummaryText
+            )
             startTick()
         }
     }
@@ -304,7 +357,16 @@ class FocusTimerService : Service() {
 
             when (finished.phase) {
                 TimerPhase.WORK -> {
-                    notifier.showTimerFinished("番茄完成", "休息一下，喝口水吧")
+                    notifier.showTimerFinished(
+                        title = "番茄完成",
+                        text = "休息一下，喝口水吧",
+                        primary = TimerActions.PRIMARY_BREAK,
+                        taskId = finished.taskId ?: 0L,
+                        taskTitle = finished.taskTitle.orEmpty(),
+                        durationMin = currentDurationMin,
+                        planId = currentPlanId ?: 0L,
+                        cycle = newCycle
+                    )
                     if (settings.autoStartBreak) {
                         startBreak(
                             TimerPhase.SHORT_BREAK,
@@ -318,7 +380,16 @@ class FocusTimerService : Service() {
                     }
                 }
                 TimerPhase.SHORT_BREAK, TimerPhase.LONG_BREAK -> {
-                    notifier.showTimerFinished("休息结束", "开始下一个番茄吧")
+                    notifier.showTimerFinished(
+                        title = "休息结束",
+                        text = "开始下一个番茄吧",
+                        primary = TimerActions.PRIMARY_NEXT,
+                        taskId = finished.taskId ?: 0L,
+                        taskTitle = finished.taskTitle.orEmpty(),
+                        durationMin = currentDurationMin,
+                        planId = currentPlanId ?: 0L,
+                        cycle = newCycle
+                    )
                     if (settings.autoStartNextPomo) {
                         startWork(finished.taskId, finished.taskTitle, currentDurationMin, currentPlanId)
                     } else {
@@ -361,7 +432,16 @@ class FocusTimerService : Service() {
             PlanTimerHolder.persist(this)
         }
         try {
-            startForeground(Notifier.NOTIFY_TIMER_RUNNING, notifier.buildTimerNotification("休息中", DateUtils.formatCountdown(totalSec)))
+            startForeground(
+                Notifier.NOTIFY_TIMER_RUNNING,
+                notifier.buildTimerNotification(
+                    "休息中",
+                    DateUtils.formatCountdown(totalSec),
+                    progressMax = totalSec.toInt(),
+                    progress = totalSec.toInt(),
+                    subText = todaySummaryText
+                )
+            )
         } catch (e: Exception) {
             // ColorOS 兼容降级
         }
@@ -390,7 +470,23 @@ class FocusTimerService : Service() {
             TimerPhase.SHORT_BREAK, TimerPhase.LONG_BREAK -> if (state.running) "休息中" else "已暂停"
             TimerPhase.IDLE -> "准备专注"
         }
-        notifier.updateTimerNotification(phaseText, DateUtils.formatCountdown(state.remainSec))
+        notifier.updateTimerNotification(
+            phaseText,
+            DateUtils.formatCountdown(state.remainSec),
+            progressMax = state.totalSec.toInt(),
+            progress = state.remainSec.toInt(),
+            subText = todaySummaryText
+        )
+    }
+
+    /**
+     * 刷新今日专注摘要，用于通知副文本。
+     */
+    private suspend fun refreshTodaySummary() {
+        todaySummaryText = runCatching {
+            val summary = container.focusRepository.summary()
+            "今日 ${summary.todayMinutes} 分钟 · ${summary.todayPomos} 个番茄"
+        }.getOrDefault("")
     }
 
     /**

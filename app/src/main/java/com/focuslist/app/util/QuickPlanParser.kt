@@ -1,4 +1,4 @@
-package com.focuslist.app.util
+﻿package com.focuslist.app.util
 
 import java.time.DayOfWeek
 import java.time.Instant
@@ -23,7 +23,10 @@ data class QuickPlanDraft(
     val dailyGoalMinutes: Int,
     val startDate: Long,
     val endDate: Long,
-    val days: Int
+    val days: Int,
+    val weekdaysMask: Int = WeekdayMask.NONE,
+    val dayRule: Int = DayRule.EVERY_DAY,
+    val activeDays: Int = days
 ) {
     /** 是否有可用标题 */
     fun hasTitle(): Boolean = title.isNotBlank()
@@ -66,7 +69,17 @@ object QuickPlanParser {
 
     private val HOUR_REGEX = Regex("""(\d+(?:\.\d+)?)\s*(?:个)?\s*(?:小时|时|h|hr|hrs|hours?)""", RegexOption.IGNORE_CASE)
     private val MINUTE_REGEX = Regex("""(\d+(?:\.\d+)?)\s*(?:分钟|分|min|mins|minutes?)""", RegexOption.IGNORE_CASE)
-    private val SPAN_REGEX = Regex("""(\d+|[一二三四五六七八九十两]+)\s*(?:天|周|星期|个月|月)""")
+    private val SPAN_REGEX = Regex("""(?:(?:坚持|持续|连续)\s*)?(\d+|[一二三四五六七八九十两]+)\s*(?:天|周|星期|个月|月)""")
+
+    // 重复规则：先于日期识别，避免「每周一到周五」被当成两个具体日期
+    private val WORKDAY_REGEX = Regex("""(?:每个?)?(?:法定)?工作日|上班日""")
+    private val REST_REGEX = Regex("""(?:每个?)?休息日|法定节假日|节假日|公共假期|公众假期""")
+    private val WEEKEND_REGEX = Regex("""每(?:个)?周末|只在周末|仅在周末|周六日|周六周日|星期六日|双休日""")
+    private val WEEKDAY_RANGE_REGEX = Regex("""(?:每)?(?:周|星期|礼拜)\s*([一二三四五六日天1-7])\s*(?:到|至|~|～|-)\s*(?:周|星期|礼拜)?\s*([一二三四五六日天1-7])""")
+    private val WEEKDAY_DELIMITED_REGEX = Regex("""每(?:周|星期|礼拜)\s*([一二三四五六日天1-7](?:\s*[、,，和及与/]\s*(?:周|星期|礼拜)?\s*[一二三四五六日天1-7])+)""")
+    private val WEEKDAY_CHAIN_REGEX = Regex("""每(?:周|星期|礼拜)\s*([一二三四五六日天]{2,7})""")
+    private val WEEKDAY_SINGLE_REGEX = Regex("""每(?:周|星期|礼拜)\s*([一二三四五六日天1-7])""")
+    private val DAILY_REGEX = Regex("""每天|每日|天天""")
 
     // 日期规则：自左到右按优先级依次扫描，命中即抹除，避免同一串被多个规则重复识别
     private val DATE_RULES: List<Pair<Regex, (MatchResult, LocalDate) -> LocalDate?>> = listOf(
@@ -166,13 +179,16 @@ object QuickPlanParser {
         // 2) 时长：1小时30分 / 30分钟 / 半小时 / 45min
         val goalMinutes = extractGoal(work) ?: DEFAULT_GOAL_MINUTES
 
-        // 3) 日期：命中顺序保留，前面带"到/至/-"的算截止日
+        // 3) 重复规则：每天 / 每周几 / 工作日 / 休息日 / 周末
+        val repeat = extractRepeat(work)
+
+        // 4) 日期：命中顺序保留，前面带"到/至/-"的算截止日
         val hits = extractDates(work, today)
 
-        // 4) 跨度：坚持 21 天 / 3个月
+        // 5) 跨度：坚持 21 天 / 3个月
         val spanDays = extractSpan(work)
 
-        // 5) 剩下的就是标题
+        // 6) 剩下的就是标题
         val title = cleanTitle(work.toString())
         val icon = typedIcon ?: suggestIcon(title)
 
@@ -192,13 +208,21 @@ object QuickPlanParser {
             }
         }
 
+        val mask = repeat?.mask ?: WeekdayMask.NONE
+        val rule = repeat?.rule ?: DayRule.EVERY_DAY
+        val startMs = start.atStartOfDay(zone).toInstant().toEpochMilli()
+        val endMs = end.atStartOfDay(zone).toInstant().toEpochMilli()
+        val activeCount = PlanSchedule.countActive(startMs, endMs, mask, rule)
         return QuickPlanDraft(
             title = title,
             icon = icon,
             dailyGoalMinutes = goalMinutes,
-            startDate = start.atStartOfDay(zone).toInstant().toEpochMilli(),
-            endDate = end.atStartOfDay(zone).toInstant().toEpochMilli(),
-            days = ChronoUnit.DAYS.between(start, end).toInt() + 1
+            startDate = startMs,
+            endDate = endMs,
+            days = ChronoUnit.DAYS.between(start, end).toInt() + 1,
+            weekdaysMask = mask,
+            dayRule = rule,
+            activeDays = activeCount
         )
     }
 
@@ -301,6 +325,102 @@ object QuickPlanParser {
         return total?.roundToInt()?.coerceIn(MIN_GOAL_MINUTES, MAX_GOAL_MINUTES)
     }
 
+    /** 重复规则命中项 */
+    private class RepeatHit(val mask: Int, val rule: Int)
+
+    /**
+     * 识别重复规则并抹掉命中片段。
+     *
+     * 支持：每天 / 每日 / 天天、每周一、每周一三五、每周一、三、五、
+     * 每周一到周五、工作日、休息日、周末等写法。
+     *
+     * @param work 工作串（原地修改）
+     * @return 命中规则；没有则返回 null
+     */
+    private fun extractRepeat(work: StringBuilder): RepeatHit? {
+        WORKDAY_REGEX.find(work.toString())?.let { m ->
+            mask(work, m.range)
+            return RepeatHit(WeekdayMask.ALL, DayRule.WORKDAY)
+        }
+        REST_REGEX.find(work.toString())?.let { m ->
+            mask(work, m.range)
+            return RepeatHit(WeekdayMask.ALL, DayRule.REST_DAY)
+        }
+        WEEKEND_REGEX.find(work.toString())?.let { m ->
+            mask(work, m.range)
+            return RepeatHit(WeekdayMask.WEEKEND, DayRule.EVERY_DAY)
+        }
+        WEEKDAY_RANGE_REGEX.find(work.toString())?.let { m ->
+            val from = weekdayOf(m.groupValues[1])
+            val to = weekdayOf(m.groupValues[2])
+            if (from != null && to != null) {
+                mask(work, m.range)
+                return RepeatHit(maskBetween(from, to), DayRule.EVERY_DAY)
+            }
+        }
+        WEEKDAY_DELIMITED_REGEX.find(work.toString())?.let { m ->
+            val bits = maskOfTokens(m.groupValues[1])
+            if (bits != WeekdayMask.NONE) {
+                mask(work, m.range)
+                return RepeatHit(bits, DayRule.EVERY_DAY)
+            }
+        }
+        WEEKDAY_CHAIN_REGEX.find(work.toString())?.let { m ->
+            val bits = maskOfTokens(m.groupValues[1])
+            if (bits != WeekdayMask.NONE) {
+                mask(work, m.range)
+                return RepeatHit(bits, DayRule.EVERY_DAY)
+            }
+        }
+        WEEKDAY_SINGLE_REGEX.find(work.toString())?.let { m ->
+            val day = weekdayOf(m.groupValues[1])
+            if (day != null) {
+                mask(work, m.range)
+                return RepeatHit(1 shl (day - 1), DayRule.EVERY_DAY)
+            }
+        }
+        DAILY_REGEX.find(work.toString())?.let { m ->
+            mask(work, m.range)
+            return RepeatHit(WeekdayMask.NONE, DayRule.EVERY_DAY)
+        }
+        return null
+    }
+
+    /**
+     * 把「一三五」「一、三、五」「一和周三」这类文本转成周几掩码。
+     *
+     * @param text 含星期几的文本
+     * @return 位掩码
+     */
+    private fun maskOfTokens(text: String): Int {
+        var result = WeekdayMask.NONE
+        text.forEach { ch ->
+            val day = weekdayOf(ch.toString())
+            if (day != null) {
+                result = result or (1 shl (day - 1))
+            }
+        }
+        return result
+    }
+
+    /**
+     * 从周 X 到周 Y 的连续掩码，支持跨周（周五到周一）。
+     *
+     * @param from 起始星期（1=周一 … 7=周日）
+     * @param to 结束星期
+     * @return 位掩码
+     */
+    private fun maskBetween(from: Int, to: Int): Int {
+        var result = WeekdayMask.NONE
+        var day = from
+        var guard = 0
+        while (guard++ < 7) {
+            result = result or (1 shl (day - 1))
+            if (day == to) break
+            day = if (day == 7) 1 else day + 1
+        }
+        return result
+    }
     /** 日期命中项 */
     private class DateHit(val date: LocalDate, val asEnd: Boolean)
 

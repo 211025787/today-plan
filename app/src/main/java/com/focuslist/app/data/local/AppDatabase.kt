@@ -163,6 +163,18 @@ private val MIGRATION_9_10 = object : Migration(9, 10) {
 }
 
 /**
+ * v11 → v12：计划增加执行日规则（周几掩码 + 工作日/休息日），
+ * 让「只在周末」「每周一三五」这类计划不必每天都出现在日历上。
+ * 旧计划掩码为 0（每天）、规则为 0，行为与升级前完全一致。
+ */
+private val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE plans ADD COLUMN weekdaysMask INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE plans ADD COLUMN dayRule INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/**
  * 应用本地数据库（Room）：业务数据全部保存在设备。
  *
  * 除了旅游规划的底图瓦片与真实路线按需联网外，应用不发起其它网络请求，
@@ -180,6 +192,7 @@ private val MIGRATION_9_10 = object : Migration(9, 10) {
  * - v9：卡片改为自由画布：占列/占行（1-4）与左上角坐标（列/行）
  * - v10：卡片增加叠放时间戳，缩放/移动后保持最新卡片置顶
  * - v11：移除习惯打卡页，删除习惯与打卡表
+ * - v12：计划增加执行日规则（周几多选 / 仅工作日 / 仅休息日）
  */
 @Database(
     entities = [
@@ -196,7 +209,7 @@ private val MIGRATION_9_10 = object : Migration(9, 10) {
         TripStopEntity::class,
         TripLegEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -266,7 +279,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, DB_NAME)
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }

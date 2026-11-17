@@ -16,6 +16,8 @@ import java.util.TimeZone
  * @property start 起始日（0 点，含）
  * @property end 截止日（0 点，含）
  * @property dailyGoalMinutes 每日目标分钟数
+ * @property weekdaysMask 周几执行掩码；0 表示每天
+ * @property dayRule 执行日类型：0=按周几, 1=仅工作日, 2=仅休息日
  */
 data class IcsPlan(
     val id: Long,
@@ -23,7 +25,9 @@ data class IcsPlan(
     val note: String = "",
     val start: Long,
     val end: Long,
-    val dailyGoalMinutes: Int = 0
+    val dailyGoalMinutes: Int = 0,
+    val weekdaysMask: Int = 0,
+    val dayRule: Int = 0
 )
 
 /**
@@ -81,10 +85,15 @@ object Ics {
         lines += "BEGIN:VEVENT"
         lines += "UID:${uidOf(plan)}"
         lines += "DTSTAMP:${stampOf(now)}"
-        lines += "DTSTART;VALUE=DATE:${dateOf(plan.start)}"
+        // DTSTART 必须是第一个执行日：只在周末执行的计划如果从周一起，
+        // 部分客户端会把这个不存在的日期当成第一个实例
+        val firstDay = PlanSchedule.activeDays(
+            plan.start, plan.end, plan.weekdaysMask, plan.dayRule, 1
+        ).firstOrNull() ?: plan.start
+        lines += "DTSTART;VALUE=DATE:${dateOf(firstDay)}"
         // 整天事件的 DTEND 是排他的，所以取截止日的下一天
         lines += "DTEND;VALUE=DATE:${dateOf(DateUtils.addDays(plan.end, 1))}"
-        lines += "RRULE:FREQ=DAILY;UNTIL=${dateOf(plan.end)}"
+        lines += rruleOf(plan)
         lines += "SUMMARY:${escape(summaryOf(plan))}"
         lines += "DESCRIPTION:${escape(descriptionOf(plan))}"
         lines += "TRANSP:TRANSPARENT"
@@ -148,28 +157,63 @@ object Ics {
     }
 
     /**
-     * 事件标题：计划名 + 每日目标，日历格子窄，尽量短。
+     * 重复规则：每天都执行时沿用 `FREQ=DAILY`，只在部分日子执行时改用 `FREQ=WEEKLY;BYDAY=…`。
+     *
+     * 工作日 / 休息日没法用 RRULE 表达「跳过法定节假日」，这里退化成「周一至周五」
+     * 与「周六日」——日历客户端拿到的仍是可用的事件，细节差异写进描述里。
+     *
+     * @param plan 计划信息
+     * @return 一行 RRULE
+     */
+    private fun rruleOf(plan: IcsPlan): String {
+        val until = dateOf(plan.end)
+        return when (plan.dayRule) {
+            DayRule.WORKDAY -> "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=$until"
+            DayRule.REST_DAY -> "RRULE:FREQ=WEEKLY;BYDAY=SA,SU;UNTIL=$until"
+            else -> {
+                val mask = if (plan.weekdaysMask == WeekdayMask.NONE) WeekdayMask.ALL else plan.weekdaysMask
+                if (mask == WeekdayMask.ALL) {
+                    "RRULE:FREQ=DAILY;UNTIL=$until"
+                } else {
+                    val byDay = WeekdayMask.ORDER
+                        .filter { (mask and it) != 0 }
+                        .joinToString(",") { ICS_WEEKDAYS[WeekdayMask.ORDER.indexOf(it)] }
+                    "RRULE:FREQ=WEEKLY;BYDAY=$byDay;UNTIL=$until"
+                }
+            }
+        }
+    }
+
+    /** iCalendar 的星期缩写，顺序对应 [WeekdayMask.ORDER]（周一起） */
+    private val ICS_WEEKDAYS = arrayOf("MO", "TU", "WE", "TH", "FR", "SA", "SU")
+
+    /**
+     * 事件标题：计划名 + 执行规则 + 每日目标，日历格子窄，尽量短。
      *
      * @param plan 计划信息
      * @return 标题
      */
     fun summaryOf(plan: IcsPlan): String {
         val title = plan.title.ifBlank { "未命名计划" }
-        return if (plan.dailyGoalMinutes > 0) {
-            "$title · 每天 ${plan.dailyGoalMinutes} 分钟"
-        } else {
-            title
+        val rule = PlanSchedule.describe(plan.weekdaysMask, plan.dayRule)
+        val everyDay = rule == "每天"
+        return when {
+            plan.dailyGoalMinutes > 0 && everyDay -> "$title · 每天 ${plan.dailyGoalMinutes} 分钟"
+            plan.dailyGoalMinutes > 0 -> "$title · $rule · ${plan.dailyGoalMinutes} 分钟"
+            everyDay -> title
+            else -> "$title · $rule"
         }
     }
 
     /**
-     * 事件描述：备注 + 区间与天数。
+     * 事件描述：备注 + 区间与天数 + 执行规则。
      *
      * @param plan 计划信息
      * @return 描述
      */
     fun descriptionOf(plan: IcsPlan): String {
-        val days = (plan.end - plan.start) / DAY_MILLIS + 1
+        // 天数按真实执行日算：只在周末的计划不该写「共 30 天」
+        val days = PlanSchedule.countActive(plan.start, plan.end, plan.weekdaysMask, plan.dayRule)
         val builder = StringBuilder()
         if (plan.note.isNotBlank()) {
             builder.append(plan.note.trim()).append('\n')
@@ -177,6 +221,10 @@ object Ics {
         builder.append("共 ").append(days).append(" 天")
         if (plan.dailyGoalMinutes > 0) {
             builder.append("，每天目标 ").append(plan.dailyGoalMinutes).append(" 分钟")
+        }
+        val rule = PlanSchedule.describe(plan.weekdaysMask, plan.dayRule)
+        if (rule != "每天") {
+            builder.append("，执行日：").append(rule)
         }
         builder.append("。由「暖历」导出。")
         return builder.toString()
