@@ -1,4 +1,4 @@
-package com.focuslist.app.data.local.dao
+﻿package com.focuslist.app.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -75,6 +75,26 @@ interface PlanDao {
      */
     @Query("DELETE FROM plan_logs WHERE planId = :planId AND date >= :start AND date <= :end")
     suspend fun deleteLogsBetween(planId: Long, start: Long, end: Long)
+
+    /**
+     * 删除计划在某一天的日志（按周几选择性删除用）。
+     *
+     * @param planId 计划 ID
+     * @param date 当天 0 点时间戳
+     */
+    @Query("DELETE FROM plan_logs WHERE planId = :planId AND date = :date")
+    suspend fun deleteLogAt(planId: Long, date: Long)
+
+    /**
+     * 把一段日期内的日志改挂到新计划 ID 下（拆分计划后迁移记录用）。
+     *
+     * @param oldPlanId 原计划 ID
+     * @param newPlanId 新计划 ID
+     * @param start 区间起点（含）
+     * @param end 区间终点（含）
+     */
+    @Query("UPDATE plan_logs SET planId = :newPlanId WHERE planId = :oldPlanId AND date >= :start AND date <= :end")
+    suspend fun reassignLogs(oldPlanId: Long, newPlanId: Long, start: Long, end: Long)
 
     /**
      * 观察某天全部计划的累计记录。

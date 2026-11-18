@@ -1,4 +1,4 @@
-package com.focuslist.app.ui.home
+﻿package com.focuslist.app.ui.home
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -36,6 +36,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -136,6 +138,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.DayRule
 import com.focuslist.app.util.DayWrapScript
 import com.focuslist.app.util.DayWraps
 import com.focuslist.app.util.Ics
@@ -146,6 +149,7 @@ import com.focuslist.app.util.NowPlan
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanPaces
 import com.focuslist.app.util.PlanSchedule
+import com.focuslist.app.util.WeekdayMask
 import com.focuslist.app.util.PlanTemplates
 import com.focuslist.app.util.WeekStrip
 import com.focuslist.app.util.WrapPlan
@@ -1076,9 +1080,9 @@ fun CalendarHomeScreen(
         RangeDeleteDialog(
             plans = state.plans,
             onDismiss = { showRangeDelete = false },
-            onDelete = { ids, start, end ->
-                // 只移除所选日期范围内的计划部分，范围外日期保留
-                viewModel.deletePlansInRange(ids, start, end)
+            onDelete = { ids, start, end, mask, rule ->
+                // 只移除所选日期范围内、符合所选规则的日期；其他日期保留
+                viewModel.deletePlansInRange(ids, start, end, mask, rule)
                 showRangeDelete = false
             }
         )
@@ -1779,12 +1783,12 @@ enum class PlanCardSize(val code: Int, val cols: Int, val rows: Int, val label: 
  * @param onDismiss 关闭回调
  * @param onDelete 删除回调（选中的计划 ID 集合, 起始日期, 结束日期）
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun RangeDeleteDialog(
     plans: List<PlanEntity>,
     onDismiss: () -> Unit,
-    onDelete: (Set<Long>, Long, Long) -> Unit
+    onDelete: (Set<Long>, Long, Long, Int, Int) -> Unit
 ) {
     /** 当前显示月的 1 号 0 点 */
     var displayMonth by remember {
@@ -1799,6 +1803,20 @@ private fun RangeDeleteDialog(
     var rangeEnd by remember { mutableStateOf<Long?>(null) }
     /** 已勾选的计划 ID */
     val selectedPlans = remember { mutableStateListOf<Long>() }
+    /** 删除方式：0=每天 1=自选周几 2=工作日 3=休息日 4=周末 */
+    var delMode by remember { mutableStateOf(0) }
+    /** 自选周几掩码 */
+    var delWeekdays by remember { mutableStateOf(WeekdayMask.NONE) }
+    val selRule = when (delMode) {
+        2 -> DayRule.WORKDAY
+        3 -> DayRule.REST_DAY
+        else -> DayRule.EVERY_DAY
+    }
+    val selMask = when (delMode) {
+        1 -> if (delWeekdays == WeekdayMask.NONE) WeekdayMask.ALL else delWeekdays
+        4 -> WeekdayMask.WEEKEND
+        else -> WeekdayMask.ALL
+    }
 
     // 范围内生效的计划：区间有交集，且交集里至少有一个执行日
     // （只在周末执行的计划，不该出现在只框住工作日的范围里）
@@ -1932,13 +1950,68 @@ private fun RangeDeleteDialog(
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("该日期范围内没有生效中的计划", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+
+                // 删除哪些天：加了规则后，可以只删某几类日期，其余保留
+                Spacer(modifier = Modifier.height(14.dp))
+                Text("删除哪些天", style = MaterialTheme.typography.labelMedium)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 6.dp)
+                ) {
+                    DelRuleChip("每天", delMode == 0) { delMode = 0 }
+                    DelRuleChip("自选周几", delMode == 1) { delMode = 1 }
+                    DelRuleChip("工作日", delMode == 2) { delMode = 2 }
+                    DelRuleChip("休息日", delMode == 3) { delMode = 3 }
+                    DelRuleChip("周末", delMode == 4) { delMode = 4 }
+                }
+                if (delMode == 1) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) {
+                        WeekdayMask.ORDER.forEachIndexed { index, bit ->
+                            val on = (delWeekdays and bit) != 0
+                            Text(
+                                text = WeekdayMask.LABELS[index],
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                    .clickable {
+                                        delWeekdays = if (on) delWeekdays and bit.inv() else delWeekdays or bit
+                                    }
+                                    .padding(vertical = 9.dp)
+                            )
+                        }
+                    }
+                    if (delWeekdays == WeekdayMask.NONE) {
+                        Text(
+                            text = "一个都不选时按「每天」删除",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = "只删除所选日期上的计划，其他日期继续保留",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
                     if (rangeStart != null && rangeEnd != null) {
-                        onDelete(selectedPlans.toSet(), rangeStart!!, rangeEnd!!)
+                        onDelete(selectedPlans.toSet(), rangeStart!!, rangeEnd!!, selMask, selRule)
                     }
                 },
                 enabled = selectedPlans.isNotEmpty() && rangeStart != null && rangeEnd != null && rangeStart!! <= rangeEnd!!
@@ -1952,6 +2025,28 @@ private fun RangeDeleteDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 
+}
+/**
+ * 删除规则的单选 chip。
+ *
+ * @param label 文案
+ * @param selected 是否选中
+ * @param onClick 点击回调
+ */
+@Composable
+private fun DelRuleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    )
 }
 /**
  * 范围删除对话框内嵌的月历日期网格。

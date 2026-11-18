@@ -1,4 +1,4 @@
-package com.focuslist.app.ui.home
+﻿package com.focuslist.app.ui.home
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -14,7 +14,9 @@ import com.focuslist.app.ui.plan.PlanTimerEntry
 import com.focuslist.app.ui.plan.PlanTimerHolder
 import com.focuslist.app.ui.plan.PlanTimerService
 import com.focuslist.app.util.DateUtils
+import com.focuslist.app.util.DayRule
 import com.focuslist.app.util.PlanSchedule
+import com.focuslist.app.util.WeekdayMask
 import com.focuslist.app.util.Search
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -659,14 +661,24 @@ class HomeViewModel(
      * @param rangeStart 删除区间起点 0 点（含）
      * @param rangeEnd 删除区间终点 0 点（含）
      */
-    fun deletePlansInRange(planIds: Set<Long>, rangeStart: Long, rangeEnd: Long) {
+    fun deletePlansInRange(
+        planIds: Set<Long>,
+        rangeStart: Long,
+        rangeEnd: Long,
+        selMask: Int = WeekdayMask.ALL,
+        selRule: Int = DayRule.EVERY_DAY
+    ) {
         if (planIds.isEmpty()) {
             return
         }
         viewModelScope.launch {
             val today = DateUtils.startOfDay(System.currentTimeMillis())
             planIds.forEach { id ->
-                planRepository.deleteInRange(id, rangeStart, rangeEnd)
+                if (selRule == DayRule.EVERY_DAY && (selMask == WeekdayMask.ALL || selMask == WeekdayMask.NONE)) {
+                    planRepository.deleteInRange(id, rangeStart, rangeEnd)
+                } else {
+                    planRepository.deleteInRangeByDays(id, rangeStart, rangeEnd, selMask, selRule)
+                }
                 // 计划已整体删除，或今天已不在剩余生效期内时，停掉对应计时
                 val plan = planRepository.getPlan(id)
                 if (plan == null || !PlanSchedule.isActive(plan, today)) {

@@ -1,4 +1,4 @@
-package com.focuslist.app.ui.plan
+﻿package com.focuslist.app.ui.plan
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,10 +41,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.ui.common.DatePickerDialogWrapper
+import com.focuslist.app.ui.common.GlassCard
 import com.focuslist.app.ui.theme.parseThemeColor
 import com.focuslist.app.util.DateUtils
 import com.focuslist.app.util.DayRule
 import com.focuslist.app.util.PlanSchedule
+import com.focuslist.app.util.PlanAdvice
 import com.focuslist.app.util.PlanTemplate
 import com.focuslist.app.util.PlanTemplates
 import com.focuslist.app.util.WeekdayMask
@@ -147,6 +149,11 @@ fun AddPlanSheet(
     val activeCount = remember(rangeStart, rangeEnd, effectiveMask, effectiveRule) {
         PlanSchedule.countActive(rangeStart, rangeEnd, effectiveMask, effectiveRule)
     }
+    // 按标题类别给出节奏建议（健身要休息、学习要每天…）
+    val advice = remember(title) { PlanAdvice.suggest(title) }
+    val adviceApplied = advice != null &&
+        effectiveRule == advice.rule &&
+        effectiveMask == advice.mask
 
     val sheetState = rememberModalBottomSheetState(
         // 表单较高，直接完全展开，不要停在半屏还要再滑一下
@@ -324,6 +331,46 @@ fun AddPlanSheet(
                 days = activeDays,
                 moreCount = (activeCount - activeDays.size).coerceAtLeast(0)
             )
+
+            // 智能建议：不同类别节奏不同，健身留恢复日、学习每天坚持
+            val tip = advice
+            if (tip != null && !adviceApplied) {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            "💡 ${tip.category}计划建议",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "${tip.summary} · 每天 ${tip.minutes} 分钟",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                        Text(
+                            text = tip.reason,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        TextButton(
+                            onClick = {
+                                when {
+                                    tip.rule == DayRule.WORKDAY -> ruleMode = MODE_WORKDAY
+                                    tip.rule == DayRule.REST_DAY -> ruleMode = MODE_REST
+                                    tip.mask == WeekdayMask.ALL -> ruleMode = MODE_EVERY
+                                    else -> {
+                                        ruleMode = MODE_PICK
+                                        weekdaysMask = tip.mask
+                                    }
+                                }
+                                goalMinutes = tip.minutes
+                            },
+                            modifier = Modifier.align(Alignment.End)
+                        ) { Text("按建议设置") }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 

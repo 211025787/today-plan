@@ -1,4 +1,4 @@
-package com.focuslist.app.ui.home
+﻿package com.focuslist.app.ui.home
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animate
@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -983,7 +984,8 @@ private fun PlanBoardCard(
     val plan = data.plan
     val base = parseThemeColor(plan.colorHex)
     val deep = Color(base.red * 0.58f, base.green * 0.58f, base.blue * 0.58f)
-    val shape = RoundedCornerShape(if (width < 100.dp || height < 100.dp) 16.dp else 20.dp)
+    val cornerDp = if (width < 100.dp || height < 100.dp) 16.dp else 20.dp
+    val shape = RoundedCornerShape(cornerDp)
 
     // 拿起时轻轻抬起来：放大一点点 + 一层投影，和手机桌面抓起图标的手感对齐
     val lift by animateFloatAsState(
@@ -997,13 +999,20 @@ private fun PlanBoardCard(
                 scaleX = 1f + 0.035f * lift
                 scaleY = 1f + 0.035f * lift
             }
-            .shadow(elevation = 18.dp * lift, shape = shape, clip = false)
+            // iOS 通知那种半透明玻璃：彩色底 + 白雾 + 左上高光 + 彩色边缘光
+            .shadow(
+                elevation = 14.dp + 14.dp * lift,
+                shape = shape,
+                clip = false,
+                ambientColor = base.copy(alpha = 0.70f),
+                spotColor = base.copy(alpha = 0.60f)
+            )
+            .edgeGlow()
             .clip(shape)
-            .background(Brush.linearGradient(listOf(base, deep)))
-            .border(
-                width = if (selected) 2.dp else if (active) 1.5.dp else 1.dp,
-                color = if (selected || active) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.22f),
-                shape = shape
+            .glassCard(
+                base = base,
+                deep = deep,
+                cornerDp = cornerDp
             )
             .cardBodyGestures(
                 key = plan.id,
@@ -1532,7 +1541,8 @@ private fun TripBoardCard(
 ) {
     val base = parseThemeColor(trip.colorHex)
     val deep = Color(base.red * 0.55f, base.green * 0.55f, base.blue * 0.55f)
-    val shape = RoundedCornerShape(if (width < 100.dp || height < 100.dp) 16.dp else 20.dp)
+    val cornerDp = if (width < 100.dp || height < 100.dp) 16.dp else 20.dp
+    val shape = RoundedCornerShape(cornerDp)
     val dateFormat = remember { SimpleDateFormat("M/d", Locale.CHINA) }
     val dateText = if (trip.startDate > 0L && trip.endDate > 0L) {
         "${dateFormat.format(Date(trip.startDate))}–${dateFormat.format(Date(trip.endDate))}"
@@ -1552,13 +1562,20 @@ private fun TripBoardCard(
                 scaleX = 1f + 0.035f * lift
                 scaleY = 1f + 0.035f * lift
             }
-            .shadow(elevation = 18.dp * lift, shape = shape, clip = false)
+            // 与计划卡片一致的玻璃质感
+            .shadow(
+                elevation = 14.dp + 14.dp * lift,
+                shape = shape,
+                clip = false,
+                ambientColor = base.copy(alpha = 0.70f),
+                spotColor = base.copy(alpha = 0.60f)
+            )
+            .edgeGlow()
             .clip(shape)
-            .background(Brush.linearGradient(listOf(base, deep)))
-            .border(
-                width = if (active) 1.5.dp else 1.dp,
-                color = if (active) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.22f),
-                shape = shape
+            .glassCard(
+                base = base,
+                deep = deep,
+                cornerDp = cornerDp
             )
             .cardBodyGestures(
                 key = -trip.id,
@@ -1680,6 +1697,83 @@ private fun TripBoardCard(
 }
 
 /**
+ * 右下角白色光晕：只在卡片右下角亮起，向外逐渐淡出。
+ *
+ * 只有一团柔光，没有描边——卡片边缘保持干净。
+ *
+ * @param cornerDp 卡片圆角
+ */
+private fun Modifier.edgeGlow(): Modifier = drawBehind {
+    // 光源放在卡片外一点，避免在内侧形成一圈亮边
+    val offset = 12.dp.toPx()
+    val center = Offset(size.width + offset, size.height + offset)
+    val radius = size.maxDimension * 0.72f
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.40f),
+                Color.White.copy(alpha = 0.14f),
+                Color.Transparent
+            ),
+            center = center,
+            radius = radius
+        ),
+        radius = radius,
+        center = center
+    )
+}
+
+/**
+ * 半透明玻璃卡片背景：彩色玻璃底 + 白色雾气 + 左上高光。
+ *
+ * 不做边缘描边，靠底色层次与右下角光晕体现玻璃质感；
+ * Compose 没有逐卡片的 backdrop blur，这里用多层半透明渐变模拟毛玻璃：
+ * - 底：计划色 80% → 66%，仍然透出壁纸；
+ * - 雾：顶部白 18%，底部压暗 22%，让白字有对比；
+ * - 光：左上角径向高光。
+ *
+ * @param base 计划主色
+ * @param deep 计划深色
+ * @param cornerDp 圆角大小
+ */
+private fun Modifier.glassCard(
+    base: Color,
+    deep: Color,
+    cornerDp: Dp
+): Modifier = drawBehind {
+    val corner = CornerRadius(cornerDp.toPx(), cornerDp.toPx())
+    // 底色压暗：白字要显眼，玻璃感靠光影而不是把颜色冲白
+    val top = Color(base.red * 0.70f, base.green * 0.70f, base.blue * 0.70f)
+    val bottom = Color(deep.red * 0.62f, deep.green * 0.62f, deep.blue * 0.62f)
+    drawRoundRect(
+        brush = Brush.verticalGradient(
+            listOf(top.copy(alpha = 0.93f), bottom.copy(alpha = 0.87f))
+        ),
+        cornerRadius = corner
+    )
+    drawRoundRect(
+        brush = Brush.verticalGradient(
+            listOf(
+                Color.White.copy(alpha = 0.10f),
+                Color.White.copy(alpha = 0.01f),
+                Color.Black.copy(alpha = 0.28f)
+            )
+        ),
+        cornerRadius = corner
+    )
+    drawRoundRect(
+        brush = Brush.radialGradient(
+            colors = listOf(Color.White.copy(alpha = 0.18f), Color.Transparent),
+            center = Offset(size.width * 0.12f, -size.height * 0.08f),
+            radius = size.maxDimension * 0.8f
+        ),
+        cornerRadius = corner
+    )
+}
+
+
+@Composable
+/**
  * 卡片主体的手势：轻点 / 长按拖动。
  *
  * 卡身只处理「轻点 / 长按拖动」；缩放交给贴在卡片外侧的独立 [ResizeGrip]。
@@ -1691,7 +1785,7 @@ private fun TripBoardCard(
  * 长按后移动超过 touch slop 才开始真正移动；**长按后原地松手不再弹操作菜单**，
  * 那些功能已搬进单击打开的统计弹层。这里只吃掉这次点击，避免松手又触发轻点。
  */
-@Composable
+
 private fun Modifier.cardBodyGestures(
     key: Long,
     enabled: Boolean,
@@ -1829,27 +1923,6 @@ private fun ResizeGrip(
                 }
             }
     ) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-            // 手柄右下角比卡片右下角外移 8dp，反推卡片圆角圆心在这个 Canvas 里的位置
-            val out = 8.dp.toPx()
-            val r = cornerRadius.toPx()
-            val cx = size.width - out - r
-            val cy = size.height - out - r
-            // 白色描边 6dp，中心线半径 = 卡片圆角 - 半个描边宽：
-            // 于是描边的**最外沿**正好落在卡片轮廓上，角标不会突出到卡片外面，
-            // 也不会和卡片边沿之间留空隙。整道弧都在卡片色块内，无需深色垫边。
-            val stroke = 6.dp.toPx()
-            val radius = (r - stroke / 2f).coerceAtLeast(1f)
-            drawArc(
-                color = Color.White,
-                startAngle = 0f,
-                sweepAngle = 90f,
-                useCenter = false,
-                topLeft = Offset(cx - radius, cy - radius),
-                size = Size(radius * 2f, radius * 2f),
-                style = Stroke(width = stroke, cap = StrokeCap.Round)
-            )
-        }
     }
 }
 

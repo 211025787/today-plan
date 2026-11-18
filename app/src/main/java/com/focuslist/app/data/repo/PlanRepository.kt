@@ -1,10 +1,12 @@
-package com.focuslist.app.data.repo
+﻿package com.focuslist.app.data.repo
 
 import com.focuslist.app.data.local.dao.PlanDao
 import com.focuslist.app.data.local.entity.PlanEntity
 import com.focuslist.app.data.local.entity.PlanLogEntity
 import com.focuslist.app.util.DateUtils
 import com.focuslist.app.util.PlanSchedule
+import com.focuslist.app.util.DayRule
+import com.focuslist.app.util.WeekdayMask
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -182,6 +184,106 @@ class PlanRepository(private val planDao: PlanDao) {
             }
         }
     }
+
+    /**
+     * 按「只删哪些天」从计划里移除部分日期。
+     *
+     * 与 [deleteInRange] 的区别：区间内不是整段删除，而是只删符合 [selMask] / [selRule]
+     * 的那些执行日，其余日期继续保留。实现分两种情况：
+     * - 范围覆盖整个计划、且两边都是「按周几」规则：直接从掩码里减掉选中的周几，
+     *   一条计划搞定，不拆不复制；
+     * - 其他情况：把保留下来的执行日按连续日期切成若干段，每段一条计划，
+     *   并把各段已有的计时记录改挂到对应计划上。
+     *
+     * @param planId 计划 ID
+     * @param rangeStart 删除区间起点 0 点（含）
+     * @param rangeEnd 删除区间终点 0 点（含）
+     * @param selMask 要删除的周几掩码（bit0=周一）
+     * @param selRule 要删除的日期类型，见 [DayRule]
+     * @return true 表示计划被整体删除
+     */
+    suspend fun deleteInRangeByDays(
+        planId: Long,
+        rangeStart: Long,
+        rangeEnd: Long,
+        selMask: Int,
+        selRule: Int
+    ): Boolean {
+        val plan = planDao.getById(planId) ?: return true
+        val from = maxOf(plan.startDate, rangeStart)
+        val to = minOf(plan.endDate, rangeEnd)
+        if (from > to) {
+            return false
+        }
+        val deleteDays = PlanSchedule.activeDays(from, to, selMask, selRule, 2000)
+            .filter { PlanSchedule.isActive(plan, it) }
+            .toSet()
+        if (deleteDays.isEmpty()) {
+            return false
+        }
+        val allActive = PlanSchedule.activeDays(plan, 4000)
+        val kept = allActive.filter { it !in deleteDays }
+        if (kept.isEmpty()) {
+            planDao.deleteLogsOf(planId)
+            planDao.deleteById(planId)
+            return true
+        }
+        // 覆盖整个计划且都是按周几的规则：改掩码即可，避免拆成很多条计划
+        val fullCover = rangeStart <= plan.startDate && rangeEnd >= plan.endDate
+        if (fullCover && selRule == DayRule.EVERY_DAY && plan.dayRule == DayRule.EVERY_DAY) {
+            val all = if (plan.weekdaysMask == WeekdayMask.NONE) WeekdayMask.ALL else plan.weekdaysMask
+            val remain = all and selMask.inv() and WeekdayMask.ALL
+            if (remain == WeekdayMask.NONE) {
+                planDao.deleteLogsOf(planId)
+                planDao.deleteById(planId)
+                return true
+            }
+            deleteDays.forEach { day -> planDao.deleteLogAt(planId, day) }
+            planDao.update(plan.copy(weekdaysMask = remain))
+            return false
+        }
+        deleteDays.forEach { day -> planDao.deleteLogAt(planId, day) }
+        val runs = groupConsecutiveDays(kept)
+        val first = runs.first()
+        planDao.update(plan.copy(startDate = first.first, endDate = first.second))
+        runs.drop(1).forEach { run ->
+            val newId = planDao.insert(
+                plan.copy(
+                    id = 0,
+                    startDate = run.first,
+                    endDate = run.second,
+                    createdAt = System.currentTimeMillis()
+                )
+            )
+            planDao.reassignLogs(planId, newId, run.first, run.second)
+        }
+        return false
+    }
+
+    /**
+     * 把升序日期按「连续天」分组。
+     *
+     * @param days 升序的 0 点时间戳
+     * @return 每段的起止日期
+     */
+    private fun groupConsecutiveDays(days: List<Long>): List<Pair<Long, Long>> {
+        if (days.isEmpty()) {
+            return emptyList()
+        }
+        val runs = ArrayList<Pair<Long, Long>>()
+        var start = days.first()
+        var prev = start
+        days.drop(1).forEach { day ->
+            if (day - prev > DateUtils.DAY_MILLIS) {
+                runs += start to prev
+                start = day
+            }
+            prev = day
+        }
+        runs += start to prev
+        return runs
+    }
+
 
     /**
      * 按 ID 查询计划实体。
