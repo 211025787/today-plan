@@ -1,4 +1,4 @@
-package com.focuslist.app.ui.common
+﻿package com.focuslist.app.ui.common
 
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -106,7 +106,10 @@ private enum class PetRegion { HEAD, TAIL, BODY }
  * @param modifier 布局修饰（通常带 size）
  */
 @Composable
-fun WhaleGirlPet(modifier: Modifier = Modifier) {
+fun WhaleGirlPet(
+    modifier: Modifier = Modifier,
+    onOffsetChange: (Offset) -> Unit = {}
+) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
@@ -244,6 +247,7 @@ fun WhaleGirlPet(modifier: Modifier = Modifier) {
             x = (offset.x + delta.x).coerceIn(maxLeft, 0f),
             y = (offset.y + delta.y).coerceIn(maxUp, 0f)
         )
+        onOffsetChange(offset)
     }
 
     BoxWithConstraints(

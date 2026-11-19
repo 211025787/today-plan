@@ -1,8 +1,16 @@
-package com.focuslist.app.ui.common
+﻿package com.focuslist.app.ui.common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,64 +50,77 @@ data class DockItem(val route: String, val label: String, val icon: ImageVector)
  */
 @Composable
 fun GlassDockBar(items: List<DockItem>, currentRoute: String?, onSelect: (DockItem) -> Unit) {
+    // 桌宠是独立浮层；它离原位越远，Dock 右侧留白越小，胶囊会自然铺开、图标居中
+    var petOffset by remember { mutableStateOf(Offset.Zero) }
+    val density = LocalDensity.current
+    val awayDp = with(density) {
+        maxOf((-petOffset.x).coerceAtLeast(0f), (-petOffset.y).coerceAtLeast(0f)).toDp()
+    }
+    val progress = (awayDp / 120.dp).coerceIn(0f, 1f)
+    // 宽度保持固定，只做水平位移：桌宠离得越远，胶囊越往屏幕中间靠
+    val dockShift by animateDpAsState(
+        targetValue = 12.dp + 58.dp * progress,
+        animationSpec = tween(180),
+        label = "dockShift"
+    )
     Box(
-        // 横向 padding 收窄到 2dp 让导航胶囊更长；不加 navigationBarsPadding，让桌宠可延伸覆盖系统导航条
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 2.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.BottomCenter
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            // 间距 0dp 让导航胶囊紧贴桌宠，边缘覆盖桌宠白边
-            horizontalArrangement = Arrangement.spacedBy(0.dp),
-            // 底部对齐：桌宠贴屏幕底部覆盖导航条，导航胶囊靠上避开导航条
-            verticalAlignment = Alignment.Bottom
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                // 右侧给桌宠留出固定 140dp，胶囊宽度因此不会随桌宠拖动变化
+                .fillMaxWidth()
+                .padding(end = PET_SIZE)
+                .height(72.dp)
+                .navigationBarsPadding()
+                .offset(y = (-16).dp, x = dockShift)
+                .glass(cornerRadius = 36.dp)
+                .padding(horizontal = 8.dp)
         ) {
-            // 导航胶囊：加高到 72dp；navigationBarsPadding 抬到导航条上方；offset 整体上移 16dp 并右移 6dp（在 glass 外侧，背景与图标一起移动）
-            Row(
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(72.dp)
-                    .navigationBarsPadding()
-                    .offset(y = -16.dp, x = 12.dp)
-                    .glass(cornerRadius = 36.dp)
-                    .padding(horizontal = 8.dp)
-            ) {
-                items.forEach { item ->
-                    val selected = currentRoute == item.route
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (selected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    Color.Transparent
-                                }
-                            )
-                            .clickable { onSelect(item) }
-                    ) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = item.label,
-                            tint = if (selected) {
-                                MaterialTheme.colorScheme.onPrimary
+            items.forEach { item ->
+                val selected = currentRoute == item.route
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (selected) {
+                                MaterialTheme.colorScheme.primary
                             } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.size(24.dp)
+                                Color.Transparent
+                            }
                         )
-                    }
+                        .clickable { onSelect(item) }
+                ) {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = item.label,
+                        tint = if (selected) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
-            // 大肥鱼桌宠在所有主 Tab 常驻，与首页保持一致；放大到 140dp 完整露出头/身体/尾巴
-            // 不再向右偏移，由导航胶囊紧贴覆盖桌宠左侧白边
-            WhaleGirlPet(modifier = Modifier.size(140.dp))
         }
+
+        // 桌宠浮层：贴右下角，可自由拖动，不影响 Dock 布局
+        WhaleGirlPet(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(PET_SIZE),
+            onOffsetChange = { petOffset = it }
+        )
     }
 }
+
+/** 桌宠占位尺寸：胶囊右侧为它留出的固定宽度 */
+private val PET_SIZE = 140.dp
